@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { FlightSegment } from '../types';
-import { Plane, QrCode, Briefcase, ShoppingBag } from 'lucide-react';
+import { Plane, QrCode, Briefcase, ShoppingBag, MapPin } from 'lucide-react';
 
 interface Props {
   segment: FlightSegment;
@@ -28,13 +28,14 @@ export const BoardingPass: React.FC<Props> = ({
 
   const formatTime = (iso: string) => {
     if (!iso) return "--:--";
-    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    // Force 24-hour format
+    return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   const logoUrl = getAirlineLogo(segment.airlineID);
 
   return (
-    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden flex flex-col md:flex-row mb-6">
+    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden flex flex-col md:flex-row mb-6 font-sans">
       {/* Main Ticket Section */}
       <div className="flex-1 p-6 relative">
         {/* Header */}
@@ -60,9 +61,8 @@ export const BoardingPass: React.FC<Props> = ({
            <div className="flex flex-col items-end gap-2">
              <div className="text-right">
                <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-0.5">艙等</div>
-               <div className="font-bold text-slate-800">{cabinClass === 'Economy' ? '經濟艙' : cabinClass}</div>
+               <div className="font-bold text-slate-800">{cabinClass === 'Economy' ? '經濟艙' : (cabinClass === 'Business' ? '商務艙' : cabinClass)}</div>
              </div>
-             {/* Baggage Quick Info */}
              {segment.baggage && (
                <div className="flex gap-2">
                   <div className="flex items-center gap-1 text-[10px] bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 text-slate-500 font-bold">
@@ -105,15 +105,17 @@ export const BoardingPass: React.FC<Props> = ({
               <div className="font-bold text-slate-800">{passengerName}</div>
            </div>
            <div>
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">座位</div>
-              <div className="font-bold text-slate-800">{seat}</div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">航廈</div>
+              <div className="font-bold text-slate-800 flex items-center gap-1">
+                <MapPin size={14} className="text-slate-400" />
+                {segment.terminal ? `TERMINAL ${segment.terminal}` : 'TBA'}
+              </div>
            </div>
            <div className="bg-white p-2 rounded-lg border border-gray-100">
                <QrCode className="text-slate-900" size={36} />
            </div>
         </div>
 
-        {/* Decorative Circles */}
         <div className="absolute top-[68%] -right-3 w-6 h-6 bg-[#F5F5F7] rounded-full hidden md:block"></div>
       </div>
 
@@ -123,7 +125,7 @@ export const BoardingPass: React.FC<Props> = ({
          
          <div className="space-y-6">
             <div className="flex items-center gap-2">
-               <span className="font-bold text-xs text-slate-500 tracking-tighter">{segment.airlineNameZh || segment.airline}</span>
+               <span className="font-bold text-xs text-slate-500 tracking-tighter truncate">{segment.airlineNameZh || segment.airline}</span>
             </div>
             
             <div className="space-y-4">
@@ -142,8 +144,8 @@ export const BoardingPass: React.FC<Props> = ({
                   </div>
                </div>
                <div>
-                  <div className="text-[9px] text-slate-400 uppercase font-bold">日期</div>
-                  <div className="font-mono font-bold text-xs text-slate-800">{formatDate(segment.departureTime)}</div>
+                  <div className="text-[9px] text-slate-400 uppercase font-bold">航廈</div>
+                  <div className="font-bold text-xs text-slate-800">{segment.terminal ? `T${segment.terminal}` : 'TBA'}</div>
                </div>
             </div>
          </div>
