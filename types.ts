@@ -7,6 +7,11 @@ export enum Currency {
   KRW = 'KRW'
 }
 
+export interface BaggageInfo {
+  carryOn: { count: number; weight: string };
+  checked: { count: number; weight: string };
+}
+
 export interface Expense {
   id: string;
   amount: number;
@@ -20,7 +25,7 @@ export interface Expense {
 export interface FlightSegment {
   airline: string;
   airlineID?: string;
-  airlineNameZh?: string; // New field for Chinese name
+  airlineNameZh?: string;
   flightNumber: string;
   departureTime: string;
   arrivalTime: string;
@@ -29,6 +34,7 @@ export interface FlightSegment {
   terminal?: string;
   gate?: string;
   status?: string;
+  baggage?: BaggageInfo; // Added baggage info per segment
 }
 
 export interface FlightInfo {
@@ -38,11 +44,8 @@ export interface FlightInfo {
   currency: Currency;
   cabinClass: string;
   seat?: string;
-  baggage: {
-    carryOn: { count: number; weight: string };
-    checked: { count: number; weight: string };
-    note?: string;
-  };
+  // Global baggage is now deprecated in favor of segment-specific baggage
+  baggage: BaggageInfo; 
 }
 
 export interface ChecklistItem {

@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { FlightSegment } from '../types';
-import { Plane, QrCode } from 'lucide-react';
+import { Plane, QrCode, Briefcase, ShoppingBag } from 'lucide-react';
 
 interface Props {
   segment: FlightSegment;
@@ -45,7 +46,7 @@ export const BoardingPass: React.FC<Props> = ({
                   alt={segment.airline} 
                   className="w-full h-full object-contain"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=' + segment.airlineID;
+                    (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=' + (segment.airlineID || 'AIR');
                   }}
                 />
              </div>
@@ -56,9 +57,22 @@ export const BoardingPass: React.FC<Props> = ({
                </div>
              </div>
            </div>
-           <div className="text-right">
-             <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-0.5">艙等</div>
-             <div className="font-bold text-slate-800">{cabinClass === 'Economy' ? '經濟艙' : cabinClass}</div>
+           <div className="flex flex-col items-end gap-2">
+             <div className="text-right">
+               <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase mb-0.5">艙等</div>
+               <div className="font-bold text-slate-800">{cabinClass === 'Economy' ? '經濟艙' : cabinClass}</div>
+             </div>
+             {/* Baggage Quick Info */}
+             {segment.baggage && (
+               <div className="flex gap-2">
+                  <div className="flex items-center gap-1 text-[10px] bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 text-slate-500 font-bold">
+                    <ShoppingBag size={10} /> {segment.baggage.carryOn.weight}
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100 text-slate-500 font-bold">
+                    <Briefcase size={10} /> {segment.baggage.checked.weight}
+                  </div>
+               </div>
+             )}
            </div>
         </div>
 
@@ -99,7 +113,7 @@ export const BoardingPass: React.FC<Props> = ({
            </div>
         </div>
 
-        {/* Decorative Circles for 'tear' effect */}
+        {/* Decorative Circles */}
         <div className="absolute top-[68%] -right-3 w-6 h-6 bg-[#F5F5F7] rounded-full hidden md:block"></div>
       </div>
 
