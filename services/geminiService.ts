@@ -3,12 +3,12 @@ import { FlightSegment } from "../types";
 
 // For generic chat (using process.env.API_KEY)
 const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 };
 
 // For Veo/High-Res Image (using user selected key via window.aistudio)
 const getPaidAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 };
 
 export const createChatSession = (systemInstruction: string): Chat => {

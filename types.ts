@@ -34,7 +34,7 @@ export interface FlightSegment {
   terminal?: string;
   gate?: string;
   status?: string;
-  baggage?: BaggageInfo; // Added baggage info per segment
+  baggage?: BaggageInfo; 
 }
 
 export interface FlightInfo {
@@ -44,7 +44,6 @@ export interface FlightInfo {
   currency: Currency;
   cabinClass: string;
   seat?: string;
-  // Global baggage is now deprecated in favor of segment-specific baggage
   baggage: BaggageInfo; 
 }
 
@@ -55,13 +54,17 @@ export interface ChecklistItem {
   category: 'Documents' | 'Gear' | 'Toiletries' | 'Clothing' | 'Other';
 }
 
+// Updated TransportType for clearer categorization
+export type TransportType = 'Public' | 'Car' | 'Bicycle' | 'Walking' | 'Flight';
+
 export interface ItineraryItem {
   id: string;
   time: string;
   placeName: string;
-  placeId?: string; // For Google Maps
+  placeId?: string; 
   note?: string;
   type: 'Place' | 'Transport' | 'Food';
+  transportType?: TransportType;
 }
 
 export interface DayPlan {
