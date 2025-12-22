@@ -21,6 +21,53 @@ const TRANSPORT_OPTIONS: { type: TransportType; label: string; icon: any; color:
   { type: 'Walking', label: '步行', icon: Footprints, color: 'text-amber-600' },
 ];
 
+/**
+ * 解決 IME (中文輸入法) 在 React 受控組件中重複文字的問題
+ */
+const SafeInput: React.FC<{
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
+}> = ({ value, onChange, placeholder, className, disabled }) => {
+  const [localValue, setLocalValue] = useState(value);
+  const isComposing = useRef(false);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalValue(e.target.value);
+    if (!isComposing.current) {
+      onChange(e.target.value);
+    }
+  };
+
+  const handleCompositionStart = () => {
+    isComposing.current = true;
+  };
+
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    isComposing.current = false;
+    onChange(e.currentTarget.value);
+  };
+
+  return (
+    <input
+      value={localValue}
+      onChange={handleChange}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
+      onBlur={() => onChange(localValue)}
+      placeholder={placeholder}
+      className={className}
+      disabled={disabled}
+    />
+  );
+};
+
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [days, setDays] = useState<DayPlan[]>([]);
@@ -134,7 +181,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     setDays(tempDays);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = `請幫我查從「${prev.placeName}」到「${next.placeName}」使用「${tempTransportType}」交通工具的預估交通時間。請只回傳「約 XX 分鐘」或「約 XX 小時」這樣的簡短文字。`;
       
       const response = await ai.models.generateContent({
@@ -317,18 +364,18 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                              {isFlightPoint ? (
                                <div className="font-bold tracking-tight text-base sm:text-lg text-blue-900 truncate">{item.placeName}</div>
                              ) : (
-                               <input 
+                               <SafeInput 
                                  value={item.placeName} 
-                                 onChange={(e) => updateItem(idx, 'placeName', e.target.value)} 
+                                 onChange={(val) => updateItem(idx, 'placeName', val)} 
                                  placeholder="名稱..." 
                                  className={`font-bold tracking-tight text-base sm:text-lg bg-transparent border-none focus:ring-0 p-0 w-full ${isFood ? 'text-orange-900' : 'text-slate-800'}`} 
                                />
                              )}
                           </div>
                           
-                          <input 
+                          <SafeInput 
                             value={item.note || ''} 
-                            onChange={(e) => !isFlightPoint && updateItem(idx, 'note', e.target.value)} 
+                            onChange={(val) => !isFlightPoint && updateItem(idx, 'note', val)} 
                             disabled={isFlightPoint}
                             placeholder={isFlightPoint ? "" : "新增筆記..."} 
                             className={`text-xs font-medium bg-transparent border-none focus:ring-0 p-0 w-full ${isFlightPoint ? 'text-blue-400/80 font-bold' : 'text-slate-400'}`} 
