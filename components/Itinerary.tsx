@@ -143,9 +143,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     saveItineraryUpdate([...currentItems, newItem].sort((a,b) => a.time.localeCompare(b.time)));
   };
 
-  const confirmInsertTransport = async (index: number, isEditing: boolean = false) => {
-    const currentItems = [...days[selectedDayIndex].items];
-    const targetIdx = isEditing ? index : index + 1;
+  const confirmInsertTransport = async (index: number, isEditing: boolean = false, customItems?: ItineraryItem[]) => {
+    const currentItems = customItems || [...days[selectedDayIndex].items];
     const prev = currentItems[isEditing ? index - 1 : index];
     const next = currentItems[isEditing ? index + 1 : index + 1];
 
@@ -158,11 +157,12 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
 
     const newTransportId = isEditing ? currentItems[index].id : `trans-${Date.now()}`;
     const newTransport: ItineraryItem = {
+      ... (isEditing ? currentItems[index] : {}),
       id: newTransportId,
       time: midTime,
       placeName: '移動中',
       type: 'Transport',
-      transportType: tempTransportType,
+      transportType: isEditing ? (currentItems[index].transportType || tempTransportType) : tempTransportType,
       note: '正在計算...'
     };
 
@@ -181,8 +181,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     setDays(tempDays);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `請幫我查從「${prev.placeName}」到「${next.placeName}」使用「${tempTransportType}」交通工具的預估交通時間。請只回傳「約 XX 分鐘」或「約 XX 小時」這樣的簡短文字。`;
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const prompt = `請幫我查從「${prev.placeName}」到「${next.placeName}」使用「${newTransport.transportType}」交通工具的預估交通時間。請只回傳「XX 分鐘」或「XX 小時」這樣的簡短文字，絕對不要包含「約」字。`;
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -190,12 +190,16 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
         config: { tools: [{ googleSearch: {} }] }
       });
 
-      const resultText = response.text?.trim() || "暫無資料";
+      const resultText = response.text?.trim().replace(/^約\s*/, '');
+      if (!resultText || resultText.length < 2) throw new Error("無效的回應");
+
       const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: resultText } : it);
       saveItineraryUpdate(finalItems);
     } catch (error) {
-      console.error(error);
-      const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: '暫無資料' } : it);
+      console.error("Transport calculation failed, using fallback:", error);
+      const duration = DateTimeUtils.getDuration(prev.time, next.time);
+      const fallbackNote = duration ? `${duration}` : "暫無資料";
+      const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: fallbackNote } : it);
       saveItineraryUpdate(finalItems);
     } finally {
       setCalculatingId(null);
@@ -203,10 +207,30 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const updateItem = (itemIdx: number, field: keyof ItineraryItem, value: any) => {
-    const newItems = [...days[selectedDayIndex].items];
-    newItems[itemIdx] = { ...newItems[itemIdx], [field]: value };
-    if (field === 'time') newItems.sort((a, b) => a.time.localeCompare(b.time));
-    saveItineraryUpdate(newItems);
+    let newItems = [...days[selectedDayIndex].items];
+    const originalItem = newItems[itemIdx];
+    newItems[itemIdx] = { ...originalItem, [field]: value };
+    
+    if (field === 'time') {
+      newItems.sort((a, b) => a.time.localeCompare(b.time));
+      // 當景點時間變動，重新找出受影響的交通項目
+      const updatedIdx = newItems.findIndex(item => item.id === originalItem.id);
+      
+      // 儲存一次排序後的結果，確保後續操作基於最新位置
+      saveItineraryUpdate(newItems);
+
+      // 檢查更新後的項目相鄰是否為交通項目，如果是，觸發重新計算
+      // 1. 檢查前一個
+      if (updatedIdx > 0 && newItems[updatedIdx - 1].type === 'Transport') {
+        confirmInsertTransport(updatedIdx - 1, true, newItems);
+      }
+      // 2. 檢查後一個
+      if (updatedIdx < newItems.length - 1 && newItems[updatedIdx + 1].type === 'Transport') {
+        confirmInsertTransport(updatedIdx + 1, true, newItems);
+      }
+    } else {
+      saveItineraryUpdate(newItems);
+    }
   };
 
   const deleteItem = (itemIdx: number) => {
@@ -281,7 +305,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   } last:hidden`} />
 
                   {isManualTransport ? (
-                    /* --- 手動新增交通卡片 (高度 56px 固定) --- */
                     <div className="relative flex items-center justify-center">
                        <div className={`w-full bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 group transition-all h-[56px] flex items-center justify-center relative overflow-hidden ${calculatingId === item.id ? 'opacity-60 grayscale' : ''}`}>
                           {insertingAt === idx ? (
@@ -325,7 +348,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                        </div>
                     </div>
                   ) : (
-                    /* --- 地點或機票卡片 --- */
                     <div className={`rounded-2xl p-4 group transition-all border ${
                       isFlightPoint ? 'bg-blue-50/50 border-blue-100 shadow-sm' : 'bg-white border-gray-100 hover:shadow-md'
                     }`}>
@@ -393,7 +415,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   )}
                 </div>
 
-                {/* 自動航班段樣式 (高度 56px 固定) */}
                 {isBetweenFlight && (
                   <div className="relative pl-12 pb-4">
                     <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-blue-200" />
@@ -409,7 +430,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   </div>
                 )}
 
-                {/* 手動插入按鈕 */}
                 {canInsertManualTransport && (
                   <div className="relative flex items-center justify-center py-2 group/btn min-h-[40px]">
                     <div className="absolute left-0 w-0.5 bg-gray-100 h-full" />
