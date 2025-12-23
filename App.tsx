@@ -144,6 +144,14 @@ const App: React.FC = () => {
     return expensesTotal + flightTotal;
   };
 
+  const tabs = [
+    { id: 'dashboard', label: t('overview'), icon: LayoutDashboard },
+    { id: 'itinerary', label: t('itinerary'), icon: Calendar },
+    { id: 'checklist', label: t('checklist'), icon: CheckSquare },
+    { id: 'expenses', label: t('expenses'), icon: DollarSign },
+    { id: 'flights', label: t('tickets'), icon: Plane },
+  ];
+
   return (
     <LocalizationContext.Provider value={{ t, language, setLanguage }}>
       <div className={`min-h-screen transition-all duration-500 ${theme === 'dark' ? 'dark bg-[#1C1C1E] text-slate-100' : 'bg-[#FBFBFD] text-slate-900'}`}>
@@ -160,7 +168,7 @@ const App: React.FC = () => {
                 <button onClick={toggleTheme} className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
                   {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                 </button>
-                <button onClick={() => setView('list')} className="hidden sm:block text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-4">{t('signIn')}</button>
+                <button onClick={() => setView('list')} className="text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-4">{t('signIn')}</button>
               </div>
             </header>
             <main className="flex-1 flex flex-col items-center justify-center text-center px-6">
@@ -185,7 +193,6 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center mb-10">
               <div className="flex items-center gap-4">
                 <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{t('yourTrips')}</h2>
-                {/* 桌面與行動端皆可見的切換按鈕 */}
                 <div className="flex gap-2">
                   <button onClick={toggleLanguage} className="p-2.5 rounded-2xl bg-white dark:bg-slate-800 text-slate-500 border border-slate-100/50 dark:border-slate-700 shadow-ios hover:shadow-ios-lg transition-all">
                     <Languages size={18} />
@@ -256,26 +263,21 @@ const App: React.FC = () => {
                    </div>
                  </div>
                  
-                 {/* 桌面端切換按鈕，行動端收納在右側 */}
+                 {/* 響應式頂部導覽：md (Tablet) 僅顯示圖標，lg (PC) 顯示圖標+文字 */}
                  <div className="flex items-center gap-1 sm:gap-4 shrink-0">
-                    <div className="hidden lg:flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-2xl">
-                      {[
-                        { id: 'dashboard', label: t('overview'), icon: LayoutDashboard },
-                        { id: 'itinerary', label: t('itinerary'), icon: Calendar },
-                        { id: 'checklist', label: t('checklist'), icon: CheckSquare },
-                        { id: 'expenses', label: t('expenses'), icon: DollarSign },
-                        { id: 'flights', label: t('tickets'), icon: Plane },
-                      ].map(tab => (
+                    <div className="hidden sm:flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-2xl">
+                      {tabs.map(tab => (
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id as any)}
-                          className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
+                          className={`px-3 lg:px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
                             activeTab === tab.id 
                              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' 
                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                           }`}
                         >
-                          <tab.icon size={16} /> {tab.label}
+                          <tab.icon size={16} /> 
+                          <span className="hidden lg:inline">{tab.label}</span>
                         </button>
                       ))}
                     </div>
@@ -295,7 +297,8 @@ const App: React.FC = () => {
               </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto p-4 md:p-12 pb-32 lg:pb-12 animate-in fade-in duration-500">
+            {/* 主內容區域：增加 pb 以防止底部導覽列遮擋內容 */}
+            <main className="max-w-7xl mx-auto p-4 md:p-12 pb-36 sm:pb-12 animate-in fade-in duration-500">
               {activeTab === 'dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="md:col-span-2 space-y-8">
@@ -362,15 +365,9 @@ const App: React.FC = () => {
               {activeTab === 'flights' && <FlightManager trip={currentTrip} onUpdate={updateCurrentTrip} />}
             </main>
 
-            {/* 行動端底部導覽列 */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-between items-center z-40 shadow-2xl transition-all duration-300">
-              {[
-                 { id: 'dashboard', icon: Home },
-                 { id: 'itinerary', icon: Calendar },
-                 { id: 'checklist', icon: CheckSquare },
-                 { id: 'expenses', icon: DollarSign },
-                 { id: 'flights', icon: Plane },
-              ].map(tab => (
+            {/* 手機板底部導覽列：僅在 sm 螢幕顯示 */}
+            <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-between items-center z-40 shadow-2xl transition-all duration-300 pb-safe">
+              {tabs.map(tab => (
                 <button 
                   key={tab.id} 
                   onClick={() => setActiveTab(tab.id as any)} 
