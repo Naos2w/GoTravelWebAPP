@@ -46,8 +46,10 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ title, isOutbou
           {labels.date}{date}
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="space-y-1 col-span-2">
+      
+      {/* 優化過的 Grid：增加時間欄位的空間比例 */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="space-y-1 md:col-span-6">
           <label className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{labels.flightNo}</label>
           <div className="flex gap-2">
             <input value={data.flightNumber} onChange={e => onChange('flightNumber', e.target.value.toUpperCase())} placeholder="BR198" className="flex-1 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold uppercase focus:ring-2 focus:ring-primary/20 outline-none shadow-sm" />
@@ -56,18 +58,24 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ title, isOutbou
             </button>
           </div>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 md:col-span-3">
           <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.depAirport}</label>
           <input value={data.departureAirport} onChange={e => onChange('departureAirport', e.target.value.toUpperCase())} placeholder="TPE" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold font-mono outline-none shadow-sm" />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 md:col-span-3">
           <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.arrAirport}</label>
           <input value={data.arrivalAirport} onChange={e => onChange('arrivalAirport', e.target.value.toUpperCase())} placeholder="NRT" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold font-mono outline-none shadow-sm" />
         </div>
-        <div className="col-span-2"><CustomDateTimeInput label={labels.depTime} value={data.departureTime} onChange={(val) => onChange('departureTime', val)} /></div>
-        <div className="col-span-2 md:col-span-1"><CustomDateTimeInput label={labels.arrTime} value={data.arrivalTime} onChange={(val) => onChange('arrivalTime', val)} /></div>
-        <div className="space-y-1"><label className="text-[10px] text-slate-500 font-bold uppercase">{labels.terminal}</label><input value={data.terminal || ''} onChange={e => onChange('terminal', e.target.value)} placeholder="2" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm" /></div>
+        
+        {/* 時間與航廈 */}
+        <div className="md:col-span-5"><CustomDateTimeInput label={labels.depTime} value={data.departureTime} onChange={(val) => onChange('departureTime', val)} /></div>
+        <div className="md:col-span-5"><CustomDateTimeInput label={labels.arrTime} value={data.arrivalTime} onChange={(val) => onChange('arrivalTime', val)} /></div>
+        <div className="space-y-1 md:col-span-2">
+          <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.terminal}</label>
+          <input value={data.terminal || ''} onChange={e => onChange('terminal', e.target.value)} placeholder="2" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/10" />
+        </div>
       </div>
+
       <div className="pt-4 border-t border-gray-100 dark:border-slate-800">
         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 block">{labels.baggage}</label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-center">
@@ -93,7 +101,6 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ title, isOutbou
   );
 };
 
-// Fix: Defined the missing Props interface for the FlightManager component.
 interface Props {
   trip: Trip;
   onUpdate: (trip: Trip) => void;
@@ -118,7 +125,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     cabin: language === 'zh' ? '艙等' : 'Cabin Class',
     noFlights: language === 'zh' ? '尚未添加航班資訊' : 'No flight information added',
     priceSummary: language === 'zh' ? '機票總計費用' : 'Total Flight Cost',
-    currentCabin: language === 'zh' ? '目前艙等' : 'Cabin'
+    currentCabin: language === 'zh' ? '目前艙等' : 'Cabin',
+    pending: language === 'zh' ? '尚未填寫費用' : 'Price Pending'
   };
 
   const handleSave = () => {
@@ -136,7 +144,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     if (outbound.flightNumber && outbound.departureAirport) {
       const day1 = { ...newItinerary[0] };
       const filtered = day1.items.filter(item => !item.id.includes('outbound-flight'));
-      // Fix: cast 'type' to 'Transport' to satisfy the ItineraryItem interface
       day1.items = [
         { id: 'outbound-flight-dep', time: DateTimeUtils.formatTime24(outbound.departureTime), placeName: `Airport ${outbound.departureAirport}`, type: 'Transport' as const, note: `Flight: ${outbound.flightNumber}` },
         { id: 'outbound-flight-arr', time: DateTimeUtils.formatTime24(outbound.arrivalTime), placeName: `Airport ${outbound.arrivalAirport}`, type: 'Transport' as const, note: `Terminal: ${outbound.terminal || 'TBA'}` },
@@ -148,7 +155,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     if (inbound && inbound.flightNumber && inbound.departureAirport) {
       const lastDay = { ...newItinerary[newItinerary.length - 1] };
       const filtered = lastDay.items.filter(item => !item.id.includes('inbound-flight'));
-      // Fix: cast 'type' to 'Transport' to satisfy the ItineraryItem interface
       lastDay.items = [
         ...filtered,
         { id: 'inbound-flight-dep', time: DateTimeUtils.formatTime24(inbound.departureTime), placeName: `Airport ${inbound.departureAirport}`, type: 'Transport' as const, note: `Flight: ${inbound.flightNumber}` },
@@ -173,6 +179,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     } catch (e) { alert("搜尋失敗。"); } finally { setLoadingField(null); }
   };
 
+  const isPricePending = flightData.price === 0;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700">
@@ -185,21 +193,36 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
         <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-8">
            <FlightSegmentInput lang={language} title={labels.outbound} isOutbound={true} data={flightData.outbound} date={trip.startDate} loading={loadingField === 'outbound'} onSearch={() => handleTdxSearch('outbound')} onChange={(f, v) => setFlightData(p => ({ ...p, outbound: { ...p.outbound, [f]: v } }))} />
            <FlightSegmentInput lang={language} title={labels.inbound} isOutbound={false} data={flightData.inbound!} date={trip.endDate} loading={loadingField === 'inbound'} onSearch={() => handleTdxSearch('inbound')} onChange={(f, v) => setFlightData(p => ({ ...p, inbound: { ...p.inbound!, [f]: v } }))} />
-           <div className="bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
-             <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-sm"><DollarSign size={18}/> {labels.costSettings}</h3>
+           
+           {/* 機票費用設定：加入動態邊框提醒樣式 */}
+           <div className={`transition-all duration-500 p-6 rounded-2xl border ${
+             isPricePending 
+               ? 'bg-red-50/20 dark:bg-red-900/10 border-red-400/60 dark:border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.05)] ring-1 ring-red-400/10' 
+               : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700'
+           }`}>
+             <div className="flex justify-between items-center mb-4">
+               <h3 className={`font-bold mb-0 flex items-center gap-2 text-sm ${isPricePending ? 'text-red-500 dark:text-red-400' : 'text-slate-800 dark:text-white'}`}>
+                 <DollarSign size={18}/> {labels.costSettings}
+               </h3>
+               {isPricePending && (
+                 <span className="px-2 py-0.5 rounded-full bg-red-50 dark:bg-red-900/20 text-[9px] font-black text-red-500 dark:text-red-400 border border-red-100 dark:border-red-900/30 animate-pulse">
+                   {labels.pending}
+                 </span>
+               )}
+             </div>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.totalPrice}</label>
                   <div className="flex gap-2">
-                    <select value={flightData.currency} onChange={e => setFlightData(p => ({ ...p, currency: e.target.value as Currency }))} className="bg-white dark:bg-slate-800 dark:text-white p-2 rounded-xl border border-gray-100 text-sm font-bold shadow-sm outline-none">
+                    <select value={flightData.currency} onChange={e => setFlightData(p => ({ ...p, currency: e.target.value as Currency }))} className="bg-white dark:bg-slate-800 dark:text-white p-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm outline-none">
                       {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <input type="number" value={flightData.price} onChange={e => setFlightData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} className="flex-1 bg-white dark:bg-slate-800 dark:text-white p-2 rounded-xl border border-gray-100 text-sm font-bold shadow-sm outline-none" placeholder="0" />
+                    <input type="number" value={flightData.price === 0 ? '' : flightData.price} onChange={e => setFlightData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} className="flex-1 bg-white dark:bg-slate-800 dark:text-white p-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-primary/10" placeholder="0" />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.cabin}</label>
-                  <select value={flightData.cabinClass} onChange={e => setFlightData(p => ({ ...p, cabinClass: e.target.value }))} className="w-full bg-white dark:bg-slate-800 dark:text-white p-2 rounded-xl border border-gray-100 text-sm font-bold shadow-sm outline-none">
+                  <select value={flightData.cabinClass} onChange={e => setFlightData(p => ({ ...p, cabinClass: e.target.value }))} className="w-full bg-white dark:bg-slate-800 dark:text-white p-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-primary/10">
                     <option value="Economy">Economy</option><option value="Premium Economy">Premium Economy</option><option value="Business">Business</option><option value="First">First Class</option>
                   </select>
                 </div>
