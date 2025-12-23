@@ -67,9 +67,9 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
 
     setLoading(true);
     try {
+      // 關鍵修正：當 type === 'inbound' 時，自動對調機場
       const from = type === 'outbound' ? origin : destination;
       const to = type === 'outbound' ? destination : origin;
-      
       const results = await fetchTdxFlights(from, to, date, fNo);
       setFlightOptions(results);
       setStep(type === 'outbound' ? 'outbound-select' : 'inbound-select');
@@ -138,14 +138,16 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1 relative">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">{labels.date}</label>
-                      <div className="relative">
-                        <input type="date" value={outboundDate} onChange={e => setOutboundDate(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none border-none relative z-10" />
-                        {!outboundDate && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs pointer-events-none z-0">{labels.datePlaceholder}</span>}
+                      <div className="relative h-[52px]">
+                        <input type="date" value={outboundDate} onChange={e => setOutboundDate(e.target.value)} className="absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none border-none opacity-0 focus:opacity-100 z-20 transition-opacity" />
+                        <div className={`absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-bold flex items-center z-10 ${outboundDate ? 'text-slate-900 dark:text-white' : 'text-slate-300'}`}>
+                           {outboundDate || labels.datePlaceholder}
+                        </div>
                       </div>
                     </div>
                     <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.flightNo}</label><input value={outboundFlightNumber} onChange={e => setOutboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold outline-none border-none focus:ring-1 focus:ring-primary/20" placeholder="BR198" /></div>
                   </div>
-                  <button onClick={() => handleSearch('outbound')} disabled={loading || !origin || !destination || !outboundDate || !outboundFlightNumber} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform disabled:opacity-50">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
+                  <button onClick={() => handleSearch('outbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform disabled:opacity-50">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
                 </div>
              </div>
            )}
@@ -154,13 +156,13 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                <h3 className="font-bold text-slate-800 dark:text-white">{step === 'outbound-select' ? labels.selectOut : labels.selectIn}</h3>
                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                  {flightOptions.length === 0 ? <div className="text-center py-20 text-slate-400">{labels.noFlights}</div> : flightOptions.map((f, i) => (
-                   <div key={i} onClick={() => { if (step === 'outbound-select') { setOutboundFlight(f); setInboundDate(f.arrivalTime.split('T')[0]); setStep('inbound-search'); } else { setInboundFlight(f); setStep('review'); } }} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 p-4 rounded-2xl cursor-pointer hover:border-primary shadow-sm hover:shadow-md transition-all">
+                   <div key={i} onClick={() => { if (step === 'outbound-select') { setOutboundFlight(f); setStep('inbound-search'); setFlightOptions([]); } else { setInboundFlight(f); setStep('review'); } }} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 p-4 rounded-2xl cursor-pointer hover:border-primary shadow-sm hover:shadow-md transition-all">
                       <div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded p-1 bg-white dark:bg-slate-800 border dark:border-slate-700"><img src={getAirlineLogo(f.airlineID) || ''} className="w-full h-full object-contain" onError={e=>(e.target as any).src='https://via.placeholder.com/32'} /></div><span className="font-bold text-sm dark:text-slate-200">{language === 'zh' ? (f.airlineNameZh || f.airline) : (f.airlineNameEn || f.airline)}</span></div><span className="text-xs font-mono font-bold text-slate-400">{f.flightNumber}</span></div>
                       <div className="flex justify-between items-center text-sm font-bold dark:text-white"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><Plane size={14} className="text-slate-300 mx-2" /><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
                    </div>
                  ))}
                </div>
-               <button onClick={() => setStep(step === 'outbound-select' ? 'outbound-search' : 'inbound-search')} className="text-sm text-slate-400 flex items-center gap-1 hover:text-slate-600"><ChevronLeft size={14} /> {labels.back}</button>
+               <button onClick={() => setStep(step === 'outbound-select' ? 'outbound-search' : 'inbound-search')} className="text-sm text-slate-400 flex items-center justify-center gap-1 hover:text-slate-600 py-2"><ChevronLeft size={14} /> {labels.back}</button>
              </div>
            )}
            {step === 'inbound-search' && (
@@ -170,15 +172,18 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1 relative">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">{labels.date}</label>
-                      <div className="relative">
-                        <input type="date" value={inboundDate} onChange={e => setInboundDate(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none border-none relative z-10" />
-                        {!inboundDate && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs pointer-events-none z-0">{labels.datePlaceholder}</span>}
+                      <div className="relative h-[52px]">
+                        <input type="date" value={inboundDate} onChange={e => setInboundDate(e.target.value)} className="absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none border-none opacity-0 focus:opacity-100 z-20 transition-opacity" />
+                        <div className={`absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-bold flex items-center z-10 ${inboundDate ? 'text-slate-900 dark:text-white' : 'text-slate-300'}`}>
+                           {inboundDate || labels.datePlaceholder}
+                        </div>
                       </div>
                     </div>
                     <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.flightNo}</label><input value={inboundFlightNumber} onChange={e => setInboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold outline-none border-none focus:ring-1 focus:ring-primary/20" placeholder="BR197" /></div>
                   </div>
-                  <button onClick={() => handleSearch('inbound')} disabled={loading || !inboundDate || !inboundFlightNumber} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
-                  <button onClick={() => setStep('outbound-select')} className="w-full text-sm text-slate-400 hover:text-slate-600 text-center">{labels.back}</button>
+                  <button onClick={() => handleSearch('inbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
+                  {/* 關鍵修正：回程搜尋階段，可以返回重新選擇去程航班 */}
+                  <button onClick={() => setStep('outbound-select')} className="w-full text-sm text-slate-400 hover:text-slate-600 text-center py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
                 </div>
              </div>
            )}
@@ -190,6 +195,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                   <div className="bg-gray-50 dark:bg-slate-900/50 p-4 rounded-2xl flex justify-between items-center border border-gray-100 dark:border-slate-700"><div className="font-bold text-slate-800 dark:text-white">{inboundFlight?.flightNumber}</div><div className="text-right text-xs text-slate-500">{inboundFlight?.departureAirport} → {inboundFlight?.arrivalAirport}</div></div>
                 </div>
                 <button onClick={handleCreateTrip} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg">{labels.confirmBtn} <ArrowRight size={18} /></button>
+                <button onClick={() => setStep('inbound-select')} className="w-full text-sm text-slate-400 hover:text-slate-600 text-center py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
              </div>
            )}
         </div>

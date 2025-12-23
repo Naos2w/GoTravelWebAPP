@@ -17,44 +17,56 @@ interface FlightSelectorModalProps {
   initialDestination: string;
 }
 
+type ModalStep = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-select' | 'review';
+
 const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({ onClose, onConfirm, initialOrigin, initialDestination }) => {
   const { language } = useTranslation();
-  const [step, setStep] = useState<'outbound' | 'inbound' | 'review'>('outbound');
+  const [step, setStep] = useState<ModalStep>('outbound-search');
   const [loading, setLoading] = useState(false);
+  
   const [origin, setOrigin] = useState(initialOrigin);
   const [destination, setDestination] = useState(initialDestination);
-  const [date, setDate] = useState('');
-  const [flightNo, setFlightNo] = useState('');
-  const [options, setOptions] = useState<FlightSegment[]>([]);
   
+  const [outDate, setOutDate] = useState('');
+  const [inDate, setInDate] = useState('');
+  const [outFlightNo, setOutFlightNo] = useState('');
+  const [inFlightNo, setInFlightNo] = useState('');
+  
+  const [options, setOptions] = useState<FlightSegment[]>([]);
   const [tempOutbound, setTempOutbound] = useState<FlightSegment | null>(null);
   const [tempInbound, setTempInbound] = useState<FlightSegment | null>(null);
 
   const labels = {
     searchOut: language === 'zh' ? '搜尋去程航班' : 'Search Outbound',
     searchIn: language === 'zh' ? '搜尋回程航班' : 'Search Inbound',
+    selectOut: language === 'zh' ? '請選擇去程航班' : 'Select Outbound',
+    selectIn: language === 'zh' ? '請選擇回程航班' : 'Select Inbound',
     origin: language === 'zh' ? '出發地' : 'Origin',
     destination: language === 'zh' ? '目的地' : 'Destination',
     date: language === 'zh' ? '日期' : 'Date',
     flightNo: language === 'zh' ? '航班代號 (必填)' : 'Flight No. (Req)',
     search: language === 'zh' ? '搜尋航班' : 'Search Flights',
-    select: language === 'zh' ? '請選擇航班' : 'Select Flight',
     review: language === 'zh' ? '確認變更' : 'Review Changes',
     confirm: language === 'zh' ? '更新航班資訊' : 'Update Flight',
+    back: language === 'zh' ? '返回上一步' : 'Back',
     datePlaceholder: 'YYYY/MM/DD'
   };
 
-  const handleSearch = async () => {
-    if (!flightNo.trim()) {
+  const handleSearch = async (type: 'out' | 'in') => {
+    const fNo = type === 'out' ? outFlightNo : inFlightNo;
+    const date = type === 'out' ? outDate : inDate;
+    if (!fNo.trim()) {
       alert(language === 'zh' ? "請輸入航班代號" : "Flight No. required");
       return;
     }
     setLoading(true);
     try {
-      const from = step === 'outbound' ? origin : destination;
-      const to = step === 'outbound' ? destination : origin;
-      const res = await fetchTdxFlights(from, to, date, flightNo);
+      // 關鍵修正：回程搜尋時將 origin/destination 對調
+      const from = type === 'out' ? origin : destination;
+      const to = type === 'out' ? destination : origin;
+      const res = await fetchTdxFlights(from, to, date, fNo);
       setOptions(res);
+      setStep(type === 'out' ? 'outbound-select' : 'inbound-select');
     } catch (e) { alert("Search failed"); }
     finally { setLoading(false); }
   };
@@ -64,52 +76,85 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({ onClose, onCo
       <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
           <h3 className="font-black text-xl text-slate-800 dark:text-white">
-            {step === 'outbound' ? labels.searchOut : step === 'inbound' ? labels.searchIn : labels.review}
+            {step.includes('outbound') ? labels.searchOut : step.includes('inbound') ? labels.searchIn : labels.review}
           </h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full text-slate-400"><X size={20} /></button>
         </div>
 
         <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
-          {step !== 'review' ? (
+          {step === 'outbound-search' || step === 'inbound-search' ? (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.origin}</label><input value={origin} onChange={e => setOrigin(e.target.value.toUpperCase())} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold" /></div>
-                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.destination}</label><input value={destination} onChange={e => setDestination(e.target.value.toUpperCase())} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold" /></div>
+                <div className="space-y-1">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                     {step === 'outbound-search' ? labels.origin : labels.destination}
+                   </label>
+                   <input 
+                     value={step === 'outbound-search' ? origin : destination} 
+                     onChange={e => step === 'outbound-search' ? setOrigin(e.target.value.toUpperCase()) : setDestination(e.target.value.toUpperCase())} 
+                     className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold" 
+                   />
+                </div>
+                <div className="space-y-1">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                     {step === 'outbound-search' ? labels.destination : labels.origin}
+                   </label>
+                   <input 
+                     value={step === 'outbound-search' ? destination : origin} 
+                     onChange={e => step === 'outbound-search' ? setDestination(e.target.value.toUpperCase()) : setOrigin(e.target.value.toUpperCase())} 
+                     className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold" 
+                   />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1 relative">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.date}</label>
-                  <div className="relative">
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold relative z-10" />
-                    {!date && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs pointer-events-none z-0">{labels.datePlaceholder}</span>}
+                  <div className="relative h-[52px]">
+                    <input type="date" value={step === 'outbound-search' ? outDate : inDate} onChange={e => step === 'outbound-search' ? setOutDate(e.target.value) : setInDate(e.target.value)} className="absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none border-none opacity-0 focus:opacity-100 z-20 transition-opacity" />
+                    <div className={`absolute inset-0 w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-bold flex items-center z-10 ${(step === 'outbound-search' ? outDate : inDate) ? 'text-slate-900 dark:text-white' : 'text-slate-300'}`}>
+                       {(step === 'outbound-search' ? outDate : inDate) || labels.datePlaceholder}
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.flightNo}</label><input value={flightNo} onChange={e => setFlightNo(e.target.value.toUpperCase())} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold font-mono" /></div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.flightNo}</label>
+                  <input 
+                    value={step === 'outbound-search' ? outFlightNo : inFlightNo} 
+                    onChange={e => step === 'outbound-search' ? setOutFlightNo(e.target.value.toUpperCase()) : setInFlightNo(e.target.value.toUpperCase())} 
+                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold font-mono" 
+                  />
+                </div>
               </div>
-              <button onClick={handleSearch} disabled={loading || !date || !flightNo} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black flex items-center justify-center gap-2 disabled:opacity-50">
+              <button onClick={() => handleSearch(step === 'outbound-search' ? 'out' : 'in')} disabled={loading} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black flex items-center justify-center gap-2">
                 {loading ? <Loader2 className="animate-spin" /> : <><Search size={20}/> {labels.search}</>}
               </button>
-
-              {options.length > 0 && (
-                <div className="space-y-3 pt-4">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{labels.select}</div>
-                  {options.map((f, i) => (
-                    <div key={i} onClick={() => { if (step === 'outbound') { setTempOutbound(f); setStep('inbound'); setOptions([]); setDate(''); setFlightNo(''); } else { setTempInbound(f); setStep('review'); } }} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all">
-                      <div className="flex justify-between items-center font-black text-sm dark:text-white">
-                        <div className="flex flex-col">
-                           <span className="text-[10px] text-slate-400">{language === 'zh' ? (f.airlineNameZh || f.airline) : (f.airlineNameEn || f.airline)}</span>
-                           <span>{f.flightNumber}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-right">
-                          <span className="block whitespace-nowrap">{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span>
-                          <Plane size={12} className="text-slate-300 shrink-0" />
-                          <span className="block whitespace-nowrap">{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {step === 'inbound-search' && (
+                <button onClick={() => setStep('outbound-select')} className="w-full text-xs font-bold text-slate-400 py-2 flex items-center justify-center gap-1 hover:text-slate-600">
+                  <ChevronLeft size={14}/> {labels.back}
+                </button>
               )}
+            </div>
+          ) : (step === 'outbound-select' || step === 'inbound-select') ? (
+            <div className="space-y-4">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{step === 'outbound-select' ? labels.selectOut : labels.selectIn}</div>
+              {options.length > 0 ? options.map((f, i) => (
+                <div key={i} onClick={() => { if (step === 'outbound-select') { setTempOutbound(f); setStep('inbound-search'); setOptions([]); } else { setTempInbound(f); setStep('review'); } }} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all">
+                  <div className="flex justify-between items-center font-black text-sm dark:text-white">
+                    <div className="flex flex-col">
+                       <span className="text-[10px] text-slate-400">{language === 'zh' ? (f.airlineNameZh || f.airline) : (f.airlineNameEn || f.airline)}</span>
+                       <span>{f.flightNumber}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-right">
+                      <span className="block whitespace-nowrap text-xs">{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span>
+                      <Plane size={12} className="text-slate-300 shrink-0" />
+                      <span className="block whitespace-nowrap text-xs">{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span>
+                    </div>
+                  </div>
+                </div>
+              )) : <div className="text-center py-10 text-slate-400 font-bold">No results found.</div>}
+              <button onClick={() => setStep(step === 'outbound-select' ? 'outbound-search' : 'inbound-search')} className="w-full text-xs font-bold text-slate-400 py-2 flex items-center justify-center gap-1 hover:text-slate-600">
+                <ChevronLeft size={14}/> {labels.back}
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -124,6 +169,9 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({ onClose, onCo
                <button onClick={() => onConfirm(tempOutbound!, tempInbound!)} className="w-full mt-6 bg-primary text-white py-4 rounded-2xl font-black shadow-xl shadow-primary/20 flex items-center justify-center gap-2">
                  <Check size={20} /> {labels.confirm}
                </button>
+               <button onClick={() => setStep('inbound-select')} className="w-full text-xs font-bold text-slate-400 py-2 flex items-center justify-center gap-1 hover:text-slate-600">
+                  <ChevronLeft size={14}/> {labels.back}
+                </button>
             </div>
           )}
         </div>
@@ -145,7 +193,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
 
   const labels = {
     title: language === 'zh' ? '航班機票' : 'Flight Tickets',
-    edit: language === 'zh' ? '編輯費用' : 'Edit Cost',
+    edit: language === 'zh' ? '編輯航班' : 'Edit Flight',
     save: language === 'zh' ? '儲存' : 'Save',
     cancel: language === 'zh' ? '取消' : 'Cancel',
     changeFlight: language === 'zh' ? '變更航班資訊' : 'Change Flight',
@@ -235,9 +283,9 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 px-4 sm:px-0">
-      {/* 行動端頂部控制列 - 統一寬度與圓角 */}
-      <div className="lg:hidden flex justify-between items-center bg-white/90 dark:bg-slate-800/90 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 sticky top-0 z-40 transition-all w-full">
-         <div className="flex flex-col min-w-0">
+      {/* 行動端頂部控制列：修正 sticky 位置與 z-index，統一按鈕名稱 */}
+      <div className="lg:hidden flex justify-between items-center bg-white/95 dark:bg-slate-800/95 backdrop-blur-md p-4 rounded-2xl shadow-ios border border-slate-100 dark:border-slate-700 sticky top-20 z-20 transition-all w-full">
+         <div className="flex flex-col min-w-0 flex-1 mr-4">
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{labels.title}</h2>
             <div className="text-sm font-black text-slate-900 dark:text-white truncate">
                {flightData.currency} {flightData.price.toLocaleString()}
@@ -343,16 +391,16 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                    <button onClick={() => setIsSelectorOpen(true)} className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-3 rounded-2xl font-black text-sm hover:scale-105 transition-all">{labels.changeFlight}</button>
                 </div>
               ) : (
-                <>
+                <div className="space-y-6">
                    <BoardingPass segment={flightData.outbound} cabinClass={flightData.cabinClass} />
                    {flightData.inbound?.flightNumber && <BoardingPass segment={flightData.inbound} cabinClass={flightData.cabinClass} />}
-                </>
+                </div>
               )}
            </div>
-           {/* 費用摘要卡片 - 防止內容重疊 */}
-           <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] border border-slate-100 dark:border-slate-700 shadow-ios h-fit w-full">
+           {/* 費用摘要卡片：行動端與平板寬度（lg以下）隱藏 */}
+           <div className="hidden lg:block bg-white dark:bg-slate-800 p-8 rounded-[40px] border border-slate-100 dark:border-slate-700 shadow-ios h-fit w-full">
               <div className="flex justify-between items-center mb-8">
-                 <h3 className="font-black text-slate-900 dark:text-white text-lg">{labels.pricing}</h3>
+                 <h3 className="font-black text-slate-900 dark:text-white text-lg tracking-tight">{labels.pricing}</h3>
                  <button onClick={() => setIsEditing(true)} className="p-3 bg-slate-50 dark:bg-slate-700 rounded-2xl hover:bg-primary/10 hover:text-primary transition-all shadow-sm">
                     <Edit2 size={18} />
                  </button>
@@ -366,11 +414,11 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                     {flightData.price === 0 && <span className="text-[9px] font-black text-red-400 uppercase tracking-widest mt-1">Pending Costs</span>}
                  </div>
                  <div className="pt-6 border-t border-slate-50 dark:border-slate-700 grid grid-cols-2 gap-4">
-                    <div>
+                    <div className="min-w-0">
                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cabin</span>
-                       <div className="font-black text-slate-700 dark:text-slate-200 text-sm truncate">{flightData.cabinClass}</div>
+                       <div className="font-black text-slate-700 dark:text-slate-200 text-sm truncate uppercase tracking-tight">{flightData.cabinClass}</div>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status</span>
                        <div className="font-black text-green-500 text-sm truncate flex items-center gap-1"><Check size={14}/> OK</div>
                     </div>
@@ -380,7 +428,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                     <div className="space-y-4">
                        {[flightData.outbound, flightData.inbound].map((seg, i) => {
                           if (!seg || !seg.flightNumber) return null;
-                          const isMis = !seg.baggage?.carryOn.weight || (seg.baggage.checked.count > 0 && !seg.baggage.checked.weight);
                           return (
                              <div key={i} className="flex justify-between items-center gap-2">
                                 <div className="flex items-center gap-2 min-w-0">

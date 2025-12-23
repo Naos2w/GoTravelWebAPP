@@ -4,7 +4,6 @@ import { FlightSegment } from "../types";
 const TOKEN_KEY = 'tdx_access_token';
 const EXPIRY_KEY = 'tdx_token_expiry';
 
-// Cache for airline names to minimize API calls
 const airlineCache = new Map<string, {zh: string, en: string}>();
 
 async function getTdxToken(): Promise<string | null> {
@@ -50,10 +49,6 @@ async function getTdxToken(): Promise<string | null> {
   }
 }
 
-/**
- * Fetch Airline Chinese & English Name from TDX Airline API
- * Specifically using Zh_tw for Traditional Chinese
- */
 async function fetchAirlineName(airlineID: string, token: string): Promise<{zh: string, en: string}> {
   if (airlineCache.has(airlineID)) {
     return airlineCache.get(airlineID)!;
