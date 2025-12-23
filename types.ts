@@ -7,6 +7,9 @@ export enum Currency {
   KRW = 'KRW'
 }
 
+export type Theme = 'light' | 'dark';
+export type Language = 'zh' | 'en';
+
 export interface BaggageInfo {
   carryOn: { count: number; weight: string };
   checked: { count: number; weight: string };
@@ -54,7 +57,6 @@ export interface ChecklistItem {
   category: 'Documents' | 'Gear' | 'Toiletries' | 'Clothing' | 'Other';
 }
 
-// Updated TransportType for clearer categorization
 export type TransportType = 'Public' | 'Car' | 'Bicycle' | 'Walking' | 'Flight';
 
 export interface ItineraryItem {
@@ -83,14 +85,6 @@ export interface Trip {
   expenses: Expense[];
   checklist: ChecklistItem[];
   itinerary: DayPlan[];
-}
-
-export interface WeatherData {
-  date: string;
-  tempMax: number;
-  tempMin: number;
-  condition: 'Sunny' | 'Cloudy' | 'Rainy' | 'Snowy';
-  rainChance: number;
 }
 
 declare global {

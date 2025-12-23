@@ -1,14 +1,10 @@
+
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 import { FlightSegment } from "../types";
 
-// For generic chat (using process.env.API_KEY)
+// Standardize Gemini initialization to use process.env.API_KEY exclusively
 const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-};
-
-// For Veo/High-Res Image (using user selected key via window.aistudio)
-const getPaidAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const createChatSession = (systemInstruction: string): Chat => {
@@ -32,8 +28,7 @@ export const generateTravelImage = async (
      }
   }
 
-  // Always create a new client to ensure the most up-to-date API key is used
-  const ai = getPaidAiClient();
+  const ai = getAiClient();
   
   try {
     const response = await ai.models.generateContent({
@@ -65,28 +60,25 @@ export const fetchFlightDetails = async (flightNumber: string, date: string): Pr
   const ai = getAiClient();
   
   try {
-    // Fix: Updated model to gemini-3-flash-preview for compliant basic text tasks
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Find the flight schedule for ${flightNumber} on ${date}. 
       I need the Airline Name, Departure Airport IATA Code, Departure Time (Local time in ISO 8601 format format YYYY-MM-DDTHH:mm), Arrival Airport IATA Code, and Arrival Time (Local time in ISO 8601 format YYYY-MM-DDTHH:mm).
       
-      Output the result in this specific format (do not use JSON blocks, just plain text lines):
+      Output the result in this specific format:
       AIRLINE: <value>
       DEP_CODE: <value>
       DEP_TIME: <value>
       ARR_CODE: <value>
       ARR_TIME: <value>
       
-      If you cannot find specific details, leave the value empty.`,
+      If details are missing, leave the value empty.`,
       config: {
         tools: [{ googleSearch: {} }]
       }
     });
 
-    // response.text is a property, accessing it as such is correct
     const text = response.text || '';
-    
     const getValue = (key: string) => {
       const match = text.match(new RegExp(`${key}:\\s*(.*)`));
       return match ? match[1].trim() : '';
@@ -118,20 +110,11 @@ export const fetchFlightDetails = async (flightNumber: string, date: string): Pr
 export const searchFlightOptions = async (from: string, to: string, date: string): Promise<FlightSegment[]> => {
   const ai = getAiClient();
   try {
-    // Fix: Updated model to gemini-3-flash-preview for compliant basic text tasks
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Find real flights from ${from} to ${to} on ${date}.
-      List at least 5 different options.
-      
-      Strictly Output each flight in this format per line:
-      FLIGHT_NO|AIRLINE|DEP_TIME_ISO|ARR_TIME_ISO|DEP_CODE|ARR_CODE
-
-      Example:
-      JX800|Starlux Airlines|2023-10-20T08:30|2023-10-20T12:45|TPE|NRT
-
-      Ensure times are in local time ISO 8601 format (YYYY-MM-DDTHH:mm).
-      If you can't find exact times, estimate based on typical schedules but keep the format.`,
+      Output each flight in this format per line:
+      FLIGHT_NO|AIRLINE|DEP_TIME_ISO|ARR_TIME_ISO|DEP_CODE|ARR_CODE`,
       config: {
         tools: [{ googleSearch: {} }]
       }

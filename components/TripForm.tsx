@@ -5,6 +5,7 @@ import { fetchTdxFlights } from '../services/tdxService';
 import { FlightSegment, Trip, Currency, ItineraryItem, DayPlan } from '../types';
 import { createNewTrip } from '../services/storageService';
 import { DateTimeUtils } from '../services/dateTimeUtils';
+import { useTranslation } from '../App';
 
 interface Props {
   onClose: () => void;
@@ -13,492 +14,149 @@ interface Props {
 
 type Step = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-select' | 'review';
 
-const getAirlineLogo = (id: string | undefined) => {
-  if (!id) return null;
-  return `https://pics.avs.io/120/120/${id}.png`;
-};
-
-interface SearchStepProps {
-  type: 'outbound' | 'inbound';
-  origin: string;
-  setOrigin: (val: string) => void;
-  destination: string;
-  setDestination: (val: string) => void;
-  flightNumber: string;
-  setFlightNumber: (val: string) => void;
-  outboundDate: string;
-  setOutboundDate: (val: string) => void;
-  inboundDate: string;
-  setInboundDate: (val: string) => void;
-  loading: boolean;
-  handleSearch: (type: 'outbound' | 'inbound') => void;
-  onBack?: () => void;
-}
-
-const SearchStep: React.FC<SearchStepProps> = ({ 
-  type, origin, setOrigin, destination, setDestination, 
-  flightNumber, setFlightNumber,
-  outboundDate, setOutboundDate, inboundDate, setInboundDate, 
-  loading, handleSearch, onBack
-}) => (
-  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-     <div className="text-center mb-6">
-       <div className="w-12 h-12 bg-blue-50 text-primary rounded-full flex items-center justify-center mx-auto mb-3">
-         <Plane className={type === 'inbound' ? 'rotate-180' : ''} />
-       </div>
-       <h3 className="text-xl font-bold text-slate-800">
-          {type === 'outbound' ? '要去哪裡旅行？' : '什麼時候回來？'}
-       </h3>
-       <p className="text-slate-500 text-sm">
-         {type === 'outbound' ? '透過 TDX 搜尋您的出發航班' : `從 ${destination} 飛回 ${origin}`}
-       </p>
-     </div>
-
-     <div className="space-y-4">
-       {type === 'outbound' && (
-         <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase">出發地</label>
-              <input 
-                value={origin} onChange={e => setOrigin(e.target.value.toUpperCase())}
-                className="w-full p-3 bg-gray-50 rounded-xl font-mono font-bold text-lg border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
-                placeholder="TPE"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 uppercase">目的地</label>
-              <input 
-                value={destination} onChange={e => setDestination(e.target.value.toUpperCase())}
-                className="w-full p-3 bg-gray-50 rounded-xl font-mono font-bold text-lg border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
-                placeholder="KIX"
-              />
-            </div>
-         </div>
-       )}
-       
-       <div className="grid grid-cols-2 gap-4">
-         <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase">日期</label>
-            <input 
-              type="date"
-              value={type === 'outbound' ? outboundDate : inboundDate}
-              onChange={e => type === 'outbound' ? setOutboundDate(e.target.value) : setInboundDate(e.target.value)}
-              className="w-full p-3 bg-gray-50 rounded-xl font-medium border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
-            />
-         </div>
-         <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase">航班代號 (選填)</label>
-            <input 
-              value={flightNumber} 
-              onChange={e => setFlightNumber(e.target.value.toUpperCase())}
-              placeholder="例如 BR198"
-              className="w-full p-3 bg-gray-50 rounded-xl font-mono font-bold border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
-            />
-         </div>
-       </div>
-
-       <div className="space-y-3">
-         <button 
-           onClick={() => handleSearch(type)}
-           disabled={loading || (type === 'outbound' ? (!origin || !destination || !outboundDate) : !inboundDate)}
-           className="w-full bg-slate-900 text-white py-4 rounded-xl font-semibold hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
-         >
-           {loading ? <Loader2 className="animate-spin" /> : '搜尋即時航班'}
-         </button>
-
-         {onBack && (
-           <button 
-             onClick={onBack}
-             className="w-full text-sm text-slate-500 hover:text-slate-800 font-medium py-2 flex items-center justify-center gap-1"
-           >
-             <ChevronLeft size={16} /> 返回上一步重新挑選
-           </button>
-         )}
-       </div>
-     </div>
-  </div>
-);
-
-interface SelectStepProps {
-  type: 'outbound' | 'inbound';
-  origin: string;
-  destination: string;
-  flightOptions: FlightSegment[];
-  handleSelectFlight: (f: FlightSegment) => void;
-  setStep: (s: Step) => void;
-}
-
-const SelectStep: React.FC<SelectStepProps> = ({ 
-  type, origin, destination, flightOptions, handleSelectFlight, setStep 
-}) => (
-  <div className="space-y-4 h-[450px] flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
-     <div className="flex items-center justify-between mb-2">
-       <h3 className="font-bold text-slate-800">選擇{type === 'outbound' ? '去程' : '回程'}航班</h3>
-       <span className="text-sm text-slate-500 font-mono">
-          {type === 'outbound' ? `${origin} → ${destination}` : `${destination} → ${origin}`}
-       </span>
-     </div>
-     
-     <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-       {flightOptions.length === 0 ? (
-          <div className="text-center py-20 text-slate-400">
-             找不到此日期的航班資訊。
-             <button onClick={() => setStep(type === 'outbound' ? 'outbound-search' : 'inbound-search')} className="block mx-auto mt-2 text-primary text-sm underline">修改搜尋</button>
-          </div>
-       ) : (
-         flightOptions.map((f, i) => (
-           <div 
-             key={i} 
-             onClick={() => handleSelectFlight(f)}
-             className="bg-white border border-gray-100 p-4 rounded-2xl cursor-pointer hover:border-primary hover:shadow-md transition-all group relative overflow-hidden"
-           >
-             <div className="flex justify-between items-center mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white border border-gray-100 rounded-lg flex items-center justify-center p-1 overflow-hidden shadow-sm">
-                    <img 
-                      src={getAirlineLogo(f.airlineID)} 
-                      alt={f.airline} 
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40x40?text=' + (f.airlineID || 'AIR');
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-slate-800 text-sm">{f.airlineNameZh || f.airline}</span>
-                    <span className="text-[10px] text-slate-400 font-mono uppercase">{f.airlineID}</span>
-                  </div>
-                </div>
-                <span className="text-xs bg-gray-100 text-slate-600 px-2 py-1 rounded font-mono font-bold tracking-tight">{f.flightNumber}</span>
-             </div>
-             
-             <div className="flex items-center justify-between text-sm">
-                <div className="flex-1">
-                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{DateTimeUtils.formatTime24(f.departureTime)}</div>
-                  <div className="text-slate-400 text-xs font-bold uppercase">{f.departureAirport}</div>
-                  {f.terminal && <div className="text-[10px] text-slate-300">Terminal {f.terminal}</div>}
-                </div>
-                
-                <div className="flex-1 px-4 flex flex-col items-center">
-                   <div className="w-full border-t border-dashed border-gray-300 relative">
-                      <Plane size={14} className="absolute -top-[7px] left-1/2 -translate-x-1/2 text-primary rotate-90" />
-                   </div>
-                </div>
-                
-                <div className="flex-1 text-right">
-                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{DateTimeUtils.formatTime24(f.arrivalTime)}</div>
-                  <div className="text-slate-400 text-xs font-bold uppercase">{f.arrivalAirport}</div>
-                </div>
-             </div>
-             
-             {f.status && (
-               <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                  <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider">{f.status}</span>
-               </div>
-             )}
-           </div>
-         ))
-       )}
-     </div>
-     <button onClick={() => setStep(type === 'outbound' ? 'outbound-search' : 'inbound-search')} className="text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1">
-       <ArrowRight size={14} className="rotate-180" /> 返回搜尋
-     </button>
-  </div>
-);
-
-interface ReviewStepProps {
-  outboundFlight: FlightSegment | null;
-  inboundFlight: FlightSegment | null;
-  destination: string;
-  handleCreateTrip: () => void;
-  onBack: () => void;
-}
-
-const ReviewStep: React.FC<ReviewStepProps> = ({ 
-  outboundFlight, inboundFlight, destination, handleCreateTrip, onBack 
-}) => (
-  <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-     <div className="text-center">
-       <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-3">
-         <Check size={24} />
-       </div>
-       <h3 className="text-xl font-bold text-slate-800">確認您的旅程</h3>
-       <p className="text-slate-500 text-sm">航班資訊將自動同步至行程表</p>
-     </div>
-
-     <div className="space-y-3">
-        <div className="bg-gray-50 p-4 rounded-2xl flex justify-between items-center border border-gray-100">
-           <div className="flex items-center gap-3">
-              <div className="text-center">
-                 <div className="font-mono font-bold text-slate-800 text-lg">{outboundFlight?.departureAirport}</div>
-                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(outboundFlight?.departureTime)}</div>
-              </div>
-              <ArrowRight size={16} className="text-primary" />
-              <div className="text-center">
-                 <div className="font-mono font-bold text-slate-800 text-lg">{outboundFlight?.arrivalAirport}</div>
-                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(outboundFlight?.arrivalTime)}</div>
-              </div>
-           </div>
-           <div className="text-right">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-tighter">去程</div>
-              <div className="text-sm font-bold text-slate-700">{outboundFlight?.flightNumber}</div>
-              <div className="text-[10px] text-slate-400 font-medium">Terminal {outboundFlight?.terminal || 'TBA'}</div>
-           </div>
-        </div>
-        
-        <div className="bg-gray-50 p-4 rounded-2xl flex justify-between items-center border border-gray-100">
-           <div className="flex items-center gap-3">
-              <div className="text-center">
-                 <div className="font-mono font-bold text-slate-800 text-lg">{inboundFlight?.departureAirport}</div>
-                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(inboundFlight?.departureTime)}</div>
-              </div>
-              <ArrowRight size={16} className="text-primary" />
-              <div className="text-center">
-                 <div className="font-mono font-bold text-slate-800 text-lg">{inboundFlight?.arrivalAirport}</div>
-                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(inboundFlight?.arrivalTime)}</div>
-              </div>
-           </div>
-           <div className="text-right">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-tighter">回程</div>
-              <div className="text-sm font-bold text-slate-700">{inboundFlight?.flightNumber}</div>
-              <div className="text-[10px] text-slate-400 font-medium">Terminal {inboundFlight?.terminal || 'TBA'}</div>
-           </div>
-        </div>
-     </div>
-
-     <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 flex gap-3">
-        <Info className="text-blue-500 shrink-0" size={18} />
-        <p className="text-xs text-blue-800 leading-relaxed">
-           系統已為您在行程的首尾兩日自動安排好航機時間點。
-        </p>
-     </div>
-
-     <div className="space-y-3">
-       <button 
-         onClick={handleCreateTrip}
-         className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
-       >
-         建立我的行程 <ArrowRight size={18} />
-       </button>
-       <button 
-         onClick={onBack}
-         className="w-full text-sm text-slate-500 hover:text-slate-800 font-medium py-2 flex items-center justify-center gap-1"
-       >
-         <ChevronLeft size={16} /> 返回修改回程航班
-       </button>
-     </div>
-  </div>
-);
+const getAirlineLogo = (id: string | undefined) => id ? `https://pics.avs.io/120/120/${id}.png` : null;
 
 export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
+  const { language } = useTranslation();
   const [step, setStep] = useState<Step>('outbound-search');
   const [loading, setLoading] = useState(false);
-
   const [origin, setOrigin] = useState('TPE');
   const [destination, setDestination] = useState('');
   const [outboundFlightNumber, setOutboundFlightNumber] = useState('');
   const [inboundFlightNumber, setInboundFlightNumber] = useState('');
   const [outboundDate, setOutboundDate] = useState('');
   const [inboundDate, setInboundDate] = useState('');
-
   const [flightOptions, setFlightOptions] = useState<FlightSegment[]>([]);
   const [outboundFlight, setOutboundFlight] = useState<FlightSegment | null>(null);
   const [inboundFlight, setInboundFlight] = useState<FlightSegment | null>(null);
 
+  const labels = {
+    title: language === 'zh' ? '行程小幫手' : 'Travel Assistant',
+    outboundSearch: language === 'zh' ? '要去哪裡旅行？' : 'Where are you going?',
+    inboundSearch: language === 'zh' ? '什麼時候回來？' : 'When are you back?',
+    outboundSub: language === 'zh' ? '透過 TDX 搜尋您的出發航班' : 'Find your outbound flight via TDX',
+    inboundSub: (dest: string, orig: string) => language === 'zh' ? `從 ${dest} 飛回 ${orig}` : `Fly from ${dest} back to ${orig}`,
+    origin: language === 'zh' ? '出發地' : 'Origin',
+    destination: language === 'zh' ? '目的地' : 'Destination',
+    date: language === 'zh' ? '日期' : 'Date',
+    flightNo: language === 'zh' ? '航班代號 (選填)' : 'Flight No. (Optional)',
+    searchBtn: language === 'zh' ? '搜尋即時航班' : 'Search Live Flights',
+    back: language === 'zh' ? '返回上一步' : 'Back',
+    selectOut: language === 'zh' ? '選擇去程航班' : 'Select Outbound',
+    selectIn: language === 'zh' ? '選擇回程航班' : 'Select Inbound',
+    noFlights: language === 'zh' ? '找不到此日期的航班資訊。' : 'No flights found for this date.',
+    review: language === 'zh' ? '確認您的旅程' : 'Confirm Your Trip',
+    reviewSub: language === 'zh' ? '航班資訊將自動同步至行程表' : 'Flights will sync to your itinerary',
+    confirmBtn: language === 'zh' ? '建立我的行程' : 'Create My Trip',
+    airport: language === 'zh' ? '機場' : 'Airport'
+  };
+
   const handleSearch = async (type: 'outbound' | 'inbound') => {
-    if (type === 'outbound' && (!origin || !destination || !outboundDate)) return;
-    if (type === 'inbound' && (!destination || !origin || !inboundDate)) return;
-
     setLoading(true);
-    setFlightOptions([]);
-
     try {
       const from = type === 'outbound' ? origin : destination;
       const to = type === 'outbound' ? destination : origin;
       const date = type === 'outbound' ? outboundDate : inboundDate;
       const fNo = type === 'outbound' ? outboundFlightNumber : inboundFlightNumber;
-
       const results = await fetchTdxFlights(from, to, date, fNo);
       setFlightOptions(results);
       setStep(type === 'outbound' ? 'outbound-select' : 'inbound-select');
-    } catch (e) {
-      console.error(e);
-      alert("抓取航班資料失敗。");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectFlight = (flight: FlightSegment) => {
-    if (step === 'outbound-select') {
-      setOutboundFlight(flight);
-      if (flight.arrivalTime) {
-         const d = new Date(flight.arrivalTime);
-         d.setDate(d.getDate() + 4);
-         setInboundDate(d.toISOString().split('T')[0]);
-      }
-      setStep('inbound-search');
-    } else {
-      setInboundFlight(flight);
-      setStep('review');
-    }
+    } catch (e) { alert(language === 'zh' ? "抓取失敗" : "Fetch failed"); }
+    finally { setLoading(false); }
   };
 
   const handleCreateTrip = () => {
     if (!outboundFlight || !inboundFlight) return;
-
     const start = new Date(outboundFlight.departureTime.split('T')[0]);
     const end = new Date(inboundFlight.departureTime.split('T')[0]);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
-    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
+    const totalDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const generatedItinerary: DayPlan[] = [];
     for (let i = 0; i < totalDays; i++) {
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const d = new Date(start); d.setDate(d.getDate() + i);
       const items: ItineraryItem[] = [];
-
       if (i === 0) {
-        // Day 1
-        items.push({
-          id: 'outbound-flight-dep',
-          time: DateTimeUtils.formatTime24(outboundFlight.departureTime),
-          placeName: `Airport ${outboundFlight.departureAirport}`,
-          type: 'Transport',
-          note: `航班: ${outboundFlight.flightNumber}, 航廈: ${outboundFlight.terminal || 'TBA'}`
-        });
-        items.push({
-          id: 'outbound-flight-arr',
-          time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime),
-          placeName: `Airport ${outboundFlight.arrivalAirport}`,
-          type: 'Transport',
-          note: `航廈: ${outboundFlight.terminal || 'TBA'}`
-        });
+        items.push({ id: 'outbound-flight-dep', time: DateTimeUtils.formatTime24(outboundFlight.departureTime), placeName: `${labels.airport} ${outboundFlight.departureAirport}`, type: 'Transport', note: `Flight: ${outboundFlight.flightNumber}` });
+        items.push({ id: 'outbound-flight-arr', time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime), placeName: `${labels.airport} ${outboundFlight.arrivalAirport}`, type: 'Transport' });
       }
-
       if (i === totalDays - 1) {
-        // Last Day
-        items.push({
-          id: 'inbound-flight-dep',
-          time: DateTimeUtils.formatTime24(inboundFlight.departureTime),
-          placeName: `Airport ${inboundFlight.departureAirport}`,
-          type: 'Transport',
-          note: `航班: ${inboundFlight.flightNumber}, 航廈: ${inboundFlight.terminal || 'TBA'}`
-        });
-        items.push({
-          id: 'inbound-flight-arr',
-          time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime),
-          placeName: `Airport ${inboundFlight.arrivalAirport}`,
-          type: 'Transport',
-          note: `航廈: ${inboundFlight.terminal || 'TBA'}`
-        });
+        items.push({ id: 'inbound-flight-dep', time: DateTimeUtils.formatTime24(inboundFlight.departureTime), placeName: `${labels.airport} ${inboundFlight.departureAirport}`, type: 'Transport', note: `Flight: ${inboundFlight.flightNumber}` });
+        items.push({ id: 'inbound-flight-arr', time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime), placeName: `${labels.airport} ${inboundFlight.arrivalAirport}`, type: 'Transport' });
       }
-
-      generatedItinerary.push({ date: dateStr, items: items.sort((a,b) => a.time.localeCompare(b.time)) });
+      generatedItinerary.push({ date: d.toISOString().split('T')[0], items: items.sort((a,b) => a.time.localeCompare(b.time)) });
     }
-
-    const newTrip = createNewTrip({
-      destination: destination,
-      startDate: outboundFlight.departureTime.split('T')[0],
-      endDate: inboundFlight.departureTime.split('T')[0]
-    });
-
+    const newTrip = createNewTrip({ destination, startDate: outboundFlight.departureTime.split('T')[0], endDate: inboundFlight.departureTime.split('T')[0] });
     newTrip.itinerary = generatedItinerary;
-    newTrip.flight = {
-      price: 0,
-      currency: Currency.TWD,
-      cabinClass: 'Economy',
-      outbound: outboundFlight,
-      inbound: inboundFlight,
-      baggage: {
-        carryOn: { count: 1, weight: '7kg' },
-        checked: { count: 1, weight: '23kg' }
-      }
-    };
-
-    const airportMap: Record<string, string> = {
-      'TPE': '台北', 'TSA': '台北', 'KHH': '高雄', 'NRT': '東京', 'HND': '東京', 'KIX': '大阪', 'ICN': '首爾', 'GMP': '首爾', 'BKK': '曼谷', 'SIN': '新加坡', 'HKG': '香港', 'LHR': '倫敦', 'JFK': '紐約', 'CDG': '巴黎', 'LAX': '洛杉磯'
-    };
-    
-    if (airportMap[destination]) {
-      newTrip.destination = airportMap[destination];
-      newTrip.name = `${airportMap[destination]}之旅`;
-    } else {
-      newTrip.name = `${destination}之旅`;
-    }
-
+    newTrip.flight = { price: 0, currency: Currency.TWD, cabinClass: 'Economy', outbound: outboundFlight, inbound: inboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } };
     onSubmit(newTrip);
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+      <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center transition-colors">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800 tracking-tight">行程小幫手</h2>
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{labels.title}</h2>
             <div className="flex gap-1.5 mt-2">
-               <div className={`h-1.5 w-10 rounded-full transition-all duration-300 ${step.includes('outbound') ? 'bg-primary' : 'bg-gray-100'}`} />
-               <div className={`h-1.5 w-10 rounded-full transition-all duration-300 ${step.includes('inbound') ? 'bg-primary' : (step === 'review' ? 'bg-primary/40' : 'bg-gray-100')}`} />
-               <div className={`h-1.5 w-10 rounded-full transition-all duration-300 ${step === 'review' ? 'bg-primary' : 'bg-gray-100'}`} />
+               <div className={`h-1.5 w-10 rounded-full ${step.includes('outbound') ? 'bg-primary' : 'bg-gray-100 dark:bg-slate-700'}`} />
+               <div className={`h-1.5 w-10 rounded-full ${step.includes('inbound') ? 'bg-primary' : (step === 'review' ? 'bg-primary/40' : 'bg-gray-100 dark:bg-slate-700')}`} />
+               <div className={`h-1.5 w-10 rounded-full ${step === 'review' ? 'bg-primary' : 'bg-gray-100 dark:bg-slate-700'}`} />
             </div>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-gray-100 rounded-full text-slate-400 transition-colors">
-            <X size={20} />
-          </button>
+          <button onClick={onClose} className="p-3 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full text-slate-400"><X size={20} /></button>
         </div>
-        
-        <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-8 flex-1 overflow-y-auto custom-scrollbar dark:text-slate-200">
            {step === 'outbound-search' && (
-             <SearchStep 
-               type="outbound" 
-               origin={origin} setOrigin={setOrigin} 
-               destination={destination} setDestination={setDestination} 
-               flightNumber={outboundFlightNumber} setFlightNumber={setOutboundFlightNumber}
-               outboundDate={outboundDate} setOutboundDate={setOutboundDate} 
-               inboundDate={inboundDate} setInboundDate={setInboundDate} 
-               loading={loading} handleSearch={handleSearch} 
-             />
+             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="text-center mb-6"><div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-primary rounded-full flex items-center justify-center mx-auto mb-3"><Plane /></div><h3 className="text-xl font-bold text-slate-800 dark:text-white">{labels.outboundSearch}</h3><p className="text-slate-500 text-sm">{labels.outboundSub}</p></div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.origin}</label><input value={origin} onChange={e => setOrigin(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold text-lg border border-transparent focus:bg-white dark:focus:bg-slate-700 focus:outline-none" placeholder="TPE" /></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.destination}</label><input value={destination} onChange={e => setDestination(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold text-lg border border-transparent focus:bg-white dark:focus:bg-slate-700 focus:outline-none" placeholder="KIX" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.date}</label><input type="date" value={outboundDate} onChange={e => setOutboundDate(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.flightNo}</label><input value={outboundFlightNumber} onChange={e => setOutboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold outline-none" /></div>
+                  </div>
+                  <button onClick={() => handleSearch('outbound')} disabled={loading || !origin || !destination || !outboundDate} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform disabled:opacity-50">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
+                </div>
+             </div>
            )}
-           {step === 'outbound-select' && (
-             <SelectStep 
-               type="outbound" 
-               origin={origin} destination={destination} 
-               flightOptions={flightOptions} 
-               handleSelectFlight={handleSelectFlight} 
-               setStep={setStep} 
-             />
+           {(step === 'outbound-select' || step === 'inbound-select') && (
+             <div className="space-y-4 h-[450px] flex flex-col animate-in fade-in slide-in-from-right-4 duration-300">
+               <h3 className="font-bold text-slate-800 dark:text-white">{step === 'outbound-select' ? labels.selectOut : labels.selectIn}</h3>
+               <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                 {flightOptions.length === 0 ? <div className="text-center py-20 text-slate-400">{labels.noFlights}</div> : flightOptions.map((f, i) => (
+                   <div key={i} onClick={() => { if (step === 'outbound-select') { setOutboundFlight(f); setInboundDate(f.arrivalTime.split('T')[0]); setStep('inbound-search'); } else { setInboundFlight(f); setStep('review'); } }} className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-700 p-4 rounded-2xl cursor-pointer hover:border-primary shadow-sm hover:shadow-md transition-all">
+                      <div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded p-1 bg-white dark:bg-slate-800 border dark:border-slate-700"><img src={getAirlineLogo(f.airlineID) || ''} className="w-full h-full object-contain" onError={e=>(e.target as any).src='https://via.placeholder.com/32'} /></div><span className="font-bold text-sm dark:text-slate-200">{f.airline}</span></div><span className="text-xs font-mono font-bold text-slate-400">{f.flightNumber}</span></div>
+                      <div className="flex justify-between items-center text-sm font-bold dark:text-white"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><Plane size={14} className="text-slate-300 mx-2" /><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
+                   </div>
+                 ))}
+               </div>
+               <button onClick={() => setStep(step === 'outbound-select' ? 'outbound-search' : 'inbound-search')} className="text-sm text-slate-400 flex items-center gap-1 hover:text-slate-600"><ChevronLeft size={14} /> {labels.back}</button>
+             </div>
            )}
            {step === 'inbound-search' && (
-             <SearchStep 
-               type="inbound" 
-               origin={origin} setOrigin={setOrigin} 
-               destination={destination} setDestination={setDestination} 
-               flightNumber={inboundFlightNumber} setFlightNumber={setInboundFlightNumber}
-               outboundDate={outboundDate} setOutboundDate={setOutboundDate} 
-               inboundDate={inboundDate} setInboundDate={setInboundDate} 
-               loading={loading} handleSearch={handleSearch} 
-               onBack={() => setStep('outbound-select')}
-             />
-           )}
-           {step === 'inbound-select' && (
-             <SelectStep 
-               type="inbound" 
-               origin={origin} destination={destination} 
-               flightOptions={flightOptions} 
-               handleSelectFlight={handleSelectFlight} 
-               setStep={setStep} 
-             />
+             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="text-center mb-6"><div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-primary rounded-full flex items-center justify-center mx-auto mb-3"><Plane className="rotate-180" /></div><h3 className="text-xl font-bold text-slate-800 dark:text-white">{labels.inboundSearch}</h3><p className="text-slate-500 text-sm">{labels.inboundSub(destination, origin)}</p></div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.date}</label><input type="date" value={inboundDate} onChange={e => setInboundDate(e.target.value)} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-medium outline-none" /></div>
+                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-500 uppercase">{labels.flightNo}</label><input value={inboundFlightNumber} onChange={e => setInboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 dark:text-white rounded-xl font-mono font-bold outline-none" /></div>
+                  </div>
+                  <button onClick={() => handleSearch('inbound')} disabled={loading || !inboundDate} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
+                  <button onClick={() => setStep('outbound-select')} className="w-full text-sm text-slate-400 hover:text-slate-600 text-center">{labels.back}</button>
+                </div>
+             </div>
            )}
            {step === 'review' && (
-             <ReviewStep 
-               outboundFlight={outboundFlight} 
-               inboundFlight={inboundFlight} 
-               destination={destination} 
-               handleCreateTrip={handleCreateTrip} 
-               onBack={() => setStep('inbound-select')}
-             />
+             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                <div className="text-center"><div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center mx-auto mb-3"><Check size={24} /></div><h3 className="text-xl font-bold text-slate-800 dark:text-white">{labels.review}</h3><p className="text-slate-500 text-sm">{labels.reviewSub}</p></div>
+                <div className="space-y-3">
+                  <div className="bg-gray-50 dark:bg-slate-900/50 p-4 rounded-2xl flex justify-between items-center border border-gray-100 dark:border-slate-700"><div className="font-bold text-slate-800 dark:text-white">{outboundFlight?.flightNumber}</div><div className="text-right text-xs text-slate-500">{outboundFlight?.departureAirport} → {outboundFlight?.arrivalAirport}</div></div>
+                  <div className="bg-gray-50 dark:bg-slate-900/50 p-4 rounded-2xl flex justify-between items-center border border-gray-100 dark:border-slate-700"><div className="font-bold text-slate-800 dark:text-white">{inboundFlight?.flightNumber}</div><div className="text-right text-xs text-slate-500">{inboundFlight?.departureAirport} → {inboundFlight?.arrivalAirport}</div></div>
+                </div>
+                <button onClick={handleCreateTrip} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-lg">{labels.confirmBtn} <ArrowRight size={18} /></button>
+             </div>
            )}
         </div>
       </div>

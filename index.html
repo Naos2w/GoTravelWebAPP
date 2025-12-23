@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
   <head>
@@ -8,18 +9,28 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
               primary: '#007AFF',
               secondary: '#5856D6',
-              background: '#F5F5F7',
-              surface: '#FFFFFF',
-              text: '#1D1D1F',
-              subtext: '#86868B',
+              // 更新為更明亮的淺色底色
+              background: {
+                light: '#FBFBFD', 
+                dark: '#1C1C1E'
+              },
+              surface: {
+                light: '#FFFFFF',
+                dark: '#2C2C2E'
+              }
             },
             fontFamily: {
               sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
+            boxShadow: {
+              'ios': '0 4px 12px rgba(0,0,0,0.05)',
+              'ios-lg': '0 10px 30px rgba(0,0,0,0.08)'
             }
           }
         }
@@ -27,9 +38,14 @@
     </script>
     <style>
       body {
-        background-color: #F5F5F7;
+        background-color: #FBFBFD;
         color: #1D1D1F;
         -webkit-font-smoothing: antialiased;
+        transition: background-color 0.4s ease, color 0.4s ease;
+      }
+      .dark body {
+        background-color: #1C1C1E;
+        color: #F5F5F7;
       }
       /* Hide scrollbar for clean UI but allow scrolling */
       .no-scrollbar::-webkit-scrollbar {
@@ -38,6 +54,19 @@
       .no-scrollbar {
         -ms-overflow-style: none;
         scrollbar-width: none;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.05);
+        border-radius: 10px;
+      }
+      .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
       }
     </style>
   <script type="importmap">
@@ -53,10 +82,9 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+      <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
