@@ -21,6 +21,7 @@ export interface Expense {
   currency: Currency;
   category: 'Accommodation' | 'Transport' | 'Food' | 'Tickets' | 'Shopping' | 'Other';
   date: string;
+  createdAt: string; // 新增：記錄建立時間
   note: string;
   exchangeRate: number; // Rate to TWD at time of entry
 }
