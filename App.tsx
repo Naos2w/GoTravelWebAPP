@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
-import { Trip, Currency, Theme, Language } from './types';
+import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import { Trip, Currency, Theme, Language, User } from './types';
 import { getTrips, saveTrip, deleteTrip } from './services/storageService';
 import { Checklist } from './components/Checklist';
 import { Itinerary } from './components/Itinerary';
@@ -10,9 +10,12 @@ import { TripForm } from './components/TripForm';
 import { FlightManager } from './components/FlightManager';
 import { 
   Plane, Calendar, CheckSquare, DollarSign, CloudSun, 
-  Plus, ArrowRight, Home, ChevronLeft,
-  LayoutDashboard, Trash2, Moon, Sun, Languages, Settings
+  Plus, ArrowRight, Home, ChevronLeft, LogOut,
+  LayoutDashboard, Trash2, Moon, Sun, Languages, Settings, User as UserIcon, AlertCircle, ExternalLink
 } from 'lucide-react';
+
+// 從環境變數讀取 Google Client ID
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 
 // --- Localization ---
 const translations = {
@@ -21,8 +24,8 @@ const translations = {
     tagline: '讓旅行更簡單',
     heroTitle: '聰明規劃，\n自在旅行。',
     heroSubtitle: '全方位的旅程規劃空間。機票、行程、花費與 AI 助手，一切都在這個優美的平台。',
-    startPlanning: '開始規劃',
-    signIn: '登入',
+    startPlanning: '立即體驗',
+    signIn: '使用 Google 登入',
     yourTrips: '您的旅程',
     newTrip: '新增旅程',
     noTrips: '尚無行程',
@@ -35,12 +38,15 @@ const translations = {
     checklist: '待辦清單',
     expenses: '花費統計',
     tickets: '機票資訊',
-    welcome: '歡迎來到',
+    welcome: '歡迎回來',
     quickStats: '快速統計',
     totalSpent: '總花費',
     weatherForecast: '天氣預報',
     deleteTrip: '刪除旅程',
-    confirmDelete: '確定要刪除這趟旅程嗎？此動作無法復原。'
+    confirmDelete: '確定要刪除這趟旅程嗎？此動作無法復原。',
+    logout: '登出',
+    devNotice: '開發者提示：尚未設定 GOOGLE_CLIENT_ID',
+    devNoticeSub: '請在環境變數中設定 GOOGLE_CLIENT_ID，並確保該 ID 已在 Google Cloud Console 中獲得授權。'
   },
   en: {
     appName: 'Go Travel',
@@ -48,7 +54,7 @@ const translations = {
     heroTitle: 'Travel smarter,\nnot harder.',
     heroSubtitle: 'The all-in-one workspace for your next adventure. Flights, itinerary, expenses, and AI assistance in one beautiful place.',
     startPlanning: 'Start Planning',
-    signIn: 'Sign In',
+    signIn: 'Sign in with Google',
     yourTrips: 'Your Trips',
     newTrip: 'New Trip',
     noTrips: 'No trips yet',
@@ -61,12 +67,15 @@ const translations = {
     checklist: 'Checklist',
     expenses: 'Expenses',
     tickets: 'Tickets',
-    welcome: 'Welcome to',
+    welcome: 'Welcome back',
     quickStats: 'Quick Stats',
     totalSpent: 'Total Spent',
     weatherForecast: 'Weather Forecast',
     deleteTrip: 'Delete Trip',
-    confirmDelete: 'Are you sure you want to delete this trip? This action cannot be undone.'
+    confirmDelete: 'Are you sure you want to delete this trip? This action cannot be undone.',
+    logout: 'Logout',
+    devNotice: 'Developer Notice: GOOGLE_CLIENT_ID Not Set',
+    devNoticeSub: 'Please set GOOGLE_CLIENT_ID in your environment variables and ensure it is authorized in the Google Cloud Console.'
   }
 };
 
@@ -85,13 +94,22 @@ export const useTranslation = () => {
 };
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'landing' | 'list' | 'detail'>('landing');
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [view, setView] = useState<'landing' | 'list' | 'detail'>(() => {
+    return localStorage.getItem('user') ? 'list' : 'landing';
+  });
   const [currentTripId, setCurrentTripId] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'itinerary' | 'checklist' | 'expenses' | 'flights'>('dashboard');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('lang') as Language) || 'zh');
+  
+  // 檢查 Client ID 是否存在且有效
+  const isClientIdMissing = !GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID.includes('YOUR_GOOGLE_CLIENT_ID');
 
   useEffect(() => {
     setTrips(getTrips());
@@ -103,10 +121,77 @@ const App: React.FC = () => {
     localStorage.setItem('lang', language);
   }, [language]);
 
+  // 初始化 Google 登入
+  useEffect(() => {
+    const initializeGoogleSignIn = () => {
+      if (!window.google || isClientIdMissing) return;
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse,
+        auto_select: false,
+      });
+
+      const btnElement = document.getElementById('google-login-btn');
+      if (btnElement) {
+        window.google.accounts.id.renderButton(btnElement, {
+          theme: theme === 'dark' ? 'filled_black' : 'outline',
+          size: 'large',
+          width: 280,
+          text: 'continue_with',
+          shape: 'pill'
+        });
+      }
+      
+      // 嘗試啟用 One Tap
+      window.google.accounts.id.prompt();
+    };
+
+    const handleCredentialResponse = (response: any) => {
+      try {
+        const base64Url = response.credential.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+
+        const decoded = JSON.parse(jsonPayload);
+        const userData: User = {
+          id: decoded.sub,
+          name: decoded.name,
+          email: decoded.email,
+          picture: decoded.picture
+        };
+
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setView('list');
+      } catch (e) {
+        console.error("Google Auth Decode Error:", e);
+      }
+    };
+
+    // 輪詢等待 SDK 載入完成
+    const checkInterval = setInterval(() => {
+      if (window.google?.accounts?.id) {
+        initializeGoogleSignIn();
+        clearInterval(checkInterval);
+      }
+    }, 500);
+
+    return () => clearInterval(checkInterval);
+  }, [view, theme, user, isClientIdMissing]);
+
   const t = (key: keyof typeof translations.en) => translations[language][key] || translations.en[key];
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const toggleLanguage = () => setLanguage(prev => prev === 'zh' ? 'en' : 'zh');
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('user');
+    setView('landing');
+  };
 
   const handleCreateTripSubmit = (newTrip: Trip) => {
     saveTrip(newTrip);
@@ -156,8 +241,8 @@ const App: React.FC = () => {
     <LocalizationContext.Provider value={{ t, language, setLanguage }}>
       <div className={`min-h-screen transition-all duration-500 ${theme === 'dark' ? 'dark bg-[#1C1C1E] text-slate-100' : 'bg-[#FBFBFD] text-slate-900'}`}>
         {view === 'landing' && (
-          <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] transition-colors">
-            <header className="p-6 flex justify-between items-center max-w-7xl mx-auto w-full">
+          <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] transition-colors overflow-x-hidden">
+            <header className="p-6 flex justify-between items-center max-w-7xl mx-auto w-full relative z-10">
               <div className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">
                 {t('appName')}
               </div>
@@ -168,23 +253,54 @@ const App: React.FC = () => {
                 <button onClick={toggleTheme} className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
                   {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                 </button>
-                <button onClick={() => setView('list')} className="text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-4">{t('signIn')}</button>
               </div>
             </header>
-            <main className="flex-1 flex flex-col items-center justify-center text-center px-6">
+            
+            <main className="flex-1 flex flex-col items-center justify-center text-center px-6 relative z-10">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-500/5 dark:bg-blue-500/10 blur-[120px] rounded-full -z-10" />
+              
               <h1 className="text-5xl md:text-8xl font-black text-slate-900 dark:text-white tracking-tighter mb-8 whitespace-pre-line animate-in fade-in slide-in-from-bottom-6 duration-1000">
                 {t('heroTitle')}
               </h1>
               <p className="text-lg md:text-xl text-slate-500 dark:text-slate-400 max-w-2xl mb-12 font-medium animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-200">
                 {t('heroSubtitle')}
               </p>
-              <button 
-                onClick={() => setView('list')}
-                className="group bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-10 py-5 rounded-full text-lg font-black hover:scale-105 transition-all flex items-center gap-3 shadow-2xl shadow-slate-200 dark:shadow-none animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-300"
-              >
-                {t('startPlanning')} <ArrowRight size={22} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+              
+              <div className="flex flex-col items-center gap-6 animate-in fade-in slide-in-from-bottom-10 duration-1000 delay-300">
+                {isClientIdMissing ? (
+                  <div className="bg-red-50 dark:bg-red-900/20 p-8 rounded-[32px] border border-red-100 dark:border-red-900/30 max-w-sm text-center shadow-ios">
+                    <div className="w-12 h-12 bg-red-500 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-red-500/20">
+                      <AlertCircle size={24} />
+                    </div>
+                    <h3 className="font-black text-red-900 dark:text-red-200 mb-2">{t('devNotice')}</h3>
+                    <p className="text-xs text-red-600 dark:text-red-400/80 mb-6 leading-relaxed">{t('devNoticeSub')}</p>
+                    <a 
+                      href="https://console.cloud.google.com/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-red-600 text-white px-6 py-3 rounded-2xl font-black text-xs hover:bg-red-700 transition-all shadow-md"
+                    >
+                      Google Console <ExternalLink size={14} />
+                    </a>
+                  </div>
+                ) : (
+                  <div id="google-login-btn"></div>
+                )}
+                
+                {user && (
+                  <button 
+                    onClick={() => setView('list')}
+                    className="group bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-10 py-5 rounded-full text-lg font-black hover:scale-105 transition-all flex items-center gap-3 shadow-2xl shadow-slate-200 dark:shadow-none"
+                  >
+                    {t('startPlanning')} <ArrowRight size={22} className="group-hover:translate-x-1 transition-transform" />
+                  </button>
+                )}
+              </div>
             </main>
+            
+            <footer className="p-8 text-center text-slate-400 dark:text-slate-600 text-[10px] font-black uppercase tracking-[0.2em] relative z-10">
+              &copy; {new Date().getFullYear()} {t('appName')} Inc. All Rights Reserved.
+            </footer>
           </div>
         )}
         
@@ -202,9 +318,18 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </div>
-              <button onClick={() => setShowCreateForm(true)} className="bg-primary text-white px-5 py-3 rounded-2xl flex items-center gap-2 hover:bg-blue-600 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all font-black text-sm">
-                <Plus size={20} /> <span className="hidden sm:inline">{t('newTrip')}</span>
-              </button>
+              <div className="flex items-center gap-4">
+                {user && (
+                   <div className="hidden sm:flex items-center gap-3 p-1.5 bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-full pr-4 shadow-sm">
+                      <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full border border-slate-100" />
+                      <span className="text-xs font-black dark:text-white">{user.name}</span>
+                      <button onClick={logout} className="p-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-400 rounded-full transition-colors"><LogOut size={14} /></button>
+                   </div>
+                )}
+                <button onClick={() => setShowCreateForm(true)} className="bg-primary text-white px-5 py-3 rounded-2xl flex items-center gap-2 hover:bg-blue-600 shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all font-black text-sm">
+                  <Plus size={20} /> <span className="hidden sm:inline">{t('newTrip')}</span>
+                </button>
+              </div>
             </div>
             
             {trips.length === 0 ? (
@@ -263,7 +388,6 @@ const App: React.FC = () => {
                    </div>
                  </div>
                  
-                 {/* 響應式頂部導覽：md (Tablet) 僅顯示圖標，lg (PC) 顯示圖標+文字 */}
                  <div className="flex items-center gap-1 sm:gap-4 shrink-0">
                     <div className="hidden sm:flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-2xl">
                       {tabs.map(tab => (
@@ -289,6 +413,11 @@ const App: React.FC = () => {
                       <button onClick={toggleTheme} className="p-2.5 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                           {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
                       </button>
+                      {user && (
+                         <button onClick={logout} className="p-2.5 text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl transition-colors">
+                            <LogOut size={20} />
+                         </button>
+                      )}
                       <button onClick={handleDeleteTrip} className="p-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-colors">
                         <Trash2 size={20} />
                       </button>
@@ -297,13 +426,15 @@ const App: React.FC = () => {
               </div>
             </nav>
 
-            {/* 主內容區域：增加 pb 以防止底部導覽列遮擋內容 */}
             <main className="max-w-7xl mx-auto p-4 md:p-12 pb-36 sm:pb-12 animate-in fade-in duration-500">
               {activeTab === 'dashboard' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="md:col-span-2 space-y-8">
                     <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 md:p-12 shadow-ios transition-all duration-300">
-                       <h2 className="text-3xl font-black mb-2 dark:text-white tracking-tighter">{t('welcome')} {currentTrip.name || currentTrip.destination}!</h2>
+                       <div className="flex items-center gap-4 mb-4">
+                          {user && <img src={user.picture} alt={user.name} className="w-12 h-12 rounded-full border-2 border-primary/20" />}
+                          <h2 className="text-3xl font-black dark:text-white tracking-tighter">{t('welcome')}{user ? `, ${user.name.split(' ')[0]}` : ''}!</h2>
+                       </div>
                        <p className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest text-[10px]">{new Date(currentTrip.startDate).toLocaleDateString()} - {new Date(currentTrip.endDate).toLocaleDateString()}</p>
                        <div className="mt-8 flex flex-wrap gap-3">
                           {currentTrip.flight?.outbound.flightNumber && (
@@ -311,28 +442,9 @@ const App: React.FC = () => {
                               {currentTrip.flight.outbound.flightNumber}
                             </span>
                           )}
-                          {currentTrip.flight?.inbound && currentTrip.flight.inbound.flightNumber && (
-                            <span className="bg-blue-50/50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-5 py-2 rounded-full font-black text-[10px] border border-blue-100/50 dark:border-blue-800 uppercase tracking-widest">
-                              {currentTrip.flight.inbound.flightNumber}
-                            </span>
-                          )}
                        </div>
                     </div>
                     <ImageGenerator />
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] shadow-ios transition-all duration-300">
-                      <h3 className="text-xl font-black text-slate-900 dark:text-white mb-8 flex items-center gap-3">
-                        <CloudSun className="text-orange-400" size={24} /> {t('weatherForecast')}
-                      </h3>
-                      <div className="flex justify-between items-center overflow-x-auto gap-8 no-scrollbar py-2">
-                         {Array.from({length: Math.min(6, currentTrip.itinerary.length || 1)}).map((_, i) => (
-                           <div key={i} className="flex flex-col items-center min-w-[80px] p-4 rounded-[32px] hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
-                              <span className="text-[9px] font-black text-slate-400 uppercase mb-3 tracking-[0.2em]">Day {i+1}</span>
-                              <CloudSun size={32} className={i % 2 === 0 ? "text-yellow-500" : "text-slate-400"} />
-                              <span className="text-xl font-black mt-3 dark:text-slate-100">{25 - i}°</span>
-                           </div>
-                         ))}
-                      </div>
-                    </div>
                   </div>
                   
                   <div className="space-y-8">
@@ -345,15 +457,6 @@ const App: React.FC = () => {
                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('totalSpent')}</span>
                              <span className="text-3xl font-black text-primary tracking-tighter">NT$ {calculateTotalSpentTWD(currentTrip).toLocaleString()}</span>
                           </div>
-                          <div className="flex flex-col gap-2">
-                             <div className="flex justify-between items-end">
-                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('checklist')}</span>
-                               <span className="text-sm font-black dark:text-slate-200">{Math.round((currentTrip.checklist.filter(i => i.isCompleted).length / (currentTrip.checklist.length || 1)) * 100)}%</span>
-                             </div>
-                             <div className="h-2.5 w-full bg-slate-50 dark:bg-slate-900 rounded-full overflow-hidden shadow-inner">
-                               <div className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-1000 shadow-[0_0_12px_rgba(34,197,94,0.3)]" style={{ width: `${(currentTrip.checklist.filter(i => i.isCompleted).length / (currentTrip.checklist.length || 1)) * 100}%` }}></div>
-                             </div>
-                          </div>
                         </div>
                      </div>
                   </div>
@@ -365,7 +468,6 @@ const App: React.FC = () => {
               {activeTab === 'flights' && <FlightManager trip={currentTrip} onUpdate={updateCurrentTrip} />}
             </main>
 
-            {/* 手機板底部導覽列：僅在 sm 螢幕顯示 */}
             <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-between items-center z-40 shadow-2xl transition-all duration-300 pb-safe">
               {tabs.map(tab => (
                 <button 

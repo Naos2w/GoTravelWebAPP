@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.TDX_CLIENT_ID': JSON.stringify(env.TDX_CLIENT_ID),
         'process.env.TDX_CLIENT_SECRET': JSON.stringify(env.TDX_CLIENT_SECRET),
+        'process.env.GOOGLE_CLIENT_ID': JSON.stringify(env.GOOGLE_CLIENT_ID),
       },
       resolve: {
         alias: {
