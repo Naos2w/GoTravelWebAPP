@@ -68,6 +68,13 @@
       .dark .custom-scrollbar::-webkit-scrollbar-thumb {
         background: rgba(255,255,255,0.1);
       }
+      @keyframes pulse-soft {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      .animate-pulse-soft {
+        animation: pulse-soft 2s infinite ease-in-out;
+      }
     </style>
   <script type="importmap">
 {
@@ -78,7 +85,8 @@
     "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
     "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
-    "recharts": "https://esm.sh/recharts@^3.6.0"
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.45.0"
   }
 }
 </script>
