@@ -63,7 +63,7 @@ const SafeInput: React.FC<{
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const { language } = useTranslation();
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  const [days, setDays] = useState<DayPlan[]>([]);
+  const [days, setDays] = useState<DayPlan[]>(trip.itinerary || []);
   const [showTimePickerId, setShowTimePickerId] = useState<string | null>(null);
   const [calculatingId, setCalculatingId] = useState<string | null>(null);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
@@ -86,27 +86,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     setTransport: language === 'zh' ? '設定交通' : 'Transport',
   };
 
-  useEffect(() => {
-    if (!trip.startDate || !trip.endDate) return;
-    const start = new Date(trip.startDate + 'T00:00:00');
-    const end = new Date(trip.endDate + 'T00:00:00');
-    const diffDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    let currentItinerary = [...(trip.itinerary || [])];
-    if (currentItinerary.length !== diffDays) {
-      const newPlan: DayPlan[] = [];
-      for (let i = 0; i < diffDays; i++) {
-        const d = new Date(start);
-        d.setDate(d.getDate() + i);
-        const dateStr = DateTimeUtils.formatDate(d);
-        const existing = currentItinerary.find(p => p.date === dateStr);
-        newPlan.push(existing ? existing : { date: dateStr, items: [] });
-      }
-      currentItinerary = newPlan;
-      onUpdate({ ...trip, itinerary: currentItinerary });
-    }
-    setDays(currentItinerary);
-  }, [trip.startDate, trip.endDate]);
-
+  // 同步外部資料
   useEffect(() => { setDays(trip.itinerary || []); }, [trip.itinerary]);
 
   useEffect(() => {
@@ -214,7 +194,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
           const isSelected = idx === selectedDayIndex;
           const d = new Date(day.date + 'T00:00:00');
           return (
-            <button key={idx} onClick={() => setSelectedDayIndex(idx)} className={`flex-shrink-0 lg:w-full p-4 rounded-[24px] text-center transition-all duration-300 border ${isSelected ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xl border-slate-900' : 'bg-white dark:bg-slate-800 text-slate-500 border-gray-100 dark:border-slate-800'}`}>
+            <button key={idx} onClick={() => setSelectedDayIndex(idx)} className={`flex-shrink-0 lg:w-full p-4 rounded-[24px] text-center transition-all duration-300 border ${isSelected ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xl border-slate-900' : 'bg-white dark:bg-slate-800 text-slate-500 border-gray-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-white/5'}`}>
               <div className="text-[10px] font-black uppercase mb-1">Day {idx + 1}</div>
               <div className="font-bold text-base leading-tight">{d.toLocaleDateString(language === 'zh' ? 'zh-TW' : 'en-US', { month: 'numeric', day: 'numeric' })}</div>
             </button>
@@ -226,8 +206,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
         <div className="p-6 sm:p-8 border-b border-gray-100 dark:border-slate-800 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
           <h2 className="text-xl font-black text-slate-900 dark:text-white">Day {selectedDayIndex + 1}</h2>
           <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-2xl border border-gray-100 dark:border-slate-700">
-            <button onClick={() => addActivity('Place')} className="px-4 py-2 bg-white dark:bg-slate-700 rounded-xl text-primary font-black text-xs flex items-center gap-2 shadow-sm"><MapPin size={14}/> {labels.addPlace}</button>
-            <button onClick={() => addActivity('Food')} className="px-4 py-2 bg-white dark:bg-slate-700 rounded-xl text-orange-500 font-black text-xs flex items-center gap-2 shadow-sm"><Coffee size={14}/> {labels.addFood}</button>
+            <button onClick={() => addActivity('Place')} className="px-4 py-2 bg-white dark:bg-slate-700 rounded-xl text-primary font-black text-xs flex items-center gap-2 shadow-sm hover:scale-105 transition-all"><MapPin size={14}/> {labels.addPlace}</button>
+            <button onClick={() => addActivity('Food')} className="px-4 py-2 bg-white dark:bg-slate-700 rounded-xl text-orange-500 font-black text-xs flex items-center gap-2 shadow-sm hover:scale-105 transition-all ml-1"><Coffee size={14}/> {labels.addFood}</button>
           </div>
         </div>
 
@@ -250,7 +230,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   <div className="absolute left-[-1px] top-10 bottom-0 w-0.5 bg-slate-50 dark:bg-slate-800/50 last:hidden" />
                   
                   {isTransport ? (
-                    <div className={`bg-slate-50 dark:bg-slate-800/40 rounded-[20px] p-4 border border-dashed flex items-center justify-between group ${isFlight ? 'bg-blue-50/20 border-blue-100 dark:border-blue-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className={`bg-slate-50 dark:bg-slate-800/40 rounded-[20px] p-4 border border-dashed flex items-center justify-between group ${isFlight ? 'bg-blue-50/20 border-blue-100 dark:border-blue-900/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'} transition-colors`}>
                        <div className="flex items-center gap-3">
                          {transportOpt && <transportOpt.icon size={16} className={transportOpt.color} />}
                          <span className={`text-xs font-bold ${isFlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`}>
@@ -267,7 +247,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                     <div className={`bg-white dark:bg-slate-800/80 p-6 rounded-[32px] border border-transparent shadow-ios hover:shadow-ios-lg transition-all group ${isFlight ? 'ring-1 ring-blue-500/30' : ''}`}>
                       <div className="flex gap-6 items-start">
                         <div className="w-20 shrink-0">
-                          <button onClick={() => !isFlight && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)} className={`font-mono font-black text-base focus:outline-none transition-colors ${isFlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>
+                          <button onClick={() => !isFlight && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)} className={`font-mono font-black text-base focus:outline-none transition-colors ${isFlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white hover:text-primary'}`}>
                             {item.time}
                           </button>
                         </div>
@@ -280,8 +260,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                         </div>
                         {!isFlight && (
                           <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                             <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')} className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-primary rounded-xl transition-all"><Map size={16} /></button>
-                             <button onClick={() => deleteItem(idx)} className="p-2 bg-slate-50 dark:bg-slate-700 text-red-400 hover:text-red-500 rounded-xl transition-all"><Trash2 size={16} /></button>
+                             <button onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')} className="p-2 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-xl transition-all"><Map size={16} /></button>
+                             <button onClick={() => deleteItem(idx)} className="p-2 bg-slate-50 dark:bg-slate-700 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"><Trash2 size={16} /></button>
                           </div>
                         )}
                       </div>
@@ -298,7 +278,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                     {insertingAt === idx && (
                       <div ref={editRef} className="absolute z-30 top-1/2 -translate-y-1/2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-2xl p-4 flex gap-3 animate-in fade-in zoom-in-95">
                         {TRANSPORT_OPTIONS.slice(0, 4).map(opt => (
-                          <button key={opt.type} onClick={() => { setTempTransportType(opt.type); confirmInsertTransport(idx); }} className={`p-3 rounded-xl transition-all ${tempTransportType === opt.type ? 'bg-primary text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'}`}>
+                          <button key={opt.type} onClick={() => { setTempTransportType(opt.type); confirmInsertTransport(idx); }} className={`p-3 rounded-xl transition-all ${tempTransportType === opt.type ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'}`}>
                             <opt.icon size={20} />
                           </button>
                         ))}
