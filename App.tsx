@@ -251,11 +251,13 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * BUG FIX: 修復重複計算 Bug。
+   * 因為 FlightManager 會將機票費用同步至 trip.expenses 清單中，
+   * 所以總花費應直接加總 expenses 即可，不應再外加 trip.flight.price。
+   */
   const calculateTotalSpentTWD = (trip: Trip) => {
-    const rates: Record<string, number> = { 'TWD': 1, 'USD': 31.5, 'JPY': 0.21, 'EUR': 34.2, 'KRW': 0.024 };
-    const expTotal = trip.expenses.reduce((acc, e) => acc + (e.amount * (e.exchangeRate || 1)), 0);
-    const flightTotal = (trip.flight?.price || 0) * (rates[trip.flight?.currency || 'TWD'] || 1);
-    return expTotal + flightTotal;
+    return trip.expenses.reduce((acc, e) => acc + (e.amount * (e.exchangeRate || 1)), 0);
   };
 
   const currentTrip = trips.find(t => t.id === currentTripId);
@@ -270,7 +272,6 @@ const App: React.FC = () => {
   ];
 
   const handleTabChange = (tabId: any) => {
-    // 允許在機票未設定時進入 dashboard (為了刪除) 或 flights
     if (isFlightMissing && !['flights', 'dashboard'].includes(tabId)) {
       return;
     }
@@ -335,11 +336,11 @@ const App: React.FC = () => {
                           activeTab === tab.id 
                             ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' 
                             : (isLocked 
-                                ? 'text-red-300/60 dark:text-red-900/40 cursor-not-allowed opacity-50 hover:bg-red-50/20' 
+                                ? 'text-red-400/30 dark:text-red-900/30 bg-red-50/10 dark:bg-red-900/5 cursor-not-allowed opacity-40 hover:bg-red-50/20' 
                                 : 'text-slate-500 dark:hover:text-slate-900')
                         }`}
                       >
-                        {isLocked ? <Lock size={14} className="text-red-400/50" /> : <tab.icon size={16} />} 
+                        {isLocked ? <Lock size={14} className="text-red-500/50" /> : <tab.icon size={16} />} 
                         <span className="hidden lg:inline">{tab.label}</span>
                         {isActionRequired && (
                           <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-800 rounded-full animate-bounce" />
@@ -428,12 +429,12 @@ const App: React.FC = () => {
                     className={`p-3 rounded-2xl transition-all duration-300 relative ${
                       activeTab === tab.id 
                         ? 'text-primary bg-primary/5 scale-110' 
-                        : (isLocked ? 'text-red-200 dark:text-red-900/20 scale-90 opacity-40' : 'text-slate-300')
+                        : (isLocked ? 'text-red-500/30 dark:text-red-900/30 scale-90 opacity-40' : 'text-slate-300')
                     }`}
                   >
-                    {isLocked ? <Lock size={22} strokeWidth={2.5} className="text-red-400/30" /> : <tab.icon size={22} strokeWidth={2.5} />}
+                    {isLocked ? <Lock size={22} strokeWidth={2.5} className="text-red-500/30" /> : <tab.icon size={22} strokeWidth={2.5} />}
                     {isActionRequired && (
-                      <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-900 rounded-full" />
+                      <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-900 rounded-full animate-bounce" />
                     )}
                   </button>
                 );

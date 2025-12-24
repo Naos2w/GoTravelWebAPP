@@ -92,7 +92,6 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({ onClose, onCo
               <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{step === 'outbound-select' ? labels.selectOut : labels.selectIn}</div>
               <div className="space-y-2 max-h-[40vh] overflow-y-auto custom-scrollbar">
                 {options.length > 0 ? options.map((f, i) => (
-                  /* FIX: Use correct state setters setTempOutbound and setTempInbound instead of setOutboundFlight and setInboundFlight */
                   <div key={i} onClick={() => { if (step === 'outbound-select') { setTempOutbound(f); setStep('inbound-search'); setOptions([]); } else { setTempInbound(f); setStep('review'); } }} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all">
                     <div className="flex justify-between items-center font-black text-sm dark:text-white">
                       <div className="flex flex-col"><span className="text-[10px] text-slate-400">{(f.airlineNameZh || f.airline)}</span><span>{f.flightNumber}</span></div>
@@ -157,7 +156,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     carryOn: language === 'zh' ? '手提行李' : 'Carry-on',
     pcs: language === 'zh' ? '件數 (Pcs)' : 'Pcs',
     weight: language === 'zh' ? '重量 (kg)' : 'Weight',
-    flightExpenseNote: language === 'zh' ? '機票 (Flight Ticket)' : 'Flight Ticket'
+    flightExpenseNoteZh: '機票 (Flight Ticket)',
+    flightExpenseNoteEn: 'Flight Ticket'
   };
 
   const handleFlightSelect = (outbound: FlightSegment, inbound: FlightSegment) => {
@@ -174,7 +174,14 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     if (isPriceInvalid) return;
 
     let currentExpenses = [...trip.expenses];
-    const flightExpenseIndex = currentExpenses.findIndex(e => e.note === labels.flightExpenseNote);
+    /**
+     * UNIQUE IDENTIFICATION: 優化尋找既有機票紀錄的邏輯。
+     * 同時比對中英兩種預設名稱，確保無論當前語言為何，都能更新同一筆資料。
+     */
+    const flightExpenseIndex = currentExpenses.findIndex(e => 
+      e.category === 'Tickets' && 
+      (e.note === labels.flightExpenseNoteZh || e.note === labels.flightExpenseNoteEn)
+    );
     
     const rates: Record<string, number> = { 'TWD': 1, 'USD': 31.5, 'JPY': 0.21, 'EUR': 34.2, 'KRW': 0.024 };
     const updatedExpense: Expense = {
@@ -183,7 +190,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       currency: flightData.currency,
       category: 'Tickets',
       date: trip.startDate,
-      note: labels.flightExpenseNote,
+      // 使用當前語言標籤儲存
+      note: language === 'zh' ? labels.flightExpenseNoteZh : labels.flightExpenseNoteEn,
       exchangeRate: rates[flightData.currency] || 1,
       createdAt: flightExpenseIndex > -1 ? currentExpenses[flightExpenseIndex].createdAt : new Date().toISOString()
     };
@@ -245,7 +253,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       {isEditing ? (
         <div className="space-y-6 animate-in fade-in duration-500">
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* 價格校驗區塊視覺優化：外部淡紅，內部維持原色，僅強調紅框 */}
               <div className={`p-8 rounded-[32px] border transition-all duration-300 shadow-ios ${isPriceInvalid ? 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                  <h3 className={`font-black flex items-center gap-2 mb-6 text-xs uppercase tracking-widest ${isPriceInvalid ? 'text-red-500 font-black' : 'text-slate-800 dark:text-white'}`}>
                     <DollarSign size={16} className={isPriceInvalid ? 'text-red-500' : 'text-primary'}/> {labels.pricing}
@@ -293,14 +300,20 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                          <ShoppingBag size={18} className="text-secondary"/> {key === 'outbound' ? (language === 'zh' ? '去程' : 'Outbound') : (language === 'zh' ? '回程' : 'Inbound')} {labels.baggage}
                        </h3>
                        <div className="space-y-8 sm:space-y-10">
-                          {/* Carry-on */}
                           <div className="space-y-4">
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{labels.carryOn}</div>
                             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                               <div className="flex-1 space-y-2">
                                 <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.weight}</label>
                                 <div className="relative">
-                                  <input type="number" value={getWeightNumeric(baggage.carryOn.weight)} onChange={e => handleBaggageChange(key, 'carryOn', 'weight', e.target.value)} disabled={baggage.carryOn.count === 0} className={`w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count > 0 && !baggage.carryOn.weight ? 'ring-1 ring-red-500 bg-red-50/50 dark:bg-red-900/10' : 'focus:ring-1 focus:ring-primary/20'}`} placeholder="7" />
+                                  <input 
+                                    type="number" 
+                                    value={getWeightNumeric(baggage.carryOn.weight)} 
+                                    onChange={e => handleBaggageChange(key, 'carryOn', 'weight', e.target.value)} 
+                                    disabled={baggage.carryOn.count === 0} 
+                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count === 0 ? 'bg-slate-100 dark:bg-slate-900/50 text-slate-400 opacity-60' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.carryOn.count > 0 && !baggage.carryOn.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
+                                    placeholder="7" 
+                                  />
                                   {baggage.carryOn.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
                                 </div>
                               </div>
@@ -310,14 +323,20 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                               </div>
                             </div>
                           </div>
-                          {/* Checked */}
                           <div className="space-y-4">
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{labels.checked}</div>
                             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
                               <div className="flex-1 space-y-2">
                                 <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.weight}</label>
                                 <div className="relative">
-                                  <input type="number" value={getWeightNumeric(baggage.checked.weight)} onChange={e => handleBaggageChange(key, 'checked', 'weight', e.target.value)} disabled={baggage.checked.count === 0} className={`w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.checked.count > 0 && !baggage.checked.weight ? 'ring-1 ring-red-500 bg-red-50/50 dark:bg-red-900/10' : 'focus:ring-1 focus:ring-primary/20'}`} placeholder="23" />
+                                  <input 
+                                    type="number" 
+                                    value={getWeightNumeric(baggage.checked.weight)} 
+                                    onChange={e => handleBaggageChange(key, 'checked', 'weight', e.target.value)} 
+                                    disabled={baggage.checked.count === 0} 
+                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.checked.count === 0 ? 'bg-slate-100 dark:bg-slate-900/50 text-slate-400 opacity-60' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.checked.count > 0 && !baggage.checked.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
+                                    placeholder="23" 
+                                  />
                                   {baggage.checked.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
                                 </div>
                               </div>
