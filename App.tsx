@@ -107,30 +107,35 @@ export const useTranslation = () => {
 };
 
 const App: React.FC = () => {
-  // 移除 localStorage 依賴，改為 null
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'landing' | 'list' | 'detail'>('landing');
+  const [view, setView] = useState<'landing' | 'list' | 'detail'>(() => {
+    const savedView = sessionStorage.getItem('appView');
+    return (savedView as any) || 'landing';
+  });
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [currentTripId, setCurrentTripId] = useState<string | null>(null);
+  const [currentTripId, setCurrentTripId] = useState<string | null>(() => sessionStorage.getItem('currentTripId'));
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'itinerary' | 'checklist' | 'expenses' | 'flights'>('dashboard');
   const [showCreateForm, setShowCreateForm] = useState(false);
   
-  // 僅保留主題與語言的 localStorage
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('lang') as Language) || 'zh');
   
-  const isEnvMissing = !GOOGLE_CLIENT_ID || !process.env.SUPABASE_URL;
+  // 用於防抖儲存的 Ref
+  const saveTimeoutRef = useRef<number | null>(null);
+
+  const isEnvMissing = !GOOGLE_CLIENT_ID || !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('placeholder');
 
   useEffect(() => {
-    // 初始載入時檢查 Session
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         handleAuthUser(session.user);
       } else {
         setIsLoading(false);
+        if (view !== 'landing') setView('landing');
       }
     };
     checkSession();
@@ -141,6 +146,8 @@ const App: React.FC = () => {
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setView('landing');
+        sessionStorage.removeItem('currentTripId');
+        sessionStorage.removeItem('appView');
         setIsLoading(false);
       }
     });
@@ -156,9 +163,24 @@ const App: React.FC = () => {
       picture: supabaseUser.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${supabaseUser.email}`,
     };
     setUser(userData);
-    if (view === 'landing') setView('list');
+    setView(prev => {
+      if (prev === 'landing') return 'list';
+      return prev;
+    });
     setIsLoading(false);
   };
+
+  useEffect(() => {
+    sessionStorage.setItem('appView', view);
+  }, [view]);
+
+  useEffect(() => {
+    if (currentTripId) {
+      sessionStorage.setItem('currentTripId', currentTripId);
+    } else {
+      sessionStorage.removeItem('currentTripId');
+    }
+  }, [currentTripId]);
 
   useEffect(() => {
     if (user) loadTrips();
@@ -243,15 +265,32 @@ const App: React.FC = () => {
     } finally { setIsSyncing(false); }
   };
 
-  const updateCurrentTrip = async (updatedTrip: Trip) => {
+  /**
+   * 核心更新函數：支援防抖儲存，解決 409 Conflict 問題
+   */
+  const updateCurrentTrip = (updatedTrip: Trip) => {
     if (!user) return;
+    
+    // 立即更新本地 UI 狀態
     setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
-    setIsSyncing(true);
-    try {
-      await saveTrip(updatedTrip, user.id);
-    } catch (err: any) {
-      console.error("Save failed:", err);
-    } finally { setIsSyncing(false); }
+
+    // 清除先前的計時器
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current);
+    }
+
+    // 設定新的儲存計時器 (1秒後執行)
+    saveTimeoutRef.current = window.setTimeout(async () => {
+      setIsSyncing(true);
+      try {
+        await saveTrip(updatedTrip, user.id);
+      } catch (err: any) {
+        console.error("Debounced save failed:", err);
+      } finally {
+        setIsSyncing(false);
+        saveTimeoutRef.current = null;
+      }
+    }, 1000);
   };
 
   const handleDeleteTrip = async () => {
@@ -329,7 +368,7 @@ const App: React.FC = () => {
             <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-30 h-16 sm:h-20 flex items-center">
               <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <button onClick={() => setView('list')} className="p-2.5 rounded-2xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
+                  <button onClick={() => { setView('list'); setCurrentTripId(null); }} className="p-2.5 rounded-2xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
                     <ChevronLeft />
                   </button>
                   <div className="truncate">
@@ -360,7 +399,7 @@ const App: React.FC = () => {
                             ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' 
                             : (isLocked 
                                 ? 'text-red-400/30 dark:text-red-900/30 bg-red-50/10 dark:bg-red-900/5 cursor-not-allowed opacity-40 hover:bg-red-50/20' 
-                                : 'text-slate-500 hover:bg-white/50 dark:hover:bg-white/5 dark:hover:text-white')
+                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white')
                         }`}
                       >
                         {isLocked ? <Lock size={14} className="text-red-500/50" /> : <tab.icon size={16} />} 
