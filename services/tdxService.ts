@@ -1,8 +1,9 @@
 
 import { FlightSegment } from "../types";
 
-const TOKEN_KEY = 'tdx_access_token';
-const EXPIRY_KEY = 'tdx_token_expiry';
+// 改為記憶體緩存，移除 localStorage 依賴
+let cachedToken: string | null = null;
+let tokenExpiry: number | null = null;
 
 const airlineCache = new Map<string, {zh: string, en: string}>();
 
@@ -12,13 +13,11 @@ async function getTdxToken(): Promise<string | null> {
   
   if (!clientId || !clientSecret) return null;
 
-  const cachedToken = localStorage.getItem(TOKEN_KEY);
-  const expiryStr = localStorage.getItem(EXPIRY_KEY);
   const now = Date.now();
   
-  if (cachedToken && expiryStr) {
-    const expiry = parseInt(expiryStr, 10);
-    if (now < (expiry - 60000)) return cachedToken;
+  // 檢查記憶體中的 Token 是否有效
+  if (cachedToken && tokenExpiry && now < (tokenExpiry - 60000)) {
+    return cachedToken;
   }
 
   try {
@@ -36,13 +35,10 @@ async function getTdxToken(): Promise<string | null> {
     if (!response.ok) throw new Error("TDX Authentication failed.");
 
     const data = await response.json();
-    const token = data.access_token;
-    const newTokenExpiry = now + (data.expires_in * 1000);
+    cachedToken = data.access_token;
+    tokenExpiry = now + (data.expires_in * 1000);
 
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(EXPIRY_KEY, newTokenExpiry.toString());
-
-    return token;
+    return cachedToken;
   } catch (e) {
     console.error("TDX Auth Error:", e);
     return null;
