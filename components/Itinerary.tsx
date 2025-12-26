@@ -405,7 +405,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                       </div>
                     ) : (
                       <button onClick={() => setInsertingAt(idx)} className="z-[110] bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md">
-                        <Plus size={14} /> <span className="hidden sm:inline font-black ml-1 uppercase">{labels.setTransport}</span>
+                        <Plus size={14} /> <span className="hidden sm:inline font-black ml-1 uppercase">{labels.selectTransport}</span>
                       </button>
                     )}
                   </div>

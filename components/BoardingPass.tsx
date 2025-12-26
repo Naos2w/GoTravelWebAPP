@@ -22,6 +22,7 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
     cabin: language === 'zh' ? '艙等' : 'Cabin',
     Economy: language === 'zh' ? '經濟艙' : 'Economy',
     Business: language === 'zh' ? '商務艙' : 'Business',
+    First: language === 'zh' ? '頭等艙' : 'First Class',
     passenger: language === 'zh' ? '旅客姓名' : 'Passenger Name',
     terminal: language === 'zh' ? '航廈' : 'Terminal',
     flight: language === 'zh' ? '航班' : 'Flight',
@@ -33,6 +34,30 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
   const airlineName = language === 'zh' 
     ? (segment.airlineNameZh || segment.airline) 
     : (segment.airlineNameEn || segment.airline);
+
+  const renderBaggagePill = (type: 'carryOn' | 'checked', data: { count: number, weight: string }) => {
+    if (!data || data.count === 0) return null;
+    
+    const Icon = type === 'carryOn' ? ShoppingBag : Briefcase;
+    const weightDisplay = data.weight ? data.weight : '';
+    
+    // 如果有重量，顯示 "重量 × 件數" (件數 > 1 時才顯示乘號)
+    // 如果沒有重量，顯示 "件數 PC"
+    let finalLabel = '';
+    if (weightDisplay) {
+      finalLabel = data.count > 1 ? `${weightDisplay} × ${data.count}` : weightDisplay;
+    } else {
+      finalLabel = `${data.count} PC`;
+    }
+    
+    if (!finalLabel) return null;
+
+    return (
+      <div className="flex items-center gap-1 text-[9px] bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-600 text-slate-500 dark:text-slate-400 font-black whitespace-nowrap">
+        <Icon size={10} /> {finalLabel}
+      </div>
+    );
+  };
 
   return (
     <div className="w-full bg-white dark:bg-slate-800 rounded-[32px] shadow-ios border border-slate-100/50 dark:border-slate-700 overflow-hidden flex flex-col md:flex-row transition-all duration-500">
@@ -53,9 +78,9 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
                <div className="font-black text-sm md:text-base text-slate-800 dark:text-slate-200">{(labels as any)[cabinClass] || cabinClass}</div>
              </div>
              {segment.baggage && (
-               <div className="flex gap-2">
-                  {segment.baggage.carryOn.weight && <div className="flex items-center gap-1 text-[9px] bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-600 text-slate-500 dark:text-slate-400 font-black"><ShoppingBag size={10} /> {segment.baggage.carryOn.weight}</div>}
-                  {segment.baggage.checked.count > 0 && segment.baggage.checked.weight && <div className="flex items-center gap-1 text-[9px] bg-slate-50 dark:bg-slate-700 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-600 text-slate-500 dark:text-slate-400 font-black"><Briefcase size={10} /> {segment.baggage.checked.weight}</div>}
+               <div className="flex flex-wrap justify-end gap-1.5">
+                  {renderBaggagePill('carryOn', segment.baggage.carryOn)}
+                  {renderBaggagePill('checked', segment.baggage.checked)}
                </div>
              )}
            </div>
