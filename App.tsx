@@ -11,8 +11,6 @@ import {
   getTripById,
   saveTrip,
   saveExpenseOnly,
-  deleteTrip,
-  exportData,
   supabase,
 } from "./services/storageService";
 import { Checklist } from "./components/Checklist";
@@ -48,9 +46,9 @@ import {
   SunMedium,
   ExternalLink,
   Coffee,
-  Lock,
   Wallet,
   Coins,
+  LogIn,
 } from "lucide-react";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -86,6 +84,7 @@ const translations = {
     guestMode: "協作者",
     save: "儲存",
     cancel: "取消",
+    login: "登入",
   },
   en: {
     appName: "Go Travel",
@@ -117,6 +116,7 @@ const translations = {
     guestMode: "Guest",
     save: "Save",
     cancel: "Cancel",
+    login: "Login",
   },
 };
 
@@ -182,67 +182,81 @@ const App: React.FC = () => {
   const [weatherSource, setWeatherSource] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<number | null>(null);
+  const refreshTimeoutRef = useRef<number | null>(null);
 
-  // --- Real-time Sync logic optimized ---
+  // --- Optimized Debounced Real-time Sync ---
   useEffect(() => {
     if (!currentTripId) return;
 
     const refreshActiveTrip = async () => {
-      // 僅針對當前正在看的旅程進行局部更新，效率更高
-      const updatedTrip = await getTripById(currentTripId);
-      if (updatedTrip) {
-        setTrips((prev) =>
-          prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
-        );
-      }
+      // Use debounce to prevent multiple rapid refreshes when a user saves a trip
+      // (because saveTrip triggers several deletes and inserts)
+      if (refreshTimeoutRef.current)
+        window.clearTimeout(refreshTimeoutRef.current);
+
+      refreshTimeoutRef.current = window.setTimeout(async () => {
+        console.log("Sync triggered: Fetching latest trip data...");
+        const updatedTrip = await getTripById(currentTripId);
+        if (updatedTrip) {
+          setTrips((prev) =>
+            prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
+          );
+        }
+      }, 500);
     };
 
+    // Listen to changes globally and filter client-side for maximum reliability
     const channel = supabase
-      .channel(`trip-sync-${currentTripId}`)
+      .channel(`realtime-sync-${currentTripId}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "trips",
-          filter: `id=eq.${currentTripId}`,
-        },
-        refreshActiveTrip
+        { event: "*", schema: "public", table: "trips" },
+        (p) => {
+          if ((p.new as any)?.id === currentTripId) refreshActiveTrip();
+        }
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "checklist_items",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        refreshActiveTrip
+        { event: "*", schema: "public", table: "checklist_items" },
+        (p) => {
+          if (
+            (p.new as any)?.trip_id === currentTripId ||
+            (p.old as any)?.trip_id === currentTripId
+          )
+            refreshActiveTrip();
+        }
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "itinerary_items",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        refreshActiveTrip
+        { event: "*", schema: "public", table: "itinerary_items" },
+        (p) => {
+          if (
+            (p.new as any)?.trip_id === currentTripId ||
+            (p.old as any)?.trip_id === currentTripId
+          )
+            refreshActiveTrip();
+        }
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "expenses",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        refreshActiveTrip
+        { event: "*", schema: "public", table: "expenses" },
+        (p) => {
+          if (
+            (p.new as any)?.trip_id === currentTripId ||
+            (p.old as any)?.trip_id === currentTripId
+          )
+            refreshActiveTrip();
+        }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED")
+          console.log("Realtime connected for trip:", currentTripId);
+      });
 
     return () => {
       supabase.removeChannel(channel);
+      if (refreshTimeoutRef.current)
+        window.clearTimeout(refreshTimeoutRef.current);
     };
   }, [currentTripId]);
 
@@ -272,45 +286,52 @@ const App: React.FC = () => {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  useEffect(() => {
-    const initializeGoogleSignIn = () => {
-      if (!window.google || user) return;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
-      });
-      const renderBtn = (id: string, width: number) => {
-        const el = document.getElementById(id);
-        if (el)
-          window.google.accounts.id.renderButton(el, {
-            theme: theme === "dark" ? "filled_black" : "outline",
-            size: "large",
-            shape: "pill",
-            width,
-          });
-      };
-      setTimeout(() => {
-        renderBtn("google-login-hero", 280);
-        renderBtn("google-login-header-right", 40);
-      }, 100);
-    };
-    const handleCredentialResponse = async (response: any) => {
-      try {
-        await supabase.auth.signInWithIdToken({
-          provider: "google",
-          token: response.credential,
+  const initGoogleLogin = () => {
+    if (!window.google) return;
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleCredentialResponse,
+    });
+
+    const renderBtn = (id: string, width: number) => {
+      const el = document.getElementById(id);
+      if (el) {
+        window.google.accounts.id.renderButton(el, {
+          theme: theme === "dark" ? "filled_black" : "outline",
+          size: "large",
+          shape: "pill",
+          width,
         });
-      } catch (e) {
-        console.error("Auth Error", e);
       }
     };
-    const interval = setInterval(() => {
-      if (window.google?.accounts?.id) {
-        initializeGoogleSignIn();
-        clearInterval(interval);
-      }
-    }, 300);
-    return () => clearInterval(interval);
+
+    setTimeout(() => {
+      renderBtn("google-login-hero", 280);
+      renderBtn("google-login-header-right", 120);
+    }, 100);
+  };
+
+  const handleCredentialResponse = async (response: any) => {
+    try {
+      await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: response.credential,
+      });
+    } catch (e) {
+      console.error("Auth Error", e);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      const interval = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          initGoogleLogin();
+          clearInterval(interval);
+        }
+      }, 500);
+      return () => clearInterval(interval);
+    }
   }, [view, theme, user]);
 
   useEffect(() => {
@@ -363,7 +384,6 @@ const App: React.FC = () => {
     if (!user) return;
     try {
       const userTrips = await getTrips(user.id);
-
       const urlParams = new URLSearchParams(window.location.search);
       const sharedId = urlParams.get("tripId");
 
@@ -372,7 +392,6 @@ const App: React.FC = () => {
         const sharedTrip = await getTripById(sharedId);
         if (sharedTrip) allTrips.push(sharedTrip);
       }
-
       setTrips(allTrips);
     } catch (err) {
       console.error(err);
@@ -417,12 +436,12 @@ const App: React.FC = () => {
   };
 
   const t = (key: keyof typeof translations.en) =>
-    translations[language][key] || translations.en[key];
+    (translations as any)[language][key] || (translations as any).en[key];
 
   const updateCurrentTrip = (updatedTrip: Trip) => {
     if (!user) return;
 
-    // UI 先行更新（這會讓操作的人立刻看到結果）
+    // Optimistic UI Update
     setTrips((prev) =>
       prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
     );
@@ -433,17 +452,19 @@ const App: React.FC = () => {
       setIsSyncing(true);
       try {
         if (isGuest) {
-          // 協作者：找出最新的一筆支出項目並單獨儲存
           const originalTrip = trips.find((t) => t.id === updatedTrip.id);
           if (
             originalTrip &&
             updatedTrip.expenses.length > originalTrip.expenses.length
           ) {
-            const newExpense = updatedTrip.expenses[0];
-            await saveExpenseOnly(updatedTrip.id, newExpense);
+            const newExpenses = updatedTrip.expenses.filter(
+              (ne) => !originalTrip.expenses.some((oe) => oe.id === ne.id)
+            );
+            if (newExpenses.length > 0) {
+              await saveExpenseOnly(updatedTrip.id, newExpenses[0]);
+            }
           }
         } else {
-          // 擁有者：完整同步
           await saveTrip(updatedTrip, user.id);
         }
       } catch (err) {
@@ -452,7 +473,7 @@ const App: React.FC = () => {
         setIsSyncing(false);
         saveTimeoutRef.current = null;
       }
-    }, 800);
+    }, 600);
   };
 
   const handleCreateTripSubmit = async (newTrip: Trip) => {
@@ -499,10 +520,16 @@ const App: React.FC = () => {
   const UserHeaderProfile = () => {
     if (!user)
       return (
-        <div
-          id="google-login-header-right"
-          className="min-w-[40px] h-[40px] flex items-center justify-center"
-        ></div>
+        <div className="flex items-center gap-2">
+          <div
+            id="google-login-header-right"
+            className="min-w-[40px] h-[40px] flex items-center justify-center overflow-hidden"
+          >
+            <button className="flex items-center gap-2 text-xs font-black text-slate-400 opacity-60">
+              <LogIn size={14} /> {t("login")}
+            </button>
+          </div>
+        </div>
       );
     return (
       <div className="flex items-center gap-3 pl-4 border-l border-slate-100 dark:border-slate-800">
@@ -972,7 +999,6 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              {/* 移除 pointer-events-none 與 opacity-90，改為組件內部的控制 */}
               {activeTab === "itinerary" && (
                 <Itinerary
                   trip={currentTrip}
@@ -1079,18 +1105,24 @@ const App: React.FC = () => {
 
         {view === "landing" && (
           <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] relative overflow-hidden">
-            <header className="p-6 flex justify-between items-center relative z-50">
+            <header className="p-6 sm:p-10 flex justify-between items-center relative z-50">
               <div className="text-2xl font-black text-primary tracking-tighter">
                 {t("appName")}
               </div>
-              <GlobalNav />
+              <div className="flex items-center gap-4">
+                <GlobalNav />
+                <UserHeaderProfile />
+              </div>
             </header>
             <main className="flex-1 flex flex-col items-center justify-center text-center px-6 relative z-10">
               <h1 className="text-7xl md:text-9xl font-black tracking-tighter mb-10 whitespace-pre-line leading-tight animate-in fade-in slide-in-from-bottom-4 duration-1000">
                 {t("heroTitle")}
               </h1>
               {!user ? (
-                <div id="google-login-hero"></div>
+                <div
+                  id="google-login-hero"
+                  className="min-h-[50px] min-w-[280px] flex items-center justify-center"
+                ></div>
               ) : (
                 <button
                   onClick={() => setView("list")}
