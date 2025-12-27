@@ -461,7 +461,6 @@ const App: React.FC = () => {
   const budgetLimit = currentTrip?.flight?.budget || 50000;
   const budgetPercent = Math.min(100, (spentTotal / budgetLimit) * 100);
   const daysLeft = getDaysLeft();
-  // Standardized 30-day countdown progress logic
   const daysProgress =
     daysLeft <= 0
       ? 0
@@ -574,7 +573,7 @@ const App: React.FC = () => {
               </div>
             </nav>
 
-            {/* Mobile Header (Strict Icons, Symmetrical Padding) */}
+            {/* Mobile Header */}
             <nav className="sm:hidden sticky top-0 z-40 bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-3xl px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => {
@@ -622,16 +621,16 @@ const App: React.FC = () => {
                           {currentTrip.startDate} — {currentTrip.endDate}
                         </div>
 
-                        {/* Mobile Integrated Panel: Date + CTS Status + Restored Edit Button */}
-                        <div className="sm:hidden flex flex-col gap-5 p-6 bg-slate-50/70 dark:bg-slate-900/40 rounded-[32px] border border-slate-100 dark:border-slate-700/50 backdrop-blur-md">
+                        {/* Mobile Integrated Panel (Refined Grid) */}
+                        <div className="sm:hidden flex flex-col gap-6 p-6 bg-slate-50/70 dark:bg-slate-900/40 rounded-[32px] border border-slate-100 dark:border-slate-700/50 backdrop-blur-md">
                           <div className="flex items-center gap-3 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">
                             <Calendar size={12} className="text-primary" />{" "}
                             {currentTrip.startDate} — {currentTrip.endDate}
                           </div>
 
-                          <div className="flex justify-around items-center px-1">
+                          <div className="grid grid-cols-3 gap-2 px-1">
                             {/* Countdown */}
-                            <div className="flex flex-col items-center gap-1.5">
+                            <div className="flex flex-col items-center gap-1.5 border-r border-slate-200 dark:border-slate-700/50">
                               <div className="flex items-center gap-1.5">
                                 <Clock size={12} className="text-blue-500" />
                                 <span className="text-[11px] font-black text-slate-900 dark:text-white">
@@ -645,10 +644,9 @@ const App: React.FC = () => {
                                 />
                               </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
                             {/* Packing */}
-                            <div className="flex flex-col items-center gap-1.5">
+                            <div className="flex flex-col items-center gap-1.5 border-r border-slate-200 dark:border-slate-700/50">
                               <div className="flex items-center gap-1.5">
                                 <Luggage size={12} className="text-green-500" />
                                 <span className="text-[11px] font-black text-slate-900 dark:text-white">
@@ -662,29 +660,28 @@ const App: React.FC = () => {
                                 />
                               </div>
                             </div>
-                            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
-                            {/* Budget (With Restored Edit Button for Mobile) */}
-                            <div className="flex flex-col items-center gap-1.5 relative">
+                            {/* Budget (Fixed Overflow) */}
+                            <div className="flex flex-col items-center gap-1.5">
                               <button
                                 disabled={!isCreator}
                                 onClick={() => {
                                   setTempBudget(budgetLimit);
                                   setIsEditingBudget(true);
                                 }}
-                                className="flex items-center gap-1.5 group/coin active:scale-95 transition-all"
+                                className="flex items-center gap-1 min-w-0 max-w-full px-1 group/coin active:scale-95 transition-all"
                               >
                                 <Coins
                                   size={12}
-                                  className="text-indigo-500 group-hover/coin:animate-bounce"
+                                  className="text-indigo-500 shrink-0"
                                 />
-                                <span className="text-[11px] font-black text-slate-900 dark:text-white">
+                                <span className="text-[11px] font-black text-slate-900 dark:text-white truncate">
                                   {(spentTotal / 1000).toFixed(1)}k
                                 </span>
                                 {isCreator && (
                                   <Edit2
                                     size={10}
-                                    className="text-slate-300 ml-0.5"
+                                    className="text-slate-300 shrink-0"
                                   />
                                 )}
                               </button>
@@ -705,7 +702,6 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Desktop KPI Progress Tiles - Hidden on Mobile because integrated into Hero */}
                   <div className="hidden sm:grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-10">
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-3xl p-10 sm:p-14 rounded-[56px] shadow-ios border border-slate-50 dark:border-slate-800/50 flex flex-col items-center group transition-all hover:scale-[1.02] hover:shadow-ios-lg">
                       <div className="w-24 h-24 rounded-[32px] bg-blue-500/10 text-blue-500 flex items-center justify-center mb-8 transition-all duration-500 group-hover:bg-blue-500 group-hover:text-white">
@@ -914,7 +910,7 @@ const App: React.FC = () => {
               )}
             </main>
 
-            {/* Symmetrical Mobile Bottom Navigation (Equal py-4 Padding, No Text) */}
+            {/* Symmetrical Mobile Bottom Navigation */}
             <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-3xl border-t border-slate-100 dark:border-slate-800 px-6 py-4 shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
               <div className="flex justify-between items-center max-w-md mx-auto">
                 {tabs.map((tab) => {
@@ -1003,7 +999,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Other Views (Landing, List) */}
+        {/* Other Views */}
         {view === "landing" && (
           <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] relative overflow-hidden">
             <header className="p-6 flex justify-between items-center relative z-50">
