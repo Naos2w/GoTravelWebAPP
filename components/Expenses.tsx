@@ -19,6 +19,7 @@ import {
   ChevronDown,
   X as CloseIcon,
   Edit2,
+  Lock,
 } from "lucide-react";
 import { useTranslation } from "../App";
 import { DateTimeUtils } from "../services/dateTimeUtils";
@@ -26,6 +27,7 @@ import { DateTimeUtils } from "../services/dateTimeUtils";
 interface Props {
   trip: Trip;
   onUpdate: (trip: Trip) => void;
+  isGuest?: boolean;
 }
 
 const CATEGORY_CONFIG: Record<
@@ -93,7 +95,11 @@ const COLORS = [
 
 type SortType = "created-desc" | "created-asc" | "amount-desc" | "amount-asc";
 
-export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
+export const Expenses: React.FC<Props> = ({
+  trip,
+  onUpdate,
+  isGuest = false,
+}) => {
   const { language } = useTranslation();
   const formAnchorRef = useRef<HTMLDivElement>(null);
 
@@ -186,6 +192,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
     const now = new Date();
 
     if (editingExpenseId) {
+      if (isGuest) return; // 安全檢查
       const updatedExpenses = trip.expenses.map((exp) => {
         if (exp.id === editingExpenseId) {
           return {
@@ -226,6 +233,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const startEdit = (expense: Expense) => {
+    if (isGuest) return; // 協作者不可編輯
     setEditingExpenseId(expense.id);
     setAmount(expense.amount.toString());
     setCategory(expense.category);
@@ -234,7 +242,6 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
     setNote(expense.note);
     setIsFormOpen(true);
 
-    // Improved scrolling logic for mobile with offset (centered)
     setTimeout(() => {
       if (formAnchorRef.current) {
         const offset = window.innerHeight / 4;
@@ -252,6 +259,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const deleteExpense = (id: string) => {
+    if (isGuest) return; // 協作者不可刪除
     onUpdate({ ...trip, expenses: trip.expenses.filter((e) => e.id !== id) });
   };
 
@@ -553,7 +561,6 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
                     {isSystemTicket ? <Plane size={18} /> : <Icon size={18} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    {/* Name area with horizontal scrollbar for long descriptions */}
                     <div className="overflow-x-auto whitespace-nowrap custom-scrollbar pb-1.5 select-text cursor-text">
                       <div className="font-black text-slate-800 dark:text-white text-sm sm:text-base leading-tight inline-block min-w-full">
                         {item.note}
@@ -587,7 +594,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
                     )}
                   </div>
 
-                  {!isSystemTicket ? (
+                  {!isSystemTicket && !isGuest ? (
                     <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                       <button
                         onClick={() => startEdit(item)}
@@ -596,6 +603,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
                         <Edit2 size={14} className="sm:w-4 sm:h-4" />
                       </button>
                       <button
+                        // Fix for missing 'id' variable: use item.id from map function scope
                         onClick={() => deleteExpense(item.id)}
                         className="p-1.5 sm:p-2.5 bg-slate-50 dark:bg-slate-700 text-red-500/80 dark:text-red-400/80 hover:text-red-600 dark:hover:text-red-300 rounded-xl shadow-sm border border-transparent hover:border-red-100 dark:hover:border-red-900/30 active:scale-90"
                       >
@@ -604,10 +612,15 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
                     </div>
                   ) : (
                     <div className="p-2.5 opacity-0 group-hover:opacity-100 transition-all">
-                      <Ticket
-                        size={16}
-                        className="text-blue-200 dark:text-blue-800"
-                      />
+                      {/* Fix for missing Lock import: Added to lucide-react imports at the top */}
+                      {isSystemTicket ? (
+                        <Ticket
+                          size={16}
+                          className="text-blue-200 dark:text-blue-800"
+                        />
+                      ) : (
+                        <Lock size={14} className="text-slate-300" />
+                      )}
                     </div>
                   )}
                 </div>

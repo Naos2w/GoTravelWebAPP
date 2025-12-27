@@ -12,12 +12,14 @@ import {
   ChevronDown,
   ChevronUp,
   X as CloseIcon,
+  Lock,
 } from "lucide-react";
 import { useTranslation } from "../App";
 
 interface Props {
   trip: Trip;
   onUpdate: (trip: Trip) => void;
+  isGuest?: boolean;
 }
 
 const CATEGORY_UI: Record<
@@ -73,7 +75,11 @@ const CATEGORY_UI: Record<
   },
 };
 
-export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
+export const Checklist: React.FC<Props> = ({
+  trip,
+  onUpdate,
+  isGuest = false,
+}) => {
   const { language } = useTranslation();
   const [newItemText, setNewItemText] = useState("");
   const [category, setCategory] = useState<ChecklistItem["category"]>("Other");
@@ -101,6 +107,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const toggleItem = (itemId: string) => {
+    if (isGuest) return;
     const newChecklist = trip.checklist.map((item) =>
       item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
     );
@@ -108,7 +115,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const addItem = () => {
-    if (!newItemText.trim()) return;
+    if (isGuest || !newItemText.trim()) return;
     const newItem: ChecklistItem = {
       id: `manual-${Date.now()}`,
       text: newItemText,
@@ -121,6 +128,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const deleteItem = (itemId: string) => {
+    if (isGuest) return;
     onUpdate({
       ...trip,
       checklist: trip.checklist.filter((i) => i.id !== itemId),
@@ -150,9 +158,16 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-12 rounded-[40px] shadow-ios border border-slate-100 dark:border-slate-800">
-        <h2 className="text-2xl font-black mb-8 text-slate-900 dark:text-white">
-          {labels.title}
-        </h2>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+            {labels.title}
+          </h2>
+          {isGuest && (
+            <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700">
+              <Lock size={12} /> View Only
+            </div>
+          )}
+        </div>
 
         {/* Global Progress */}
         <div className="mb-10 bg-slate-50/50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 backdrop-blur-sm">
@@ -176,81 +191,83 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
           </div>
         </div>
 
-        {/* Toggleable Add Item Section */}
-        <div className="mb-10 bg-slate-50/30 dark:bg-slate-900/30 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all duration-500">
-          <div
-            className={`transition-all duration-500 ease-in-out ${
-              isFormOpen
-                ? "max-h-0 opacity-0 pointer-events-none"
-                : "max-h-20 opacity-100"
-            }`}
-          >
-            <button
-              onClick={() => setIsFormOpen(true)}
-              className="w-full py-6 flex items-center justify-center gap-2 text-slate-500 hover:text-primary dark:hover:text-white transition-all font-black uppercase text-xs tracking-[0.2em]"
+        {/* Toggleable Add Item Section - Hidden for Guest */}
+        {!isGuest && (
+          <div className="mb-10 bg-slate-50/30 dark:bg-slate-900/30 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all duration-500">
+            <div
+              className={`transition-all duration-500 ease-in-out ${
+                isFormOpen
+                  ? "max-h-0 opacity-0 pointer-events-none"
+                  : "max-h-20 opacity-100"
+              }`}
             >
-              <Plus size={18} /> {labels.addItem}
-            </button>
-          </div>
-
-          <div
-            className={`transition-all duration-500 ease-in-out ${
-              isFormOpen
-                ? "max-h-[400px] opacity-100 p-6 sm:p-8"
-                : "max-h-0 opacity-0 pointer-events-none"
-            }`}
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">
-                {labels.addItem}
-              </h3>
               <button
-                onClick={() => setIsFormOpen(false)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors"
+                onClick={() => setIsFormOpen(true)}
+                className="w-full py-6 flex items-center justify-center gap-2 text-slate-500 hover:text-primary dark:hover:text-white transition-all font-black uppercase text-xs tracking-[0.2em]"
               >
-                <CloseIcon size={18} />
+                <Plus size={18} /> {labels.addItem}
               </button>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                value={newItemText}
-                onChange={(e) => setNewItemText(e.target.value)}
-                placeholder={labels.inputPlaceholder}
-                className="flex-1 px-6 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 outline-none font-bold shadow-sm"
-              />
-              <div className="flex gap-2 h-14 sm:h-auto">
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as any)}
-                  className="flex-1 sm:w-40 px-4 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none font-black text-xs uppercase tracking-widest outline-none shadow-sm cursor-pointer"
+            <div
+              className={`transition-all duration-500 ease-in-out ${
+                isFormOpen
+                  ? "max-h-[400px] opacity-100 p-6 sm:p-8"
+                  : "max-h-0 opacity-0 pointer-events-none"
+              }`}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-widest">
+                  {labels.addItem}
+                </h3>
+                <button
+                  onClick={() => setIsFormOpen(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors"
                 >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {(labels as any)[c]}
-                    </option>
-                  ))}
-                </select>
+                  <CloseIcon size={18} />
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <input
+                  type="text"
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                  placeholder={labels.inputPlaceholder}
+                  className="flex-1 px-6 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 outline-none font-bold shadow-sm"
+                />
+                <div className="flex gap-2 h-14 sm:h-auto">
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value as any)}
+                    className="flex-1 sm:w-40 px-4 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none font-black text-xs uppercase tracking-widest outline-none shadow-sm cursor-pointer"
+                  >
+                    {categories.map((c) => (
+                      <option key={c} value={c}>
+                        {(labels as any)[c]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={addItem}
+                  className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black shadow-xl transition-all active:scale-95 hover:bg-primary dark:hover:bg-primary dark:hover:text-white flex items-center justify-center gap-2"
+                >
+                  <Plus size={20} /> {labels.confirm}
+                </button>
+                <button
+                  onClick={() => setIsFormOpen(false)}
+                  className="px-6 py-4 bg-slate-200/50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
+                >
+                  {labels.cancel}
+                </button>
               </div>
             </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={addItem}
-                className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black shadow-xl transition-all active:scale-95 hover:bg-primary dark:hover:bg-primary dark:hover:text-white flex items-center justify-center gap-2"
-              >
-                <Plus size={20} /> {labels.confirm}
-              </button>
-              <button
-                onClick={() => setIsFormOpen(false)}
-                className="px-6 py-4 bg-slate-200/50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-              >
-                {labels.cancel}
-              </button>
-            </div>
           </div>
-        </div>
+        )}
 
         <div className="space-y-8">
           {categories.map((cat) => {
@@ -272,7 +289,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                     : "border-slate-50 dark:border-slate-700 bg-white dark:bg-slate-800"
                 }`}
               >
-                {/* Category Header */}
+                {/* Category Header - Guest can Expand */}
                 <div
                   onClick={() => toggleExpand(cat)}
                   className="flex items-center justify-between cursor-pointer"
@@ -298,11 +315,10 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                           {catProgress}%
                         </span>
                       </div>
-                      {/* Sub-progress bar */}
                       <div className="mt-2 h-1.5 w-32 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-700 ${
-                            isComplete ? "bg-green-500" : "bg-red-500"
+                            isComplete ? "bg-green-500" : "bg-red-50"
                           }`}
                           style={{ width: `${catProgress}%` }}
                         />
@@ -310,8 +326,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                     </div>
                   </div>
 
-                  {/* Expand Toggle Button */}
-                  <div className="sm:hidden p-2 text-slate-300 dark:text-slate-500">
+                  <div className="p-2 text-slate-300 dark:text-slate-500">
                     {isExpanded ? (
                       <ChevronUp size={20} />
                     ) : (
@@ -320,12 +335,11 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                   </div>
                 </div>
 
-                {/* Items List (Responsive Accordion) */}
                 <div
                   className={`grid grid-cols-1 md:grid-cols-2 gap-3 transition-all duration-300 overflow-hidden ${
                     isExpanded
                       ? "max-h-[2000px] opacity-100 mt-4"
-                      : "max-h-0 opacity-0 sm:max-h-none sm:opacity-100 sm:mt-4"
+                      : "max-h-0 opacity-0"
                   }`}
                 >
                   {items.map((item) => (
@@ -339,6 +353,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                     >
                       <div className="flex items-center gap-4 flex-1 min-w-0">
                         <button
+                          disabled={isGuest}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleItem(item.id);
@@ -346,6 +361,8 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                           className={`w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${
                             item.isCompleted
                               ? "bg-green-500 border-green-500 text-white"
+                              : isGuest
+                              ? "border-slate-100 dark:border-slate-800 text-transparent"
                               : "border-slate-200 dark:border-slate-600 text-transparent hover:border-primary"
                           }`}
                         >
@@ -361,15 +378,18 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                           {item.text}
                         </span>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteItem(item.id);
-                        }}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+
+                      {!isGuest && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteItem(item.id);
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

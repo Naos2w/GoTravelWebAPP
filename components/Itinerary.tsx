@@ -15,6 +15,7 @@ import {
   Loader2,
   Check,
   X,
+  Lock,
 } from "lucide-react";
 import { DateTimeUtils } from "../services/dateTimeUtils";
 import { GoogleGenAI } from "@google/genai";
@@ -23,6 +24,7 @@ import { useTranslation } from "../App";
 interface Props {
   trip: Trip;
   onUpdate: (trip: Trip) => void;
+  isGuest?: boolean;
 }
 
 const TRANSPORT_OPTIONS: {
@@ -180,7 +182,11 @@ const TimePicker: React.FC<{
   );
 };
 
-export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
+export const Itinerary: React.FC<Props> = ({
+  trip,
+  onUpdate,
+  isGuest = false,
+}) => {
   const { language } = useTranslation();
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [days, setDays] = useState<DayPlan[]>([]);
@@ -220,6 +226,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   }, []);
 
   const saveItineraryUpdate = (newItems: ItineraryItem[]) => {
+    if (isGuest) return;
     const newDays = [...days];
     newDays[selectedDayIndex] = {
       ...newDays[selectedDayIndex],
@@ -229,6 +236,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const addActivity = (type: "Place" | "Food") => {
+    if (isGuest) return;
     const currentItems = [...days[selectedDayIndex].items];
     let defaultTime = "09:00";
     if (currentItems.length > 0) {
@@ -258,13 +266,13 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     type: TransportType,
     currentItems: ItineraryItem[]
   ) => {
+    if (isGuest) return;
     const prev = currentItems[index - 1];
     const next = currentItems[index + 1];
     if (!prev || !next) return;
 
     setCalculatingId(transportId);
     try {
-      // Create a new GoogleGenAI instance right before making an API call to ensure it uses the most up-to-date key
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Estimate transport time from "${prev.placeName}" to "${
         next.placeName
@@ -299,6 +307,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const handleInsertTransport = async (index: number, type: TransportType) => {
+    if (isGuest) return;
     const currentItems = [...days[selectedDayIndex].items];
     const prev = currentItems[index];
     const next = currentItems[index + 1];
@@ -334,6 +343,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     field: keyof ItineraryItem,
     value: any
   ) => {
+    if (isGuest) return;
     let newItems = [...days[selectedDayIndex].items];
     const item = newItems[itemIdx];
 
@@ -374,6 +384,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const deleteItem = (itemIdx: number) => {
+    if (isGuest) return;
     const item = days[selectedDayIndex].items[itemIdx];
     if (item.transportType === "Flight") return;
     const newItems = [...days[selectedDayIndex].items];
@@ -391,6 +402,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden">
+      {/* Day Selector - Guest can Switch Days */}
       <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
@@ -427,24 +439,32 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
           <h2 className="text-lg font-black text-slate-900 dark:text-white">
             Day {selectedDayIndex + 1}
           </h2>
-          <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
-            <button
-              onClick={() => addActivity("Place")}
-              className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all"
-            >
-              <MapPin size={12} />{" "}
-              <span className="hidden sm:inline">{labels.addPlace}</span>
-            </button>
-            <button
-              onClick={() => addActivity("Food")}
-              className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-1"
-            >
-              <Coffee size={12} />{" "}
-              <span className="hidden sm:inline">{labels.addFood}</span>
-            </button>
-          </div>
+
+          {!isGuest ? (
+            <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
+              <button
+                onClick={() => addActivity("Place")}
+                className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all"
+              >
+                <MapPin size={12} />{" "}
+                <span className="hidden sm:inline">{labels.addPlace}</span>
+              </button>
+              <button
+                onClick={() => addActivity("Food")}
+                className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-1"
+              >
+                <Coffee size={12} />{" "}
+                <span className="hidden sm:inline">{labels.addFood}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
+              Read Only
+            </div>
+          )}
         </div>
 
+        {/* Content Area - Scrollable for everyone */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
           {currentDay?.items.map((item, idx) => {
             const isTransport = item.type === "Transport";
@@ -454,7 +474,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
             );
             const nextItem = currentDay.items[idx + 1];
             const canInsertTransport =
-              nextItem && !isTransport && nextItem.type !== "Transport";
+              nextItem &&
+              !isTransport &&
+              nextItem.type !== "Transport" &&
+              !isGuest;
 
             return (
               <React.Fragment key={item.id}>
@@ -500,12 +523,16 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                     >
                       <div className="flex items-center gap-1.5 relative pr-10 sm:pr-0">
                         <button
-                          disabled={isFlight || calculatingId === item.id}
+                          disabled={
+                            isFlight || isGuest || calculatingId === item.id
+                          }
                           onClick={() =>
-                            !isFlight && setShowTransportPickerId(item.id)
+                            !isFlight &&
+                            !isGuest &&
+                            setShowTransportPickerId(item.id)
                           }
                           className={`flex items-center gap-1.5 p-1 rounded-lg transition-colors ${
-                            isFlight
+                            isFlight || isGuest
                               ? "cursor-default"
                               : "hover:bg-slate-100 dark:hover:bg-slate-700"
                           }`}
@@ -539,7 +566,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                           </span>
                         </button>
 
-                        {showTransportPickerId === item.id && (
+                        {showTransportPickerId === item.id && !isGuest && (
                           <div
                             ref={editRef}
                             className="absolute bottom-full left-0 mb-2 z-[110] bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-2xl p-2 flex gap-1 animate-in zoom-in-95 duration-200"
@@ -569,7 +596,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                         )}
                       </div>
 
-                      {!isFlight && (
+                      {!isFlight && !isGuest && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button
                             onClick={() => deleteItem(idx)}
@@ -589,19 +616,21 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                       <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-center sm:items-center pr-12 sm:pr-32">
                         <div className="shrink-0 relative">
                           <button
-                            disabled={isFlight}
+                            disabled={isFlight || isGuest}
                             onClick={() =>
-                              !isFlight && setShowTimePickerId(item.id)
+                              !isFlight &&
+                              !isGuest &&
+                              setShowTimePickerId(item.id)
                             }
                             className={`font-mono font-black text-xs sm:text-sm focus:outline-none transition-colors ${
-                              isFlight
+                              isFlight || isGuest
                                 ? "text-blue-600 dark:text-blue-400 cursor-default"
                                 : "text-slate-900 dark:text-white hover:text-primary"
                             }`}
                           >
                             {item.time}
                           </button>
-                          {showTimePickerId === item.id && (
+                          {showTimePickerId === item.id && !isGuest && (
                             <TimePicker
                               value={item.time}
                               onChange={(t) => {
@@ -621,7 +650,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                               />
                             )}
                             <SafeInput
-                              disabled={isFlight}
+                              disabled={isFlight || isGuest}
                               value={item.placeName}
                               onChange={(val) =>
                                 updateItem(idx, "placeName", val)
@@ -636,7 +665,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                             />
                           </div>
                           <SafeInput
-                            disabled={isFlight}
+                            disabled={isFlight || isGuest}
                             value={item.note || ""}
                             onChange={(val) => updateItem(idx, "note", val)}
                             placeholder="..."
@@ -659,7 +688,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                         >
                           <Map size={14} />
                         </button>
-                        {!isFlight && (
+                        {!isFlight && !isGuest && (
                           <button
                             onClick={() => deleteItem(idx)}
                             className="p-1.5 bg-slate-50 dark:bg-slate-700 text-red-400 hover:text-red-500 hover:bg-red-500/5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600"
@@ -672,7 +701,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   )}
                 </div>
 
-                {canInsertTransport && (
+                {canInsertTransport && !isGuest && (
                   <div className="relative flex items-center justify-center py-2 group/btn">
                     <div className="absolute left-[-0.5px] w-0.5 bg-slate-50 dark:bg-slate-800/50 h-full" />
                     {insertingAt === idx ? (
@@ -702,7 +731,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                         onClick={() => setInsertingAt(idx)}
                         className="z-[110] bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md"
                       >
-                        {/* Fixed: Use selectTransport instead of setTransport which was missing from the labels object */}
                         <Plus size={14} />{" "}
                         <span className="hidden sm:inline font-black ml-1 uppercase">
                           {labels.selectTransport}
