@@ -300,7 +300,7 @@ const App: React.FC = () => {
   const load7DayWeather = async () => {
     if (!currentTrip) return;
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Provide a 7-day weather forecast for ${currentTrip.destination}. Return ONLY a JSON array. Date (MM/DD), Temp (min-max°C), Condition, Icon (sun, cloud, rain, wind).`,
