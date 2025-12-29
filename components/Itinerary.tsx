@@ -16,6 +16,8 @@ import {
   Check,
   X,
   Lock,
+  ChevronDown,
+  Edit2,
 } from "lucide-react";
 import { DateTimeUtils } from "../services/dateTimeUtils";
 import { GoogleGenAI } from "@google/genai";
@@ -64,52 +66,6 @@ const TRANSPORT_OPTIONS: {
   },
 ];
 
-const SafeInput: React.FC<{
-  value: string;
-  onChange: (val: string) => void;
-  placeholder?: string;
-  className?: string;
-  disabled?: boolean;
-}> = ({ value, onChange, placeholder, className, disabled }) => {
-  const [localValue, setLocalValue] = useState(value);
-  const isComposing = useRef(false);
-
-  useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalValue(e.target.value);
-    if (!isComposing.current) {
-      onChange(e.target.value);
-    }
-  };
-
-  const handleCompositionStart = () => {
-    isComposing.current = true;
-  };
-
-  const handleCompositionEnd = (
-    e: React.CompositionEvent<HTMLInputElement>
-  ) => {
-    isComposing.current = false;
-    onChange(e.currentTarget.value);
-  };
-
-  return (
-    <input
-      value={localValue}
-      onChange={handleChange}
-      onCompositionStart={handleCompositionStart}
-      onCompositionEnd={handleCompositionEnd}
-      onBlur={() => !disabled && onChange(localValue)}
-      placeholder={placeholder}
-      className={className}
-      disabled={disabled}
-    />
-  );
-};
-
 const TimePicker: React.FC<{
   value: string;
   onChange: (newTime: string) => void;
@@ -135,7 +91,7 @@ const TimePicker: React.FC<{
   return (
     <div
       ref={ref}
-      className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[100] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200"
+      className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200"
     >
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">
@@ -189,75 +145,96 @@ export const Itinerary: React.FC<Props> = ({
 }) => {
   const { language } = useTranslation();
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  const [days, setDays] = useState<DayPlan[]>([]);
   const [calculatingId, setCalculatingId] = useState<string | null>(null);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
-  const [showTimePickerId, setShowTimePickerId] = useState<string | null>(null);
   const [showTransportPickerId, setShowTransportPickerId] = useState<
     string | null
   >(null);
+  const [editingItem, setEditingItem] = useState<ItineraryItem | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
   const editRef = useRef<HTMLDivElement>(null);
 
   const labels = {
     addPlace: language === "zh" ? "景點" : "Place",
     addFood: language === "zh" ? "餐廳" : "Food",
-    newPlace: language === "zh" ? "新景點" : "New Place",
-    newFood: language === "zh" ? "新餐廳" : "New Food",
+    editActivity: language === "zh" ? "編輯行程" : "Edit",
+    placeName: language === "zh" ? "地點名稱" : "Place Name",
+    time: language === "zh" ? "時間" : "Time",
+    note: language === "zh" ? "備註" : "Notes",
+    save: language === "zh" ? "儲存" : "Save",
+    cancel: language === "zh" ? "取消" : "Cancel",
     calculating: language === "zh" ? "計算中" : "Calculating...",
     noData: language === "zh" ? "暫無資料" : "No Data",
     selectTransport: language === "zh" ? "選擇交通" : "Transport",
-    cancel: language === "zh" ? "取消" : "Cancel",
-    moving: language === "zh" ? "移動中" : "Transporting",
+    moving: language === "zh" ? "移動" : "Move",
+    readOnly: language === "zh" ? "僅供檢視" : "Read Only",
+    confirmDelete: language === "zh" ? "確定刪除？" : "Delete?",
+    type: language === "zh" ? "類型" : "Type",
+    typePlace: language === "zh" ? "景點" : "Place",
+    typeFood: language === "zh" ? "餐飲" : "Food",
   };
 
-  useEffect(() => {
-    setDays(trip.itinerary || []);
-  }, [trip.itinerary]);
+  const days = trip.itinerary || [];
+  const currentDay = days[selectedDayIndex];
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (editRef.current && !editRef.current.contains(e.target as Node)) {
-        setInsertingAt(null);
-        setShowTransportPickerId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const saveItineraryUpdate = (newItems: ItineraryItem[]) => {
+  const handleOpenAddForm = (type: "Place" | "Food") => {
     if (isGuest) return;
-    const newDays = [...days];
-    newDays[selectedDayIndex] = {
-      ...newDays[selectedDayIndex],
-      items: newItems,
-    };
-    onUpdate({ ...trip, itinerary: newDays });
-  };
-
-  const addActivity = (type: "Place" | "Food") => {
-    if (isGuest) return;
-    const currentItems = [...days[selectedDayIndex].items];
     let defaultTime = "09:00";
-    if (currentItems.length > 0) {
-      const lastItem = currentItems[currentItems.length - 1];
+    if (currentDay.items.length > 0) {
+      const lastItem = currentDay.items[currentDay.items.length - 1];
       const [h, m] = lastItem.time.split(":").map(Number);
       const nextM = m + 30;
       defaultTime = `${(h + Math.floor(nextM / 60))
         .toString()
         .padStart(2, "0")}:${(nextM % 60).toString().padStart(2, "0")}`;
     }
-    const newItem: ItineraryItem = {
+    setEditingItem({
       id: crypto.randomUUID(),
       time: defaultTime,
-      placeName: type === "Place" ? labels.newPlace : labels.newFood,
+      placeName: "",
       type,
       note: "",
-      date: days[selectedDayIndex].date,
-    };
-    saveItineraryUpdate(
-      [...currentItems, newItem].sort((a, b) => a.time.localeCompare(b.time))
-    );
+      date: currentDay.date,
+    });
+    setIsFormOpen(true);
+  };
+
+  const handleEditItem = (item: ItineraryItem) => {
+    if (isGuest || item.type === "Transport") return;
+    setEditingItem({ ...item });
+    setIsFormOpen(true);
+  };
+
+  const handleSaveItem = () => {
+    if (!editingItem || !editingItem.placeName.trim()) return;
+
+    let newItems = [...currentDay.items];
+    const index = newItems.findIndex((i) => i.id === editingItem.id);
+
+    if (index > -1) {
+      newItems[index] = editingItem;
+    } else {
+      newItems.push(editingItem);
+    }
+
+    newItems.sort((a, b) => a.time.localeCompare(b.time));
+
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: newItems };
+    onUpdate({ ...trip, itinerary: newDays });
+
+    setIsFormOpen(false);
+    setEditingItem(null);
+  };
+
+  const handleDeleteItem = (itemId: string) => {
+    if (isGuest || !window.confirm(labels.confirmDelete)) return;
+    const newItems = currentDay.items.filter((i) => i.id !== itemId);
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: newItems };
+    onUpdate({ ...trip, itinerary: newDays });
   };
 
   const calculateTransportTime = async (
@@ -292,15 +269,19 @@ export const Itinerary: React.FC<Props> = ({
           ? { ...it, note: resultText, transportType: type }
           : it
       );
-      saveItineraryUpdate(updatedItems);
-    } catch {
+      const newDays = [...days];
+      newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+      onUpdate({ ...trip, itinerary: newDays });
+    } catch (error) {
       const duration = DateTimeUtils.getDuration(prev.time, next.time);
       const updatedItems = currentItems.map((it) =>
         it.id === transportId
           ? { ...it, note: duration || labels.noData, transportType: type }
           : it
       );
-      saveItineraryUpdate(updatedItems);
+      const newDays = [...days];
+      newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+      onUpdate({ ...trip, itinerary: newDays });
     } finally {
       setCalculatingId(null);
     }
@@ -308,7 +289,7 @@ export const Itinerary: React.FC<Props> = ({
 
   const handleInsertTransport = async (index: number, type: TransportType) => {
     if (isGuest) return;
-    const currentItems = [...days[selectedDayIndex].items];
+    const currentItems = [...currentDay.items];
     const prev = currentItems[index];
     const next = currentItems[index + 1];
     if (!prev || !next) return;
@@ -328,68 +309,18 @@ export const Itinerary: React.FC<Props> = ({
       type: "Transport",
       transportType: type,
       note: labels.calculating,
-      date: days[selectedDayIndex].date,
+      date: currentDay.date,
     };
 
     const newItems = [...currentItems];
     newItems.splice(index + 1, 0, newTransport);
     setInsertingAt(null);
-    saveItineraryUpdate(newItems);
+
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: newItems };
+    onUpdate({ ...trip, itinerary: newDays });
+
     await calculateTransportTime(index + 1, targetId, type, newItems);
-  };
-
-  const updateItem = async (
-    itemIdx: number,
-    field: keyof ItineraryItem,
-    value: any
-  ) => {
-    if (isGuest) return;
-    let newItems = [...days[selectedDayIndex].items];
-    const item = newItems[itemIdx];
-
-    if (item.transportType === "Flight") return;
-
-    newItems[itemIdx] = { ...item, [field]: value };
-
-    if (field === "time") {
-      newItems.sort((a, b) => a.time.localeCompare(b.time));
-      const newIdx = newItems.findIndex((it) => it.id === item.id);
-      saveItineraryUpdate(newItems);
-
-      if (
-        newItems[newIdx - 1]?.type === "Transport" &&
-        newItems[newIdx - 1]?.transportType !== "Flight"
-      ) {
-        calculateTransportTime(
-          newIdx - 1,
-          newItems[newIdx - 1].id,
-          newItems[newIdx - 1].transportType!,
-          newItems
-        );
-      }
-      if (
-        newItems[newIdx + 1]?.type === "Transport" &&
-        newItems[newIdx + 1]?.transportType !== "Flight"
-      ) {
-        calculateTransportTime(
-          newIdx + 1,
-          newItems[newIdx + 1].id,
-          newItems[newIdx + 1].transportType!,
-          newItems
-        );
-      }
-    } else {
-      saveItineraryUpdate(newItems);
-    }
-  };
-
-  const deleteItem = (itemIdx: number) => {
-    if (isGuest) return;
-    const item = days[selectedDayIndex].items[itemIdx];
-    if (item.transportType === "Flight") return;
-    const newItems = [...days[selectedDayIndex].items];
-    newItems.splice(itemIdx, 1);
-    saveItineraryUpdate(newItems);
   };
 
   if (days.length === 0)
@@ -398,12 +329,11 @@ export const Itinerary: React.FC<Props> = ({
         {labels.noData}
       </div>
     );
-  const currentDay = days[selectedDayIndex];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden">
-      {/* Day Selector - Guest can Switch Days */}
-      <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0 shrink-0 px-1">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] sm:h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
+      {/* Day Selector */}
+      <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
           const d = new Date(day.date + "T00:00:00");
@@ -423,7 +353,7 @@ export const Itinerary: React.FC<Props> = ({
               <div className="text-[9px] font-black uppercase mb-0.5">
                 Day {idx + 1}
               </div>
-              <div className="font-bold text-sm leading-tight">
+              <div className="font-bold text-xs sm:text-sm leading-tight">
                 {d.toLocaleDateString(language === "zh" ? "zh-TW" : "en-US", {
                   month: "numeric",
                   day: "numeric",
@@ -434,37 +364,37 @@ export const Itinerary: React.FC<Props> = ({
         })}
       </div>
 
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[28px] lg:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-          <h2 className="text-lg font-black text-slate-900 dark:text-white">
+      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden">
+        <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white px-2">
             Day {selectedDayIndex + 1}
           </h2>
 
           {!isGuest ? (
             <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
               <button
-                onClick={() => addActivity("Place")}
-                className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all"
+                onClick={() => handleOpenAddForm("Place")}
+                className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all"
               >
                 <MapPin size={12} />{" "}
                 <span className="hidden sm:inline">{labels.addPlace}</span>
               </button>
               <button
-                onClick={() => addActivity("Food")}
-                className="px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-1"
+                onClick={() => handleOpenAddForm("Food")}
+                className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-0.5"
               >
                 <Coffee size={12} />{" "}
                 <span className="hidden sm:inline">{labels.addFood}</span>
               </button>
             </div>
           ) : (
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
-              Read Only
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1">
+              <Lock size={10} />
+              {labels.readOnly}
             </div>
           )}
         </div>
 
-        {/* Content Area - Scrollable for everyone */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
           {currentDay?.items.map((item, idx) => {
             const isTransport = item.type === "Transport";
@@ -482,7 +412,7 @@ export const Itinerary: React.FC<Props> = ({
             return (
               <React.Fragment key={item.id}>
                 <div
-                  className={`relative pl-10 sm:pl-12 ${
+                  className={`relative pl-8 sm:pl-12 ${
                     isTransport ? "pb-2 sm:pb-3" : "pb-6 sm:pb-8"
                   }`}
                 >
@@ -515,13 +445,13 @@ export const Itinerary: React.FC<Props> = ({
 
                   {isTransport ? (
                     <div
-                      className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex flex-col sm:flex-row items-center justify-center sm:justify-between h-auto sm:h-11 py-2 sm:py-0 relative ${
+                      className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative ${
                         isFlight
                           ? "bg-blue-50/20 border-blue-100 dark:border-blue-900/20"
                           : "border-slate-200 dark:border-slate-700 hover:border-slate-400"
-                      } transition-all`}
+                      } transition-all overflow-hidden`}
                     >
-                      <div className="flex items-center gap-1.5 relative pr-10 sm:pr-0">
+                      <div className="flex items-center gap-2 relative max-w-full px-12 sm:px-4 justify-center sm:justify-start">
                         <button
                           disabled={
                             isFlight || isGuest || calculatingId === item.id
@@ -531,7 +461,7 @@ export const Itinerary: React.FC<Props> = ({
                             !isGuest &&
                             setShowTransportPickerId(item.id)
                           }
-                          className={`flex items-center gap-1.5 p-1 rounded-lg transition-colors ${
+                          className={`flex items-center gap-2 p-1 rounded-lg transition-colors w-full justify-center sm:justify-start text-center sm:text-left ${
                             isFlight || isGuest
                               ? "cursor-default"
                               : "hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -548,28 +478,33 @@ export const Itinerary: React.FC<Props> = ({
                               className="text-blue-500 shrink-0"
                             />
                           ) : null}
-                          <span
-                            className={`text-[10px] sm:text-xs font-bold truncate ${
-                              isFlight
-                                ? "text-blue-600 dark:text-blue-400"
-                                : "text-slate-500 dark:text-slate-400"
-                            }`}
-                          >
-                            <span className="hidden sm:inline">
-                              {labels.moving}:{" "}
+                          <div className="w-full flex flex-col items-start overflow-hidden">
+                            <span
+                              className={`text-[10px] sm:text-xs font-bold whitespace-nowrap ${
+                                isFlight
+                                  ? "text-blue-600 dark:text-blue-400"
+                                  : "text-slate-500 dark:text-slate-400"
+                              }`}
+                            >
+                              <span className="opacity-60">
+                                {labels.moving}:{" "}
+                              </span>
+                              {calculatingId === item.id ? (
+                                <Loader2
+                                  size={10}
+                                  className="animate-spin inline"
+                                />
+                              ) : (
+                                item.note
+                              )}
                             </span>
-                            {calculatingId === item.id ? (
-                              <Loader2 size={10} className="animate-spin" />
-                            ) : (
-                              item.note
-                            )}
-                          </span>
+                          </div>
                         </button>
 
                         {showTransportPickerId === item.id && !isGuest && (
                           <div
                             ref={editRef}
-                            className="absolute bottom-full left-0 mb-2 z-[110] bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-2xl p-2 flex gap-1 animate-in zoom-in-95 duration-200"
+                            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-2xl p-2 flex gap-1 animate-in zoom-in-95 duration-200"
                           >
                             {TRANSPORT_OPTIONS.map((opt) => (
                               <button
@@ -597,10 +532,10 @@ export const Itinerary: React.FC<Props> = ({
                       </div>
 
                       {!isFlight && !isGuest && (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button
-                            onClick={() => deleteItem(idx)}
-                            className="p-1.5 bg-white dark:bg-slate-700 text-red-500/80 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600"
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="p-1.5 bg-white/80 dark:bg-slate-700 text-red-500/80 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600 active:scale-90"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -609,93 +544,104 @@ export const Itinerary: React.FC<Props> = ({
                     </div>
                   ) : (
                     <div
-                      className={`group bg-white dark:bg-slate-800/80 p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border border-transparent shadow-ios hover:shadow-ios-lg transition-all relative ${
+                      className={`group bg-white dark:bg-slate-800/80 p-3 sm:p-3.5 rounded-2xl border border-transparent shadow-ios sm:hover:shadow-ios transition-all relative ${
                         isFlight ? "ring-1 ring-blue-500/20 bg-blue-50/5" : ""
                       }`}
                     >
-                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-center sm:items-center pr-12 sm:pr-32">
-                        <div className="shrink-0 relative">
-                          <button
-                            disabled={isFlight || isGuest}
-                            onClick={() =>
-                              !isFlight &&
-                              !isGuest &&
-                              setShowTimePickerId(item.id)
-                            }
-                            className={`font-mono font-black text-xs sm:text-sm focus:outline-none transition-colors ${
-                              isFlight || isGuest
-                                ? "text-blue-600 dark:text-blue-400 cursor-default"
-                                : "text-slate-900 dark:text-white hover:text-primary"
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        {/* Left: Time */}
+                        <div className="shrink-0 w-10 sm:w-14">
+                          <div
+                            className={`font-mono font-black text-[10px] sm:text-sm ${
+                              isFlight
+                                ? "text-blue-600 dark:text-blue-400"
+                                : "text-slate-900 dark:text-white"
                             }`}
                           >
                             {item.time}
-                          </button>
-                          {showTimePickerId === item.id && !isGuest && (
-                            <TimePicker
-                              value={item.time}
-                              onChange={(t) => {
-                                updateItem(idx, "time", t);
-                                setShowTimePickerId(null);
-                              }}
-                              onClose={() => setShowTimePickerId(null)}
-                            />
-                          )}
+                          </div>
                         </div>
-                        <div className="flex-1 space-y-0.5 min-w-0 flex flex-col items-center sm:items-start text-center sm:text-left">
-                          <div className="flex items-center gap-1.5 w-full justify-center sm:justify-start">
+
+                        {/* Center: Text Content - Fixed: Force items-start and text-left for mobile to avoid clipping on left */}
+                        <div
+                          onClick={() => {
+                            if (
+                              window.innerWidth < 640 &&
+                              !isFlight &&
+                              !isGuest
+                            )
+                              handleEditItem(item);
+                          }}
+                          className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-default rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50 sm:hover:bg-transparent"
+                        >
+                          <div className="flex items-center gap-1.5 w-full justify-start">
                             {isFlight && (
                               <Plane
-                                size={12}
+                                size={11}
                                 className="text-blue-500 shrink-0"
                               />
                             )}
-                            <SafeInput
-                              disabled={isFlight || isGuest}
-                              value={item.placeName}
-                              onChange={(val) =>
-                                updateItem(idx, "placeName", val)
-                              }
-                              className={`font-black text-sm sm:text-base bg-transparent border-none w-full p-0 focus:ring-0 truncate text-center sm:text-left ${
+                            <div
+                              className={`font-black text-sm sm:text-base whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 ${
                                 isFlight
                                   ? "text-blue-900 dark:text-blue-300"
                                   : item.type === "Food"
                                   ? "text-orange-600"
                                   : "text-slate-900 dark:text-white"
                               }`}
-                            />
+                            >
+                              {item.placeName}
+                            </div>
                           </div>
-                          <SafeInput
-                            disabled={isFlight || isGuest}
-                            value={item.note || ""}
-                            onChange={(val) => updateItem(idx, "note", val)}
-                            placeholder="..."
-                            className="text-[10px] sm:text-xs font-medium text-slate-400 bg-transparent border-none w-full p-0 focus:ring-0 text-center sm:text-left"
-                          />
+                          <div className="text-[9px] sm:text-xs font-medium text-slate-400 whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 w-full text-left">
+                            {item.note || "..."}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col sm:flex-row gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                        <button
-                          onClick={() =>
-                            window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                                item.placeName
-                              )}`,
-                              "_blank"
-                            )
-                          }
-                          className="p-1.5 bg-slate-50 dark:bg-slate-700 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600"
-                        >
-                          <Map size={14} />
-                        </button>
-                        {!isFlight && !isGuest && (
+                        {/* Right: 1+2 Action Buttons layout */}
+                        <div className="shrink-0 flex flex-col gap-1 w-[72px] sm:w-24 items-end pl-1 sm:pl-3">
                           <button
-                            onClick={() => deleteItem(idx)}
-                            className="p-1.5 bg-slate-50 dark:bg-slate-700 text-red-400 hover:text-red-500 hover:bg-red-500/5 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600"
+                            onClick={() => handleEditItem(item)}
+                            disabled={isGuest || isFlight}
+                            className={`hidden sm:flex w-full py-1.5 items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${
+                              isGuest || isFlight
+                                ? "opacity-30 cursor-default"
+                                : "bg-slate-50 dark:bg-slate-700/80 text-slate-500 hover:text-primary"
+                            }`}
                           >
-                            <Trash2 size={14} />
+                            <Edit2 size={13} />
                           </button>
-                        )}
+                          <div className="flex gap-1 w-full transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(
+                                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                                    item.placeName
+                                  )}`,
+                                  "_blank"
+                                );
+                              }}
+                              className="flex-1 py-1.5 flex items-center justify-center bg-slate-50 dark:bg-slate-700/80 text-slate-400 hover:text-primary rounded-lg border border-slate-100 dark:border-slate-700 active:scale-95 transition-all"
+                            >
+                              <Map size={13} />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteItem(item.id);
+                              }}
+                              disabled={isGuest || isFlight}
+                              className={`flex-1 py-1.5 flex items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${
+                                isGuest || isFlight
+                                  ? "opacity-30 cursor-default"
+                                  : "bg-slate-50 dark:bg-slate-700/80 text-red-400 hover:text-red-500"
+                              }`}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -707,7 +653,7 @@ export const Itinerary: React.FC<Props> = ({
                     {insertingAt === idx ? (
                       <div
                         ref={editRef}
-                        className="z-[110] bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200"
+                        className="z-10 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200"
                       >
                         {TRANSPORT_OPTIONS.map((opt) => (
                           <button
@@ -729,7 +675,7 @@ export const Itinerary: React.FC<Props> = ({
                     ) : (
                       <button
                         onClick={() => setInsertingAt(idx)}
-                        className="z-[110] bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md"
+                        className="z-10 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95"
                       >
                         <Plus size={14} />{" "}
                         <span className="hidden sm:inline font-black ml-1 uppercase">
@@ -744,6 +690,142 @@ export const Itinerary: React.FC<Props> = ({
           })}
         </div>
       </div>
+
+      {/* Activity Form Modal */}
+      {isFormOpen && editingItem && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-slate-800 p-6 sm:p-10 rounded-[40px] shadow-2xl w-full max-w-lg border border-slate-100 dark:border-slate-700 overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32" />
+
+            <div className="relative z-10">
+              <div className="flex justify-between items-center mb-6 sm:mb-8">
+                <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
+                  {editingItem.placeName
+                    ? labels.editActivity
+                    : labels.addPlace}
+                </h3>
+                <button
+                  onClick={() => setIsFormOpen(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6 sm:space-y-8">
+                {/* Type Selection */}
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    {labels.type}
+                  </label>
+                  <div className="flex bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <button
+                      onClick={() =>
+                        setEditingItem({ ...editingItem, type: "Place" })
+                      }
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${
+                        editingItem.type === "Place"
+                          ? "bg-white dark:bg-slate-700 text-primary shadow-sm"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      <MapPin size={13} /> {labels.typePlace}
+                    </button>
+                    <button
+                      onClick={() =>
+                        setEditingItem({ ...editingItem, type: "Food" })
+                      }
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${
+                        editingItem.type === "Food"
+                          ? "bg-white dark:bg-slate-700 text-orange-500 shadow-sm"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      <Coffee size={13} /> {labels.typeFood}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Name and Time */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
+                  <div className="sm:col-span-2 space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      {labels.placeName}
+                    </label>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingItem.placeName}
+                      onChange={(e) =>
+                        setEditingItem({
+                          ...editingItem,
+                          placeName: e.target.value,
+                        })
+                      }
+                      placeholder="..."
+                      className="w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
+                    />
+                  </div>
+                  <div className="space-y-2 relative">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      {labels.time}
+                    </label>
+                    <button
+                      onClick={() => setShowTimePicker(!showTimePicker)}
+                      className="w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-mono font-black text-center flex items-center justify-center gap-2 border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
+                    >
+                      <Clock size={15} className="text-slate-400" />
+                      {editingItem.time}
+                    </button>
+                    {showTimePicker && (
+                      <TimePicker
+                        value={editingItem.time}
+                        onChange={(t) => {
+                          setEditingItem({ ...editingItem, time: t });
+                          setShowTimePicker(false);
+                        }}
+                        onClose={() => setShowTimePicker(false)}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    {labels.note}
+                  </label>
+                  <textarea
+                    value={editingItem.note || ""}
+                    onChange={(e) =>
+                      setEditingItem({ ...editingItem, note: e.target.value })
+                    }
+                    rows={2}
+                    placeholder="..."
+                    className="w-full bg-slate-50 dark:bg-slate-900 p-5 sm:p-6 rounded-[24px] sm:rounded-[32px] font-bold border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm resize-none"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
+                  <button
+                    onClick={handleSaveItem}
+                    disabled={!editingItem.placeName.trim()}
+                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+                  >
+                    {labels.save}
+                  </button>
+                  <button
+                    onClick={() => setIsFormOpen(false)}
+                    className="order-2 sm:order-1 flex-1 py-4 sm:py-5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 transition-all active:scale-95"
+                  >
+                    {labels.cancel}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
