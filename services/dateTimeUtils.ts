@@ -61,9 +61,10 @@ export const DateTimeUtils = {
 
   /**
    * Calculates duration string between two HH:mm strings
+   * Returns format: XHYM if hours > 0, else YM (e.g., 1H30M, 45M)
    */
   getDuration: (startTime: string, endTime: string): string => {
-    if (!startTime || !endTime) return "";
+    if (!startTime || !endTime) return "0M";
     const [h1, m1] = startTime.split(':').map(Number);
     const [h2, m2] = endTime.split(':').map(Number);
     
@@ -73,7 +74,9 @@ export const DateTimeUtils = {
     const hours = Math.floor(totalMinutes / 60);
     const mins = totalMinutes % 60;
 
-    if (hours > 0) return `${hours}h ${mins}m`;
+    if (hours > 0) {
+      return `${hours}h${mins}m`;
+    }
     return `${mins}m`;
   }
 };
