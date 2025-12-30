@@ -40,6 +40,7 @@ const transformTripRow = (row: any): Trip => {
       itineraryMap[it.date].push({
         id: it.id,
         trip_id: it.trip_id,
+        user_id: it.user_id, // Map user_id
         time: it.time,
         placeName: it.place_name,
         note: it.note,
@@ -81,6 +82,7 @@ const transformTripRow = (row: any): Trip => {
     })),
     checklist: (row.checklist_items || []).map((ci: any) => ({
       id: ci.id,
+      user_id: ci.user_id, // Map user_id
       text: ci.text,
       isCompleted: ci.is_completed,
       category: ci.category
@@ -103,14 +105,60 @@ const transformTripRow = (row: any): Trip => {
 
 export const joinTrip = async (tripId: string, userId: string): Promise<void> => {
   try {
-    // Use upsert to handle "already joined" cases gracefully without throwing unique constraint errors
-    await supabase.from('trip_collaborators').upsert({
+    // 1. Join Collaborators
+    const { error } = await supabase.from('trip_collaborators').upsert({
       trip_id: tripId,
       user_id: userId,
       role: 'editor' 
     }, { onConflict: 'trip_id,user_id' });
+
+    if (error) throw error;
+
+    // 2. Check if user already has checklist items
+    const { count } = await supabase.from('checklist_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('trip_id', tripId)
+      .eq('user_id', userId);
+
+    // 3. Insert default checklist if none exists
+    if (count === 0) {
+       const defaultItems = [
+         { text: 'Passport & Visa', category: 'Documents' },
+         { text: 'Phone Charger', category: 'Gear' },
+         { text: 'Clothes', category: 'Clothing' },
+         { text: 'Toothbrush', category: 'Toiletries' }
+       ];
+       
+       const payload = defaultItems.map(item => ({
+          trip_id: tripId,
+          user_id: userId,
+          text: item.text,
+          category: item.category,
+          is_completed: false
+       }));
+       
+       await supabase.from('checklist_items').insert(payload);
+    }
   } catch (e) {
     console.error("Failed to join trip:", e);
+  }
+};
+
+export const leaveTrip = async (tripId: string, userId: string): Promise<void> => {
+  try {
+    // 1. Remove from collaborators
+    await supabase.from('trip_collaborators').delete().eq('trip_id', tripId).eq('user_id', userId);
+    
+    // 2. Clean up ALL user-specific data from this trip
+    await Promise.all([
+      supabase.from('checklist_items').delete().eq('trip_id', tripId).eq('user_id', userId),
+      supabase.from('expenses').delete().eq('trip_id', tripId).eq('user_id', userId),
+      supabase.from('flights').delete().eq('trip_id', tripId).eq('user_id', userId),
+      supabase.from('itinerary_items').delete().eq('trip_id', tripId).eq('user_id', userId)
+    ]);
+    
+  } catch (e) {
+    console.error("Failed to leave trip:", e);
   }
 };
 
@@ -237,6 +285,7 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
     const checklistPayload = trip.checklist.map(ci => ({
       id: isValidUUID(ci.id) ? ci.id : crypto.randomUUID(),
       trip_id: trip.id,
+      user_id: ci.user_id || userId, // Ensure user_id is saved
       text: ci.text,
       is_completed: ci.isCompleted,
       category: ci.category
@@ -290,6 +339,7 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
         itineraryPayload.push({
           id: isValidUUID(item.id) ? item.id : crypto.randomUUID(),
           trip_id: trip.id,
+          user_id: item.user_id || userId, // Keep ownership
           date: day.date,
           time: item.time,
           place_name: item.placeName,
