@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { X, Calendar, MapPin, Plane, ArrowRight, Loader2, Check, Info, ChevronLeft } from 'lucide-react';
+import { X, Calendar, MapPin, Plane, ArrowRight, Loader2, Check, Info, ChevronLeft, AlertCircle } from 'lucide-react';
 import { fetchTdxFlights } from '../services/tdxService';
 import { FlightSegment, Trip, Currency, ItineraryItem, DayPlan, ChecklistItem } from '../types';
 import { createNewTrip } from '../services/storageService';
@@ -14,10 +13,8 @@ interface Props {
 
 type Step = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-select' | 'review';
 
-const getAirlineLogo = (id: string | undefined) => id ? `https://pics.avs.io/120/120/${id}.png` : null;
-
 export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
-  const { language } = useTranslation();
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>('outbound-search');
   const [loading, setLoading] = useState(false);
   const [origin, setOrigin] = useState('TPE');
@@ -29,46 +26,32 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   const [flightOptions, setFlightOptions] = useState<FlightSegment[]>([]);
   const [outboundFlight, setOutboundFlight] = useState<FlightSegment | null>(null);
   const [inboundFlight, setInboundFlight] = useState<FlightSegment | null>(null);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   const labels = {
-    title: language === 'zh' ? '開始一段新旅程' : 'Start a New Journey',
-    outboundSearch: language === 'zh' ? '目的地在哪裡？' : 'Where to?',
-    inboundSearch: language === 'zh' ? '什麼時候回來？' : 'When back?',
-    outboundSub: language === 'zh' ? '搜尋您的出發航班' : 'Find your outbound flight',
-    inboundSub: (dest: string, orig: string) => language === 'zh' ? `從 ${dest} 飛回 ${orig}` : `Fly from ${dest} back to ${orig}`,
-    origin: language === 'zh' ? '出發地' : 'Origin',
-    destination: language === 'zh' ? '目的地' : 'Destination',
-    date: language === 'zh' ? '日期' : 'Date',
-    flightNo: language === 'zh' ? '航班代號' : 'Flight No.',
-    searchBtn: language === 'zh' ? '搜尋即時航班' : 'Search Flights',
-    back: language === 'zh' ? '返回' : 'Back',
-    selectOut: language === 'zh' ? '選擇去程航班' : 'Select Outbound',
-    selectIn: language === 'zh' ? '選擇回程航班' : 'Select Inbound',
-    noFlights: language === 'zh' ? '找不到航班資訊' : 'No flights found.',
-    review: language === 'zh' ? '確認行程' : 'Review Trip',
-    reviewSub: language === 'zh' ? '系統將自動生成基礎行程與清單' : 'System will generate base itinerary',
-    confirmBtn: language === 'zh' ? '完成並建立' : 'Create Trip',
-    airport: language === 'zh' ? '機場' : 'Airport',
-    flight: language === 'zh' ? '航班' : 'Flight',
-    terminal: language === 'zh' ? '航廈' : 'Terminal',
-    datePlaceholder: 'YYYY-MM-DD'
+    title: t('newTrip'),
+    outboundSearch: t('searchOut'),
+    inboundSearch: t('searchIn'),
+    origin: t('origin'),
+    destination: t('destination'),
+    date: t('date'),
+    flightNo: t('flightNo'),
+    searchBtn: t('search'),
+    back: t('back'),
+    selectOut: t('selectOut'),
+    selectIn: t('selectIn'),
+    review: t('review'),
+    confirmBtn: t('confirm'),
+    required: t('required')
   };
 
   const getDefaultChecklist = (): ChecklistItem[] => {
-    const items = language === 'zh' 
-      ? [
-          { text: '護照與簽證', cat: 'Documents' },
-          { text: '行動電源與線材', cat: 'Gear' },
-          { text: '個人藥物', cat: 'Toiletries' },
-          { text: '外幣現金', cat: 'Other' }
-        ]
-      : [
-          { text: 'Passport & Visa', cat: 'Documents' },
-          { text: 'Power Bank & Cables', cat: 'Gear' },
-          { text: 'Medicine', cat: 'Toiletries' },
-          { text: 'Currency / Cash', cat: 'Other' }
-        ];
-
+    const items = [
+        { text: 'Passport & Visa', cat: 'Documents' },
+        { text: 'Power Bank', cat: 'Gear' },
+        { text: 'Medicine', cat: 'Toiletries' },
+        { text: 'Cash', cat: 'Other' }
+    ];
     return items.map((item) => ({
       id: crypto.randomUUID(),
       text: item.text,
@@ -77,10 +60,26 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     }));
   };
 
+  const validateSearch = (type: 'outbound' | 'inbound') => {
+    const newErrors: Record<string, boolean> = {};
+    if (type === 'outbound') {
+      if (!origin) newErrors.origin = true;
+      if (!destination) newErrors.destination = true;
+      if (!outboundDate) newErrors.outboundDate = true;
+      if (!outboundFlightNumber) newErrors.outboundFlightNumber = true;
+    } else {
+      if (!inboundDate) newErrors.inboundDate = true;
+      if (!inboundFlightNumber) newErrors.inboundFlightNumber = true;
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSearch = async (type: 'outbound' | 'inbound') => {
+    if (!validateSearch(type)) return;
+
     const fNo = type === 'outbound' ? outboundFlightNumber : inboundFlightNumber;
     const date = type === 'outbound' ? outboundDate : inboundDate;
-    if (!fNo.trim() || !date) return;
 
     setLoading(true);
     try {
@@ -93,64 +92,110 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     finally { setLoading(false); }
   };
 
+  const calculateDurationStr = (start: string, end: string) => {
+    const s = new Date(start).getTime();
+    const e = new Date(end).getTime();
+    if (isNaN(s) || isNaN(e)) return '';
+    let diffMins = Math.floor((e - s) / 60000);
+    if (diffMins < 0) diffMins += 24 * 60; 
+    const h = Math.floor(diffMins / 60);
+    const m = diffMins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  const getMidPointTime = (t1: string, t2: string) => {
+    const [h1, m1] = t1.split(':').map(Number);
+    const [h2, m2] = t2.split(':').map(Number);
+    let min1 = h1 * 60 + m1;
+    let min2 = h2 * 60 + m2;
+    if (min2 < min1) min2 += 24 * 60;
+    const mid = Math.floor((min1 + min2) / 2) % (24 * 60);
+    return `${Math.floor(mid/60).toString().padStart(2, '0')}:${(mid%60).toString().padStart(2, '0')}`;
+  };
+
   const handleCreateTrip = () => {
     if (!outboundFlight || !inboundFlight) return;
+    
     const startStr = outboundFlight.departureTime.split('T')[0];
     const endStr = inboundFlight.departureTime.split('T')[0];
     const start = new Date(startStr);
-    const end = new Date(endStr);
-    const totalDays = Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const diffTime = Math.abs(new Date(endStr).getTime() - start.getTime());
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
     const generatedItinerary: DayPlan[] = [];
+    
     for (let i = 0; i < totalDays; i++) {
-      const d = new Date(start); 
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const currentDate = new Date(start);
+      currentDate.setDate(start.getDate() + i);
+      const dateStr = DateTimeUtils.formatDate(currentDate);
       const items: ItineraryItem[] = [];
 
-      if (i === 0) {
-        items.push({ 
+      // Outbound logic
+      if (dateStr === outboundFlight.departureTime.split('T')[0]) {
+         items.push({ 
           id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(outboundFlight.departureTime), 
-          placeName: `${labels.airport} ${outboundFlight.departureAirport}`, 
-          type: 'Place', 
-          transportType: 'Flight',
-          note: `${labels.flight}: ${outboundFlight.flightNumber}`, 
-          date: dateStr 
+          placeName: `${outboundFlight.departureAirport} Airport`, 
+          type: 'Place', transportType: 'Flight', 
+          note: `Flight: ${outboundFlight.flightNumber}`, date: dateStr 
+        });
+        items.push({
+           id: crypto.randomUUID(),
+           time: getMidPointTime(DateTimeUtils.formatTime24(outboundFlight.departureTime), DateTimeUtils.formatTime24(outboundFlight.arrivalTime)),
+           placeName: 'Flight', type: 'Transport', transportType: 'Flight',
+           note: calculateDurationStr(outboundFlight.departureTime, outboundFlight.arrivalTime), date: dateStr
         });
       }
-      
-      if (i === totalDays - 1) {
-        items.push({ 
+      if (dateStr === outboundFlight.arrivalTime.split('T')[0]) {
+         items.push({ 
+          id: crypto.randomUUID(), 
+          time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime), 
+          placeName: `${outboundFlight.arrivalAirport} Airport`, 
+          type: 'Place', transportType: 'Flight', note: 'Arrival', date: dateStr 
+        });
+      }
+
+      // Inbound logic
+      if (dateStr === inboundFlight.departureTime.split('T')[0]) {
+         items.push({ 
           id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(inboundFlight.departureTime), 
-          placeName: `${labels.airport} ${inboundFlight.departureAirport}`, 
-          type: 'Place', 
-          transportType: 'Flight',
-          note: `${labels.flight}: ${inboundFlight.flightNumber}`, 
-          date: dateStr 
+          placeName: `${inboundFlight.departureAirport} Airport`, 
+          type: 'Place', transportType: 'Flight', 
+          note: `Flight: ${inboundFlight.flightNumber}`, date: dateStr 
+        });
+        items.push({
+           id: crypto.randomUUID(),
+           time: getMidPointTime(DateTimeUtils.formatTime24(inboundFlight.departureTime), DateTimeUtils.formatTime24(inboundFlight.arrivalTime)),
+           placeName: 'Flight', type: 'Transport', transportType: 'Flight',
+           note: calculateDurationStr(inboundFlight.departureTime, inboundFlight.arrivalTime), date: dateStr
         });
       }
-      generatedItinerary.push({ date: dateStr, items: items });
+      if (dateStr === inboundFlight.arrivalTime.split('T')[0]) {
+         items.push({ 
+          id: crypto.randomUUID(), 
+          time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime), 
+          placeName: `${inboundFlight.arrivalAirport} Airport`, 
+          type: 'Place', transportType: 'Flight', note: 'Arrival', date: dateStr 
+        });
+      }
+
+      generatedItinerary.push({ date: dateStr, items: items.sort((a,b) => a.time.localeCompare(b.time)) });
     }
 
     const newTrip = createNewTrip({ destination, startDate: startStr, endDate: endStr });
     newTrip.itinerary = generatedItinerary;
     newTrip.checklist = getDefaultChecklist();
-    // 使用漸層色背景作為預算封面，移除隨機 Picsum 圖
-    newTrip.coverImage = `https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?auto=format&fit=crop&q=80&w=800`;
-    newTrip.flight = { 
-      price: 0, 
-      currency: Currency.TWD, 
-      cabinClass: 'Economy', 
+    newTrip.flights = [{ 
+      id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: 'Economy', 
       outbound: { ...outboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }, 
       inbound: { ...inboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }, 
-      baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } },
-      budget: 50000
-    };
-
+      baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } }, budget: 50000
+    }];
     onSubmit(newTrip);
   };
+
+  const inputClass = (isError: boolean) => `w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-2 outline-none transition-all ${isError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:border-primary/20'}`;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -162,14 +207,26 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
            {step === 'outbound-search' && (
              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.outboundSearch}</h3><p className="text-slate-500 text-sm">{labels.outboundSub}</p></div>
+                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.outboundSearch}</h3></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.origin}</label><input value={origin} onChange={e => setOrigin(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black text-lg border-none outline-none" placeholder="TPE" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.destination}</label><input value={destination} onChange={e => setDestination(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black text-lg border-none outline-none" placeholder="KIX" /></div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.origin ? "text-red-500" : "text-slate-400"}`}>{labels.origin}</label>
+                    <input value={origin} onChange={e => {setOrigin(e.target.value.toUpperCase()); setErrors({...errors, origin: false})}} className={inputClass(errors.origin)} placeholder="TPE" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.destination ? "text-red-500" : "text-slate-400"}`}>{labels.destination}</label>
+                    <input value={destination} onChange={e => {setDestination(e.target.value.toUpperCase()); setErrors({...errors, destination: false})}} className={inputClass(errors.destination)} placeholder="KIX" />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.date}</label><input type="date" value={outboundDate} onChange={e => setOutboundDate(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-none outline-none" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.flightNo}</label><input value={outboundFlightNumber} onChange={e => setOutboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-none outline-none" placeholder="BR198" /></div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.outboundDate ? "text-red-500" : "text-slate-400"}`}>{labels.date}</label>
+                    <input type="date" value={outboundDate} onChange={e => {setOutboundDate(e.target.value); setErrors({...errors, outboundDate: false})}} className={inputClass(errors.outboundDate)} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.outboundFlightNumber ? "text-red-500" : "text-slate-400"}`}>{labels.flightNo}</label>
+                    <input value={outboundFlightNumber} onChange={e => {setOutboundFlightNumber(e.target.value.toUpperCase()); setErrors({...errors, outboundFlightNumber: false})}} className={inputClass(errors.outboundFlightNumber)} placeholder="BR198" />
+                  </div>
                 </div>
                 <button onClick={() => handleSearch('outbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black transition-all active:scale-95">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
              </div>
@@ -188,10 +245,16 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
            )}
            {step === 'inbound-search' && (
              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.inboundSearch}</h3><p className="text-slate-500 text-sm">{labels.inboundSub(destination, origin)}</p></div>
+                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.inboundSearch}</h3></div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.date}</label><input type="date" value={inboundDate} onChange={e => setInboundDate(e.target.value)} className="w-full px-4 py-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-none outline-none" /></div>
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.flightNo}</label><input value={inboundFlightNumber} onChange={e => setInboundFlightNumber(e.target.value.toUpperCase())} className="w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-none outline-none" placeholder="BR197" /></div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.inboundDate ? "text-red-500" : "text-slate-400"}`}>{labels.date}</label>
+                    <input type="date" value={inboundDate} onChange={e => {setInboundDate(e.target.value); setErrors({...errors, inboundDate: false})}} className={inputClass(errors.inboundDate)} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.inboundFlightNumber ? "text-red-500" : "text-slate-400"}`}>{labels.flightNo}</label>
+                    <input value={inboundFlightNumber} onChange={e => {setInboundFlightNumber(e.target.value.toUpperCase()); setErrors({...errors, inboundFlightNumber: false})}} className={inputClass(errors.inboundFlightNumber)} placeholder="BR197" />
+                  </div>
                 </div>
                 <button onClick={() => handleSearch('inbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
                 <button onClick={() => setStep('outbound-select')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
@@ -211,10 +274,10 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
            )}
            {step === 'review' && (
              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.review}</h3><p className="text-slate-500 text-sm">{labels.reviewSub}</p></div>
+                <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.review}</h3></div>
                 <div className="space-y-2">
-                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>去程：{outboundFlight?.flightNumber}</span><span>{outboundFlight?.departureAirport} → {outboundFlight?.arrivalAirport}</span></div>
-                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>回程：{inboundFlight?.flightNumber}</span><span>{inboundFlight?.departureAirport} → {inboundFlight?.arrivalAirport}</span></div>
+                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>{outboundFlight?.flightNumber}</span><span>{outboundFlight?.departureAirport} → {outboundFlight?.arrivalAirport}</span></div>
+                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>{inboundFlight?.flightNumber}</span><span>{inboundFlight?.departureAirport} → {inboundFlight?.arrivalAirport}</span></div>
                 </div>
                 <button onClick={handleCreateTrip} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black shadow-lg flex items-center justify-center gap-2">{labels.confirmBtn} <ArrowRight size={18}/></button>
                 <button onClick={() => setStep('inbound-select')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>

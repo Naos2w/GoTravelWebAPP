@@ -1,41 +1,33 @@
-import { createClient } from "@supabase/supabase-js";
-import {
-  Trip,
-  ChecklistItem,
-  Currency,
-  Expense,
-  ItineraryItem,
-  DayPlan,
-} from "../types";
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL || "https://placeholder-project.supabase.co";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "placeholder-key";
+import { createClient } from '@supabase/supabase-js';
+import { Trip, ChecklistItem, Currency, Expense, ItineraryItem, DayPlan, FlightInfo } from '../types';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://placeholder-project.supabase.co';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'placeholder-key';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const isValidUUID = (id: string) => {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(id);
 };
 
 const formatDateStr = (date: Date) => {
   const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 };
 
 const transformTripRow = (row: any): Trip => {
-  const start = new Date(row.start_date + "T00:00:00");
-  const end = new Date(row.end_date + "T00:00:00");
+  const start = new Date(row.start_date + 'T00:00:00');
+  const end = new Date(row.end_date + 'T00:00:00');
   const diffTime = Math.abs(end.getTime() - start.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
   const itinerary: DayPlan[] = [];
   const itineraryMap: Record<string, ItineraryItem[]> = {};
-
+  
   for (let i = 0; i < diffDays; i++) {
     const currentDate = new Date(start);
     currentDate.setDate(currentDate.getDate() + i);
@@ -53,7 +45,7 @@ const transformTripRow = (row: any): Trip => {
         note: it.note,
         type: it.type,
         transportType: it.transport_type,
-        date: it.date,
+        date: it.date
       });
     }
   });
@@ -61,7 +53,7 @@ const transformTripRow = (row: any): Trip => {
   Object.entries(itineraryMap).forEach(([date, items]) => {
     itinerary.push({
       date,
-      items: items.sort((a, b) => a.time.localeCompare(b.time)),
+      items: items.sort((a, b) => a.time.localeCompare(b.time))
     });
   });
 
@@ -74,42 +66,98 @@ const transformTripRow = (row: any): Trip => {
     destination: row.destination,
     startDate: row.start_date,
     endDate: row.end_date,
-    coverImage: row.cover_image,
-    flight: row.flight,
+    allowed_emails: row.allowed_emails || [],
+    flights: (row.flights || []).map((f: any) => ({
+      id: f.id,
+      user_id: f.user_id,
+      traveler_name: f.traveler_name,
+      outbound: f.outbound,
+      inbound: f.inbound,
+      price: f.price,
+      currency: f.currency,
+      cabinClass: f.cabin_class,
+      baggage: f.baggage,
+      budget: f.budget
+    })),
     checklist: (row.checklist_items || []).map((ci: any) => ({
       id: ci.id,
       text: ci.text,
       isCompleted: ci.is_completed,
-      category: ci.category,
+      category: ci.category
     })),
     expenses: (row.expenses || []).map((ex: any) => ({
       id: ex.id,
+      user_id: ex.user_id,
+      user_name: ex.user_name,
       amount: parseFloat(ex.amount),
       currency: ex.currency,
       category: ex.category,
       date: ex.date,
       note: ex.note,
       exchangeRate: parseFloat(ex.exchange_rate),
-      createdAt: ex.created_at,
+      createdAt: ex.created_at
     })),
-    itinerary,
+    itinerary
   };
 };
 
-export const getTrips = async (userId: string): Promise<Trip[]> => {
-  if (!userId || SUPABASE_URL.includes("placeholder")) return [];
+export const joinTrip = async (tripId: string, userId: string): Promise<void> => {
   try {
-    const { data: tripsData, error } = await supabase
-      .from("trips")
-      .select(`*, checklist_items (*), itinerary_items (*), expenses (*)`)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
+    // Use upsert to handle "already joined" cases gracefully without throwing unique constraint errors
+    await supabase.from('trip_collaborators').upsert({
+      trip_id: tripId,
+      user_id: userId,
+      role: 'editor' 
+    }, { onConflict: 'trip_id,user_id' });
+  } catch (e) {
+    console.error("Failed to join trip:", e);
+  }
+};
 
-    if (error) throw error;
-    return (tripsData || []).map(transformTripRow);
+export const getTrips = async (userId: string): Promise<Trip[]> => {
+  if (!userId || SUPABASE_URL.includes('placeholder')) return [];
+  try {
+    // 1. Get trips owned by user
+    const { data: ownedTrips, error: ownerError } = await supabase
+      .from('trips')
+      .select(`*, checklist_items (*), itinerary_items (*), expenses (*), flights (*)`)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (ownerError) throw ownerError;
+
+    // 2. Get trips where user is a collaborator
+    const { data: collabData, error: collabError } = await supabase
+      .from('trip_collaborators')
+      .select(`trip_id`)
+      .eq('user_id', userId);
+
+    if (collabError) throw collabError;
+
+    let sharedTrips: Trip[] = [];
+    if (collabData && collabData.length > 0) {
+       const tripIds = collabData.map((c: any) => c.trip_id);
+       const { data: sharedTripsData, error: sharedError } = await supabase
+         .from('trips')
+         .select(`*, checklist_items (*), itinerary_items (*), expenses (*), flights (*)`)
+         .in('id', tripIds)
+         .order('created_at', { ascending: false });
+       
+       if (sharedError) throw sharedError;
+       sharedTrips = (sharedTripsData || []).map(transformTripRow);
+    }
+
+    const owned = (ownedTrips || []).map(transformTripRow);
+    
+    // Merge and deduplicate just in case
+    const allTripsMap = new Map<string, Trip>();
+    owned.forEach(t => allTripsMap.set(t.id, t));
+    sharedTrips.forEach(t => allTripsMap.set(t.id, t));
+
+    return Array.from(allTripsMap.values());
   } catch (err) {
-    console.error("Failed to get trips:", err);
-    return [];
+    console.error('Failed to get trips:', err);
+    throw err;
   }
 };
 
@@ -117,10 +165,10 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
   if (!tripId || !isValidUUID(tripId)) return null;
   try {
     const { data, error } = await supabase
-      .from("trips")
-      .select(`*, checklist_items (*), itinerary_items (*), expenses (*)`)
-      .eq("id", tripId)
-      .maybeSingle(); // 使用 maybeSingle 避免 406 錯誤
+      .from('trips')
+      .select(`*, checklist_items (*), itinerary_items (*), expenses (*), flights (*)`)
+      .eq('id', tripId)
+      .maybeSingle();
 
     if (error || !data) return null;
     return transformTripRow(data);
@@ -129,77 +177,116 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
   }
 };
 
-/**
- * 僅供協作者儲存支出項目
- */
-export const saveExpenseOnly = async (
-  tripId: string,
-  expense: Expense
-): Promise<void> => {
+export const saveExpenseOnly = async (tripId: string, expense: Expense): Promise<void> => {
   const payload = {
     id: isValidUUID(expense.id) ? expense.id : crypto.randomUUID(),
     trip_id: tripId,
+    user_id: expense.user_id,
+    user_name: expense.user_name,
     amount: expense.amount,
     currency: expense.currency,
     category: expense.category,
     date: expense.date,
     note: expense.note,
-    exchange_rate: expense.exchangeRate,
+    exchange_rate: expense.exchangeRate
   };
+  
+  const { error } = await supabase.from('expenses').upsert(payload);
+  if (error) throw error;
+};
 
-  const { error } = await supabase.from("expenses").upsert(payload);
+export const saveFlightOnly = async (tripId: string, flight: FlightInfo): Promise<void> => {
+  const payload = {
+    id: isValidUUID(flight.id) ? flight.id : crypto.randomUUID(),
+    trip_id: tripId,
+    user_id: flight.user_id,
+    traveler_name: flight.traveler_name,
+    outbound: flight.outbound,
+    inbound: flight.inbound,
+    price: flight.price,
+    currency: flight.currency,
+    cabin_class: flight.cabinClass,
+    baggage: flight.baggage,
+    budget: flight.budget
+  };
+  
+  const { error } = await supabase.from('flights').upsert(payload);
   if (error) throw error;
 };
 
 export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
-  if (!userId || SUPABASE_URL.includes("placeholder"))
-    throw new Error("Database configuration missing.");
+  if (!userId || SUPABASE_URL.includes('placeholder')) throw new Error("Database configuration missing.");
 
-  const { error: tripError } = await supabase.from("trips").upsert({
-    id: trip.id,
-    user_id: trip.user_id || userId,
-    name: trip.name,
-    destination: trip.destination,
-    start_date: trip.startDate,
-    end_date: trip.endDate,
-    cover_image: trip.coverImage,
-    flight: trip.flight,
-  });
+  const { error: tripError } = await supabase
+    .from('trips')
+    .upsert({
+      id: trip.id,
+      user_id: trip.user_id || userId,
+      name: trip.name,
+      destination: trip.destination,
+      start_date: trip.startDate,
+      end_date: trip.endDate,
+      allowed_emails: trip.allowed_emails || []
+    });
 
   if (tripError) throw tripError;
 
-  await supabase.from("checklist_items").delete().eq("trip_id", trip.id);
+  // Handle Checklist
+  await supabase.from('checklist_items').delete().eq('trip_id', trip.id);
   if (trip.checklist && trip.checklist.length > 0) {
-    const checklistPayload = trip.checklist.map((ci) => ({
+    const checklistPayload = trip.checklist.map(ci => ({
       id: isValidUUID(ci.id) ? ci.id : crypto.randomUUID(),
       trip_id: trip.id,
       text: ci.text,
       is_completed: ci.isCompleted,
-      category: ci.category,
+      category: ci.category
     }));
-    await supabase.from("checklist_items").insert(checklistPayload);
+    await supabase.from('checklist_items').insert(checklistPayload);
   }
 
-  await supabase.from("expenses").delete().eq("trip_id", trip.id);
+  // Handle Expenses
+  await supabase.from('expenses').delete().eq('trip_id', trip.id);
   if (trip.expenses && trip.expenses.length > 0) {
-    const expensesPayload = trip.expenses.map((ex) => ({
+    const expensesPayload = trip.expenses.map(ex => ({
       id: isValidUUID(ex.id) ? ex.id : crypto.randomUUID(),
       trip_id: trip.id,
+      user_id: ex.user_id,
+      user_name: ex.user_name,
       amount: ex.amount,
       currency: ex.currency,
       category: ex.category,
       date: ex.date,
       note: ex.note,
-      exchange_rate: ex.exchangeRate,
+      exchange_rate: ex.exchangeRate
     }));
-    await supabase.from("expenses").insert(expensesPayload);
+    await supabase.from('expenses').insert(expensesPayload);
   }
 
-  await supabase.from("itinerary_items").delete().eq("trip_id", trip.id);
+  // Handle Flights
+  await supabase.from('flights').delete().eq('trip_id', trip.id);
+  if (trip.flights && trip.flights.length > 0) {
+    const flightsPayload = trip.flights.map(f => ({
+      id: isValidUUID(f.id) ? f.id : crypto.randomUUID(),
+      trip_id: trip.id,
+      user_id: f.user_id,
+      traveler_name: f.traveler_name,
+      outbound: f.outbound,
+      inbound: f.inbound,
+      price: f.price,
+      currency: f.currency,
+      cabin_class: f.cabinClass,
+      baggage: f.baggage,
+      budget: f.budget
+    }));
+    await supabase.from('flights').insert(flightsPayload);
+  }
+
+  // Handle Itinerary
+  await supabase.from('itinerary_items').delete().eq('trip_id', trip.id);
   const itineraryPayload: any[] = [];
   if (trip.itinerary) {
-    trip.itinerary.forEach((day) => {
-      day.items.forEach((item) => {
+    trip.itinerary.forEach(day => {
+      day.items.forEach(item => {
         itineraryPayload.push({
           id: isValidUUID(item.id) ? item.id : crypto.randomUUID(),
           trip_id: trip.id,
@@ -208,50 +295,45 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
           place_name: item.placeName,
           note: item.note,
           type: item.type,
-          transport_type: item.transportType,
+          transport_type: item.transportType
         });
       });
     });
   }
   if (itineraryPayload.length > 0) {
-    await supabase.from("itinerary_items").insert(itineraryPayload);
+    await supabase.from('itinerary_items').insert(itineraryPayload);
   }
 };
 
 export const deleteTrip = async (id: string, userId: string): Promise<void> => {
   const { error } = await supabase
-    .from("trips")
+    .from('trips')
     .delete()
-    .eq("id", id)
-    .eq("user_id", userId);
+    .eq('id', id)
+    .eq('user_id', userId);
   if (error) throw error;
 };
 
-export const createNewTrip = (data: {
-  destination: string;
-  startDate: string;
-  endDate: string;
-}): Trip => {
+export const createNewTrip = (data: { destination: string; startDate: string; endDate: string }): Trip => {
   return {
     id: crypto.randomUUID(),
     name: data.destination,
     destination: data.destination,
     startDate: data.startDate,
     endDate: data.endDate,
-    coverImage: `https://images.unsplash.com/photo-1436491865332-7a61a109c0f3?auto=format&fit=crop&q=80&w=800`,
     expenses: [],
     checklist: [],
     itinerary: [],
+    flights: [],
+    allowed_emails: []
   };
 };
 
 export const exportData = (trips: Trip[]) => {
-  const blob = new Blob([JSON.stringify(trips)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(trips)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const link = document.createElement('a');
   link.href = url;
-  link.download = `go-travel-backup-${
-    new Date().toISOString().split("T")[0]
-  }.json`;
+  link.download = `go-travel-backup-${new Date().toISOString().split('T')[0]}.json`;
   link.click();
 };
