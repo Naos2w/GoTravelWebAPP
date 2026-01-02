@@ -1,14 +1,13 @@
-
 export enum Currency {
-  TWD = 'TWD',
-  USD = 'USD',
-  JPY = 'JPY',
-  EUR = 'EUR',
-  KRW = 'KRW'
+  TWD = "TWD",
+  USD = "USD",
+  JPY = "JPY",
+  EUR = "EUR",
+  KRW = "KRW",
 }
 
-export type Theme = 'light' | 'dark';
-export type Language = 'zh' | 'en';
+export type Theme = "light" | "dark";
+export type Language = "zh" | "en";
 
 export interface User {
   id: string;
@@ -25,15 +24,21 @@ export interface BaggageInfo {
 export interface Expense {
   id: string;
   trip_id?: string;
-  user_id?: string;   // 支出建立者 ID
+  user_id?: string; // 支出建立者 ID
   user_name?: string; // 支出建立者名稱
   amount: number;
   currency: Currency;
-  category: 'Accommodation' | 'Transport' | 'Food' | 'Tickets' | 'Shopping' | 'Other';
+  category:
+    | "Accommodation"
+    | "Transport"
+    | "Food"
+    | "Tickets"
+    | "Shopping"
+    | "Other";
   date: string;
-  createdAt?: string; 
+  createdAt?: string;
   note: string;
-  exchangeRate: number; 
+  exchangeRate: number;
 }
 
 export interface FlightSegment {
@@ -49,12 +54,12 @@ export interface FlightSegment {
   terminal?: string;
   gate?: string;
   status?: string;
-  baggage?: BaggageInfo; 
+  baggage?: BaggageInfo;
 }
 
 export interface FlightInfo {
-  id: string;         // 機票 ID
-  user_id: string;    // 持有人 ID
+  id: string; // 機票 ID
+  user_id: string; // 持有人 ID
   traveler_name: string; // 旅客姓名 (可與 User.name 不同)
   outbound: FlightSegment;
   inbound?: FlightSegment;
@@ -69,23 +74,25 @@ export interface FlightInfo {
 export interface ChecklistItem {
   id: string;
   trip_id?: string;
+  user_id?: string; // 新增：用於區分是誰的清單項目
   text: string;
   isCompleted: boolean;
-  category: 'Documents' | 'Gear' | 'Toiletries' | 'Clothing' | 'Other';
+  category: "Documents" | "Gear" | "Toiletries" | "Clothing" | "Other";
 }
 
-export type TransportType = 'Public' | 'Car' | 'Bicycle' | 'Walking' | 'Flight';
+export type TransportType = "Public" | "Car" | "Bicycle" | "Walking" | "Flight";
 
 export interface ItineraryItem {
   id: string;
   trip_id?: string;
+  user_id?: string; // 新增：用於綁定行程建立者
   time: string;
   placeName: string;
-  placeId?: string; 
+  placeId?: string;
   note?: string;
-  type: 'Place' | 'Transport' | 'Food';
+  type: "Place" | "Transport" | "Food";
   transportType?: TransportType;
-  date: string; 
+  date: string;
 }
 
 export interface DayPlan {
@@ -93,18 +100,25 @@ export interface DayPlan {
   items: ItineraryItem[];
 }
 
+export interface Collaborator {
+  user_id: string;
+  email: string;
+  role: string;
+}
+
 export interface Trip {
   id: string;
   user_id?: string; // 旅程建立者 (Owner) UID
   name: string;
-  startDate: string; 
-  endDate: string; 
+  startDate: string;
+  endDate: string;
   destination: string;
   flights: FlightInfo[]; // 更改為數組以支援多人機票
   expenses: Expense[];
   checklist: ChecklistItem[];
   itinerary: DayPlan[];
   allowed_emails?: string[]; // New: List of emails allowed to view/edit
+  collaborators?: Collaborator[]; // New: Mapping of user_id to email
 }
 
 declare global {
