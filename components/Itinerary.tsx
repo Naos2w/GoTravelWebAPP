@@ -7,7 +7,7 @@ import {
   Loader2, Check, X, Lock, ChevronDown, Edit2
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
 
 interface Props {

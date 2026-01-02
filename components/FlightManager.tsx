@@ -29,8 +29,9 @@ import {
 } from "lucide-react";
 import { fetchTdxFlights } from "../services/tdxService";
 import { BoardingPass } from "./BoardingPass";
+import { SegmentedDateInput } from "./SegmentedDateInput";
 import { DateTimeUtils } from "../services/dateTimeUtils";
-import { useTranslation } from "../App";
+import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from "../services/storageService";
 
 interface FlightSelectorModalProps {
@@ -38,6 +39,8 @@ interface FlightSelectorModalProps {
   onConfirm: (outbound: FlightSegment, inbound: FlightSegment) => void;
   initialOrigin: string;
   initialDestination: string;
+  initialOutDate?: string;
+  initialInDate?: string;
 }
 
 type ModalStep =
@@ -52,14 +55,16 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
   onConfirm,
   initialOrigin,
   initialDestination,
+  initialOutDate = "",
+  initialInDate = "",
 }) => {
   const { t } = useTranslation();
   const [step, setStep] = useState<ModalStep>("outbound-search");
   const [loading, setLoading] = useState(false);
   const [origin, setOrigin] = useState(initialOrigin);
   const [destination, setDestination] = useState(initialDestination);
-  const [outDate, setOutDate] = useState("");
-  const [inDate, setInDate] = useState("");
+  const [outDate, setOutDate] = useState(initialOutDate);
+  const [inDate, setInDate] = useState(initialInDate);
   const [outFlightNo, setOutFlightNo] = useState("");
   const [inFlightNo, setInFlightNo] = useState("");
   const [options, setOptions] = useState<FlightSegment[]>([]);
@@ -140,15 +145,16 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     {t("date")}
                   </label>
-                  <input
-                    type="date"
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("date")}
+                  </label>
+                  <SegmentedDateInput
                     value={step === "outbound-search" ? outDate : inDate}
-                    onChange={(e) =>
+                    onChange={(val) =>
                       step === "outbound-search"
-                        ? setOutDate(e.target.value)
-                        : setInDate(e.target.value)
+                        ? setOutDate(val)
+                        : setInDate(val)
                     }
-                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold outline-none"
                   />
                 </div>
                 <div className="space-y-1">
@@ -475,6 +481,8 @@ export const FlightManager: React.FC<Props> = ({
     );
   }, [trip.flights, trip.user_id]);
 
+  // Removed auto-edit mode on zero price to prevent looping and allow user to view the list first
+  /* 
   React.useEffect(() => {
     if (currentUser && !editingFlightId && !tempFlightData) {
       const myZeroPriceFlight = trip.flights?.find(
@@ -493,6 +501,7 @@ export const FlightManager: React.FC<Props> = ({
       }
     }
   }, [currentUser, trip.flights, editingFlightId, ownerFlight]);
+  */
 
   const defaultBaggage = {
     carryOn: { count: 1, weight: "7kg" },
@@ -501,19 +510,33 @@ export const FlightManager: React.FC<Props> = ({
 
   const handleStartAdd = () => {
     if (!currentUser) return;
+
+    // Default values from owner flight if available
+    const initialOutbound = ownerFlight
+      ? {
+          airline: "",
+          flightNumber: "",
+          departureTime: "",
+          arrivalTime: "",
+          departureAirport: ownerFlight.outbound.departureAirport,
+          arrivalAirport: ownerFlight.outbound.arrivalAirport,
+          baggage: defaultBaggage,
+        }
+      : {
+          airline: "",
+          flightNumber: "",
+          departureTime: "",
+          arrivalTime: "",
+          departureAirport: "",
+          arrivalAirport: "",
+          baggage: defaultBaggage,
+        };
+
     setTempFlightData({
       id: crypto.randomUUID(),
       user_id: currentUser.id,
       traveler_name: currentUser.name,
-      outbound: {
-        airline: "",
-        flightNumber: "",
-        departureTime: "",
-        arrivalTime: "",
-        departureAirport: "",
-        arrivalAirport: "",
-        baggage: defaultBaggage,
-      },
+      outbound: initialOutbound,
       inbound: {
         airline: "",
         flightNumber: "",
@@ -824,7 +847,7 @@ export const FlightManager: React.FC<Props> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-6">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center h-[15px]">
                   {t("traveler")}
                 </label>
                 <input
@@ -835,14 +858,14 @@ export const FlightManager: React.FC<Props> = ({
                       traveler_name: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold text-sm outline-none"
+                  className="w-full h-[48px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border-2 border-transparent focus:border-primary/20 font-bold text-sm outline-none transition-all"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5 w-full">
                   <label
-                    className={`text-[10px] font-black uppercase tracking-widest flex justify-between ${
+                    className={`text-[10px] font-black uppercase tracking-widest flex justify-between items-center h-[15px] ${
                       priceError ? "text-red-500" : "text-slate-400"
                     }`}
                   >
@@ -852,7 +875,7 @@ export const FlightManager: React.FC<Props> = ({
                     )}
                   </label>
                   <div
-                    className={`flex w-full rounded-2xl bg-slate-50 dark:bg-slate-900 transition-all border-2 ${
+                    className={`flex w-full h-[48px] items-stretch rounded-2xl bg-slate-50 dark:bg-slate-900 transition-all border-2 ${
                       priceError
                         ? "border-red-500 bg-red-50/10 ring-4 ring-red-500/10"
                         : "border-transparent focus-within:border-primary/20"
@@ -866,7 +889,7 @@ export const FlightManager: React.FC<Props> = ({
                           currency: e.target.value as Currency,
                         })
                       }
-                      className="bg-transparent dark:text-white p-3 border-none font-bold text-xs outline-none w-20"
+                      className="bg-transparent dark:text-white px-3 border-none font-bold text-xs outline-none w-20"
                     >
                       {Object.values(Currency).map((c) => (
                         <option key={c} value={c}>
@@ -884,29 +907,40 @@ export const FlightManager: React.FC<Props> = ({
                         });
                         setPriceError(false);
                       }}
-                      className="flex-1 bg-transparent dark:text-white p-3 border-none font-black text-sm outline-none min-w-0"
+                      className="flex-1 bg-transparent dark:text-white px-3 border-none font-black text-sm outline-none min-w-0"
                       placeholder="0"
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="space-y-1.5 w-full">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center h-[15px]">
                     {t("cabin")}
                   </label>
-                  <select
-                    value={tempFlightData.cabinClass}
-                    onChange={(e) =>
-                      setTempFlightData({
-                        ...tempFlightData,
-                        cabinClass: e.target.value,
-                      })
-                    }
-                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold text-sm outline-none"
-                  >
-                    <option value="Economy">Economy</option>
-                    <option value="Business">Business</option>
-                    <option value="First">First Class</option>
-                  </select>
+                  <div className="relative flex items-center w-full h-[48px] bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-transparent focus-within:border-primary/20 transition-all">
+                    <select
+                      value={tempFlightData.cabinClass}
+                      onChange={(e) =>
+                        setTempFlightData({
+                          ...tempFlightData,
+                          cabinClass: e.target.value,
+                        })
+                      }
+                      className="w-full bg-transparent dark:text-white px-3 font-bold text-sm outline-none appearance-none"
+                    >
+                      <option value="Economy">Economy</option>
+                      <option value="Business">Business</option>
+                      <option value="First">First Class</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500">
+                      <svg
+                        className="fill-current h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1017,8 +1051,16 @@ export const FlightManager: React.FC<Props> = ({
         <FlightSelectorModal
           onClose={() => setIsSelectorOpen(false)}
           onConfirm={handleFlightSelect}
-          initialOrigin={trip.destination || "TPE"}
-          initialDestination={""}
+          initialOrigin={ownerFlight?.outbound.departureAirport || "TPE"}
+          initialDestination={ownerFlight?.outbound.arrivalAirport || ""}
+          initialOutDate={
+            ownerFlight ? ownerFlight.outbound.departureTime.split("T")[0] : ""
+          }
+          initialInDate={
+            ownerFlight?.inbound
+              ? ownerFlight.inbound.departureTime.split("T")[0]
+              : ""
+          }
         />
       )}
     </div>

@@ -6,13 +6,13 @@ import {
   Coffee, Home, Car, 
   Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon
 } from 'lucide-react';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { supabase } from '../services/storageService';
 
 interface Props {
   trip: Trip;
-  onUpdate: (trip: Trip) => void;
+  onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
 
@@ -147,10 +147,22 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
   };
 
   const deleteExpense = (id: string) => {
+    console.log("[Expenses] Attempting to delete:", id);
     const exp = trip.expenses.find(e => e.id === id);
-    if (exp?.user_id !== currentUser?.id && trip.user_id !== currentUser?.id) return;
-    if (!window.confirm(t('confirmDeleteItems'))) return;
-    onUpdate({ ...trip, expenses: trip.expenses.filter(e => e.id !== id) });
+    
+    if (!exp) {
+        console.error("[Expenses] Expense not found in trip prop:", id);
+    }
+
+    if (exp?.user_id !== currentUser?.id && trip.user_id !== currentUser?.id) {
+        console.warn("[Expenses] Permission denied for delete:", id);
+        return;
+    }
+
+    console.log("[Expenses] Optimistic delete triggered for:", id);
+    
+    // Optimistic update
+    onUpdate({ ...trip, expenses: trip.expenses.filter(e => e.id !== id) }, "DELETE_EXPENSE", id);
   };
 
   const flightsTotal = (trip.flights || []).reduce((sum, f) => sum + (f.price * (rates[f.currency] || 1)), 0);

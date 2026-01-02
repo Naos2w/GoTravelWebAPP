@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { Clock, ChevronDown } from 'lucide-react';
+import { SegmentedDateInput } from './SegmentedDateInput';
 
 interface Props {
   value: string; // ISO string YYYY-MM-DDTHH:mm:ss
@@ -46,12 +47,12 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
     <div className="space-y-1 relative" ref={pickerRef}>
       {label && <label className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase tracking-widest ml-1">{label}</label>}
       <div className="flex gap-2">
-        <input 
-          type="date"
-          value={datePart}
-          onChange={(e) => handleDateChange(e.target.value)}
-          className="flex-1 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 focus:outline-none shadow-sm transition-all"
-        />
+        <div className="flex-1">
+          <SegmentedDateInput
+            value={datePart}
+            onChange={handleDateChange}
+          />
+        </div>
         <div className="relative">
           <button
             type="button"

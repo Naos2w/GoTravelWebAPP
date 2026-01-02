@@ -5,7 +5,8 @@ import { fetchTdxFlights } from '../services/tdxService';
 import { FlightSegment, Trip, Currency, ItineraryItem, DayPlan, ChecklistItem } from '../types';
 import { createNewTrip } from '../services/storageService';
 import { DateTimeUtils } from '../services/dateTimeUtils';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
+import { SegmentedDateInput } from './SegmentedDateInput';
 
 interface Props {
   onClose: () => void;
@@ -222,7 +223,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.outboundDate ? "text-red-500" : "text-slate-400"}`}>{labels.date}</label>
-                    <input type="date" value={outboundDate} onChange={e => {setOutboundDate(e.target.value); setErrors({...errors, outboundDate: false})}} className={inputClass(errors.outboundDate)} />
+                    <SegmentedDateInput value={outboundDate} onChange={val => {setOutboundDate(val); setErrors({...errors, outboundDate: false})}} hasError={errors.outboundDate} />
                   </div>
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.outboundFlightNumber ? "text-red-500" : "text-slate-400"}`}>{labels.flightNo}</label>
@@ -250,7 +251,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.inboundDate ? "text-red-500" : "text-slate-400"}`}>{labels.date}</label>
-                    <input type="date" value={inboundDate} onChange={e => {setInboundDate(e.target.value); setErrors({...errors, inboundDate: false})}} className={inputClass(errors.inboundDate)} />
+                    <SegmentedDateInput value={inboundDate} onChange={val => {setInboundDate(val); setErrors({...errors, inboundDate: false})}} hasError={errors.inboundDate} />
                   </div>
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.inboundFlightNumber ? "text-red-500" : "text-slate-400"}`}>{labels.flightNo}</label>
