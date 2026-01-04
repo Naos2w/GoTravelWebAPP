@@ -16,7 +16,7 @@ interface Props {
   isGuest?: boolean;
 }
 
-const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: string, bgColor: string, darkBgColor: string, textColor: string }> = {
+export const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: string, bgColor: string, darkBgColor: string, textColor: string }> = {
   Flight: { icon: Plane, color: 'bg-sky-500', hexColor: '#0ea5e9', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900', textColor: 'text-sky-600' },
   Food: { icon: Coffee, color: 'bg-orange-500', hexColor: '#f97316', bgColor: 'bg-orange-50', darkBgColor: 'dark:bg-orange-900', textColor: 'text-orange-600' },
   Accommodation: { icon: Home, color: 'bg-indigo-500', hexColor: '#6366f1', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900', textColor: 'text-indigo-600' },
@@ -24,6 +24,19 @@ const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: string, 
   Tickets: { icon: Ticket, color: 'bg-emerald-500', hexColor: '#10b981', bgColor: 'bg-emerald-50', darkBgColor: 'dark:bg-emerald-900', textColor: 'text-emerald-600' },
   Shopping: { icon: ShoppingBag, color: 'bg-pink-500', hexColor: '#ec4899', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900', textColor: 'text-pink-600' },
   Other: { icon: Tag, color: 'bg-slate-400', hexColor: '#94a3b8', bgColor: 'bg-slate-100', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-500' }
+};
+
+export const getCategoryName = (cat: string, t: (key: string) => string) => {
+  switch(cat) {
+      case 'Flight': return t('catFlight');
+      case 'Food': return t('catFood');
+      case 'Accommodation': return t('catAccom');
+      case 'Transport': return t('catTransport');
+      case 'Tickets': return t('catTickets');
+      case 'Shopping': return t('catShopping');
+      case 'Other': return t('catOther');
+      default: return cat;
+  }
 };
 
 type SortType = 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
@@ -47,18 +60,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   // Helper to translate categories
-  const getCatName = (cat: string) => {
-      switch(cat) {
-          case 'Flight': return t('catFlight');
-          case 'Food': return t('catFood');
-          case 'Accommodation': return t('catAccom');
-          case 'Transport': return t('catTransport');
-          case 'Tickets': return t('catTickets');
-          case 'Shopping': return t('catShopping');
-          case 'Other': return t('catOther');
-          default: return cat;
-      }
-  };
+  const getCatName = (cat: string) => getCategoryName(cat, t);
 
   useEffect(() => {
     supabase.auth.getUser().then(({data}) => {
