@@ -17,13 +17,13 @@ interface Props {
 }
 
 const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: string, bgColor: string, darkBgColor: string, textColor: string }> = {
-  Flight: { icon: Plane, color: 'bg-sky-500', hexColor: '#0ea5e9', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900/10', textColor: 'text-sky-600' },
-  Food: { icon: Coffee, color: 'bg-orange-500', hexColor: '#f97316', bgColor: 'bg-orange-50', darkBgColor: 'dark:bg-orange-900/10', textColor: 'text-orange-600' },
-  Accommodation: { icon: Home, color: 'bg-indigo-500', hexColor: '#6366f1', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900/10', textColor: 'text-indigo-600' },
-  Transport: { icon: Car, color: 'bg-slate-500', hexColor: '#64748b', bgColor: 'bg-slate-50', darkBgColor: 'dark:bg-slate-900/10', textColor: 'text-slate-600' },
-  Tickets: { icon: Ticket, color: 'bg-emerald-500', hexColor: '#10b981', bgColor: 'bg-emerald-50', darkBgColor: 'dark:bg-emerald-900/10', textColor: 'text-emerald-600' },
-  Shopping: { icon: ShoppingBag, color: 'bg-pink-500', hexColor: '#ec4899', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900/10', textColor: 'text-pink-600' },
-  Other: { icon: Tag, color: 'bg-slate-400', hexColor: '#94a3b8', bgColor: 'bg-slate-100', darkBgColor: 'dark:bg-slate-800/50', textColor: 'text-slate-500' }
+  Flight: { icon: Plane, color: 'bg-sky-500', hexColor: '#0ea5e9', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900', textColor: 'text-sky-600' },
+  Food: { icon: Coffee, color: 'bg-orange-500', hexColor: '#f97316', bgColor: 'bg-orange-50', darkBgColor: 'dark:bg-orange-900', textColor: 'text-orange-600' },
+  Accommodation: { icon: Home, color: 'bg-indigo-500', hexColor: '#6366f1', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900', textColor: 'text-indigo-600' },
+  Transport: { icon: Car, color: 'bg-slate-500', hexColor: '#64748b', bgColor: 'bg-slate-50', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-600' },
+  Tickets: { icon: Ticket, color: 'bg-emerald-500', hexColor: '#10b981', bgColor: 'bg-emerald-50', darkBgColor: 'dark:bg-emerald-900', textColor: 'text-emerald-600' },
+  Shopping: { icon: ShoppingBag, color: 'bg-pink-500', hexColor: '#ec4899', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900', textColor: 'text-pink-600' },
+  Other: { icon: Tag, color: 'bg-slate-400', hexColor: '#94a3b8', bgColor: 'bg-slate-100', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-500' }
 };
 
 type SortType = 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
@@ -335,7 +335,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
              return (
                <div key={item.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/50 rounded-[28px] border border-slate-100 dark:border-slate-700 transition-all gap-4 sm:gap-0">
                   <div className="flex items-center gap-4 min-w-0 w-full sm:flex-1">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${config.bgColor} ${config.textColor} flex items-center justify-center shrink-0`}>
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shrink-0`}>
                       <Icon size={18} className="sm:w-5 sm:h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
