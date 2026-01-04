@@ -798,21 +798,26 @@ export const FlightManager: React.FC<Props> = ({
             {canSync && (
               <button
                 onClick={handleSyncWithOwner}
-                className="px-6 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2 bg-white dark:bg-slate-800 text-primary border border-primary/20 hover:bg-primary/5 transition-all shadow-lg"
+                className="p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 bg-white dark:bg-slate-800 text-primary border border-primary/20 hover:bg-primary/5 transition-all shadow-lg"
+                title={t("syncWithOwner")}
               >
-                <RefreshCw size={16} /> {t("syncWithOwner")}
+                <RefreshCw size={18} />{" "}
+                <span className="hidden sm:inline">{t("syncWithOwner")}</span>
               </button>
             )}
             <button
               onClick={handleStartAdd}
-              className={`px-6 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${
+              className={`p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${
                 hasMyFlight
                   ? "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200"
                   : "bg-primary text-white hover:opacity-90 shadow-primary/20"
               }`}
+              title={hasMyFlight ? t("addSegment") : t("addMyFlight")}
             >
               <Plus size={18} />{" "}
-              {hasMyFlight ? t("addSegment") : t("addMyFlight")}
+              <span className="hidden sm:inline">
+                {hasMyFlight ? t("addSegment") : t("addMyFlight")}
+              </span>
             </button>
           </div>
         )}
@@ -1008,36 +1013,42 @@ export const FlightManager: React.FC<Props> = ({
       ) : (
         <div className="space-y-8">
           {trip.flights && trip.flights.length > 0 ? (
-            trip.flights.map((flight) => (
-              <div key={flight.id} className="relative group">
-                <div className="absolute -top-3 left-8 z-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-slate-200 dark:shadow-none">
-                  <UserIcon size={12} /> {flight.traveler_name}{" "}
-                  {flight.user_id === currentUser?.id ? "(Me)" : ""}
-                </div>
-                <div className="space-y-4">
-                  <BoardingPass
-                    segment={flight.outbound}
-                    passengerName={flight.traveler_name}
-                    cabinClass={flight.cabinClass}
-                  />
-                  {flight.inbound?.flightNumber && (
+            trip.flights
+              .sort((a, b) => {
+                if (a.user_id === currentUser?.id) return -1;
+                if (b.user_id === currentUser?.id) return 1;
+                return 0;
+              })
+              .map((flight) => (
+                <div key={flight.id} className="relative group">
+                  <div className="absolute -top-3 left-8 z-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-slate-200 dark:shadow-none">
+                    <UserIcon size={12} /> {flight.traveler_name}{" "}
+                    {flight.user_id === currentUser?.id ? "(Me)" : ""}
+                  </div>
+                  <div className="space-y-4">
                     <BoardingPass
-                      segment={flight.inbound}
+                      segment={flight.outbound}
                       passengerName={flight.traveler_name}
                       cabinClass={flight.cabinClass}
                     />
+                    {flight.inbound?.flightNumber && (
+                      <BoardingPass
+                        segment={flight.inbound}
+                        passengerName={flight.traveler_name}
+                        cabinClass={flight.cabinClass}
+                      />
+                    )}
+                  </div>
+                  {flight.user_id === currentUser?.id && (
+                    <button
+                      onClick={() => startEdit(flight)}
+                      className="absolute top-4 right-4 p-3 bg-white/80 dark:bg-slate-700/80 backdrop-blur-md rounded-xl text-slate-500 hover:text-primary transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                    >
+                      <Edit2 size={18} />
+                    </button>
                   )}
                 </div>
-                {flight.user_id === currentUser?.id && (
-                  <button
-                    onClick={() => startEdit(flight)}
-                    className="absolute top-4 right-4 p-3 bg-white/80 dark:bg-slate-700/80 backdrop-blur-md rounded-xl text-slate-500 hover:text-primary transition-all shadow-sm opacity-0 group-hover:opacity-100"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                )}
-              </div>
-            ))
+              ))
           ) : (
             <div className="py-24 text-center text-slate-300 font-black uppercase text-xs tracking-[0.3em] flex flex-col items-center gap-6">
               <Plane size={48} className="opacity-20" />
