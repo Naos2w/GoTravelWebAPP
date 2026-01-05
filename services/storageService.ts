@@ -461,6 +461,15 @@ export const deleteExpense = async (id: string, tripId: string): Promise<void> =
   if (error) throw error;
 };
 
+export const deleteChecklistItem = async (id: string, tripId: string): Promise<void> => {
+  const { error } = await supabase
+    .from("checklist_items")
+    .delete()
+    .eq("id", id)
+    .eq("trip_id", tripId);
+  if (error) throw error;
+};
+
 export const deleteTrip = async (id: string, userId: string): Promise<void> => {
   const { error } = await supabase
     .from("trips")
