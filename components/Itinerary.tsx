@@ -115,6 +115,70 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     }
   }, [trip, selectedDayIndex]);
 
+  // "Smart Grouping": Reorder items to keep Flight sequences (Dep -> Trans -> Arr) visually contiguous.
+  // This prevents other users' interleaved items from breaking the visual flow of a flight.
+  const displayItems = React.useMemo(() => {
+     const items = [...(currentDay?.items || [])];
+     
+     // We will build a new sorted list
+     const ordered: ItineraryItem[] = [];
+     const processedIds = new Set<string>();
+
+     for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (processedIds.has(item.id)) continue;
+
+        ordered.push(item);
+        processedIds.add(item.id);
+
+        // Check if this is the start of a flight sequence (Place + Flight Type)
+        // Usually: Airport (Place) -> Flight (Transport) -> Airport (Place)
+        if (item.type === 'Place' && item.transportType === 'Flight') {
+            const userId = item.user_id;
+
+            // Look ahead for the *parts* of this flight
+            // We expect a Transport part and an Arrival part
+            // We scan the rest of the list to find the NEXT Flight Transport and NEXT Flight Place for THIS user
+            // CRITICAL: We MUST match user_id to ensure we don't grab someone else's flight parts if they overlap!
+            
+            // 1. Find Transport
+            let transportIdx = -1;
+            for (let j = i + 1; j < items.length; j++) {
+                const cand = items[j];
+                if (!processedIds.has(cand.id) && cand.user_id === userId && cand.type === 'Transport' && cand.transportType === 'Flight') {
+                    transportIdx = j;
+                    break;
+                }
+            }
+
+            if (transportIdx !== -1) {
+                const transItem = items[transportIdx];
+                ordered.push(transItem);
+                processedIds.add(transItem.id);
+
+                // 2. Find Arrival (Place)
+                // Should be after the transport we just found (chronologically, although list is time-sorted already)
+                let arrivalIdx = -1;
+                for (let k = transportIdx + 1; k < items.length; k++) {
+                    const cand = items[k];
+                    if (!processedIds.has(cand.id) && cand.user_id === userId && cand.type === 'Place' && cand.transportType === 'Flight') {
+                        arrivalIdx = k;
+                        break;
+                    }
+                }
+
+                if (arrivalIdx !== -1) {
+                    const arrItem = items[arrivalIdx];
+                    ordered.push(arrItem);
+                    processedIds.add(arrItem.id);
+                }
+            }
+        }
+     }
+     
+     return ordered;
+  }, [currentDay?.items]);
+
   // Recalculates transport times/durations based on neighbor items
   const recalculateTransport = (prev: ItineraryItem, transport: ItineraryItem, next: ItineraryItem): ItineraryItem => {
      if (transport.transportType === 'Flight') return transport; // Flights are static
@@ -169,10 +233,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     if (isGuest || !currentUser) return;
     setIsAddingNew(true);
     let defaultTime = '09:00';
-    if (currentDay.items.length > 0) {
-      const lastItem = currentDay.items[currentDay.items.length - 1];
+    if (displayItems.length > 0) {
+      const lastItem = displayItems[displayItems.length - 1];
       // Try to find the last non-transport item
-      const anchors = currentDay.items.filter(i => i.type !== 'Transport');
+      const anchors = displayItems.filter(i => i.type !== 'Transport');
       if (anchors.length > 0) {
           const lastAnchor = anchors[anchors.length - 1];
           const [h, m] = lastAnchor.time.split(':').map(Number);
@@ -206,7 +270,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   };
 
   const saveTransportNote = (id: string) => {
-    const newItems = currentDay.items.map(it => it.id === id ? { ...it, note: tempTransportNote } : it);
+    const newItems = displayItems.map(it => it.id === id ? { ...it, note: tempTransportNote } : it);
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...currentDay, items: newItems };
     onUpdate({ ...trip, itinerary: newDays });
@@ -219,7 +283,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
        return;
     }
     
-    let newItems = [...currentDay.items];
+    let newItems = [...displayItems];
     const index = newItems.findIndex(i => i.id === editingItem.id);
     
     if (index > -1) {
@@ -254,8 +318,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const handleDeleteItem = (itemId: string) => {
     if (isGuest) return;
-    const index = currentDay.items.findIndex(i => i.id === itemId);
-    let newItems = [...currentDay.items];
+    const index = displayItems.findIndex(i => i.id === itemId);
+    let newItems = [...displayItems];
     
     if (index > -1) {
       const target = newItems[index];
@@ -276,7 +340,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const handleChangeTransportType = (transportId: string, type: TransportType) => {
     if (isGuest) return;
-    const newItems = currentDay.items.map(it => 
+    const newItems = displayItems.map(it => 
       it.id === transportId ? { ...it, transportType: type } : it
     );
     const newDays = [...days];
@@ -286,7 +350,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const handleInsertTransport = (index: number, type: TransportType) => {
     if (isGuest || !currentUser) return;
-    const currentItems = [...currentDay.items];
+    const currentItems = [...displayItems];
     const prev = currentItems[index];
     const next = currentItems[index + 1];
     if (!prev || !next) return;
@@ -353,7 +417,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
-          {currentDay?.items.map((item, idx) => {
+          {displayItems.map((item, idx) => {
             const isTransport = item.type === 'Transport';
             const isFlight = item.transportType === 'Flight'; // Used for locking interactions
             const transportOpt = TRANSPORT_OPTIONS.find(o => o.type === item.transportType);
