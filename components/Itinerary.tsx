@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
-import { supabase } from '../services/storageService';
+import { supabase, deleteItineraryItem } from '../services/storageService';
 
 interface Props {
   trip: Trip;
@@ -316,7 +316,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     setEditingItem(null);
   };
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
     if (isGuest) return;
     const index = displayItems.findIndex(i => i.id === itemId);
     let newItems = [...displayItems];
@@ -325,10 +325,20 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
       const target = newItems[index];
       if (target.transportType === 'Flight') return;
 
+      const idsToDelete = [itemId];
+
       if (target.type !== 'Transport' && newItems[index+1]?.type === 'Transport' && newItems[index+1]?.transportType !== 'Flight') {
+        idsToDelete.push(newItems[index+1].id);
         newItems.splice(index, 2); // Delete Place + Following Transport
       } else {
         newItems.splice(index, 1);
+      }
+
+      // Sync with DB
+      try {
+        await Promise.all(idsToDelete.map(id => deleteItineraryItem(id, trip.id)));
+      } catch (e) {
+        console.error("Failed to delete items", e);
       }
     }
     
@@ -425,7 +435,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
             
             // Revised Condition: Allow inserting transport if next item is NOT transport. 
             // Removed check for current/next item being Flight type to allow transport after Airport.
-            const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest;
+            // Also explicitly disable inserting transport after a Flight transport item itself
+            const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
             
             const isHighlighted = highlightedId === item.id;
 
