@@ -50,13 +50,13 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
           type="date"
           value={datePart}
           onChange={(e) => handleDateChange(e.target.value)}
-          className="flex-1 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 rounded-2xl border border-transparent dark:border-slate-800 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 focus:bg-white dark:focus:bg-slate-800 focus:outline-none shadow-sm transition-all"
+          className="flex-1 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-slate-700 text-sm font-bold text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 focus:outline-none shadow-sm transition-all"
         />
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowPicker(!showPicker)}
-            className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 rounded-2xl border border-transparent dark:border-slate-800 text-sm font-mono font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 shadow-sm transition-all min-w-[110px] justify-between"
+            className="flex items-center gap-3 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-slate-700 text-sm font-mono font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 shadow-sm transition-all min-w-[110px] justify-between"
           >
             <Clock size={14} className="text-slate-400" />
             {timePart}
