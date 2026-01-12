@@ -47,9 +47,9 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ title, isOutbou
         </div>
       </div>
       
-      {/* 優化過的 Grid：增加時間欄位的空間比例 */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="space-y-1 md:col-span-6">
+      {/* 使用更靈活的響應式 Grid 避免重疊 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-x-4 gap-y-6 lg:gap-4">
+        <div className="space-y-1 md:col-span-2 lg:col-span-6">
           <label className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{labels.flightNo}</label>
           <div className="flex gap-2">
             <input value={data.flightNumber} onChange={e => onChange('flightNumber', e.target.value.toUpperCase())} placeholder="BR198" className="flex-1 bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold uppercase focus:ring-2 focus:ring-primary/20 outline-none shadow-sm" />
@@ -58,19 +58,23 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ title, isOutbou
             </button>
           </div>
         </div>
-        <div className="space-y-1 md:col-span-3">
+        <div className="space-y-1 md:col-span-1 lg:col-span-3">
           <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.depAirport}</label>
           <input value={data.departureAirport} onChange={e => onChange('departureAirport', e.target.value.toUpperCase())} placeholder="TPE" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold font-mono outline-none shadow-sm" />
         </div>
-        <div className="space-y-1 md:col-span-3">
+        <div className="space-y-1 md:col-span-1 lg:col-span-3">
           <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.arrAirport}</label>
           <input value={data.arrivalAirport} onChange={e => onChange('arrivalAirport', e.target.value.toUpperCase())} placeholder="NRT" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold font-mono outline-none shadow-sm" />
         </div>
         
-        {/* 時間與航廈 */}
-        <div className="md:col-span-5"><CustomDateTimeInput label={labels.depTime} value={data.departureTime} onChange={(val) => onChange('departureTime', val)} /></div>
-        <div className="md:col-span-5"><CustomDateTimeInput label={labels.arrTime} value={data.arrivalTime} onChange={(val) => onChange('arrivalTime', val)} /></div>
-        <div className="space-y-1 md:col-span-2">
+        {/* 時間組件在 md 寬度時垂直堆疊或並列 */}
+        <div className="md:col-span-2 lg:col-span-5">
+          <CustomDateTimeInput label={labels.depTime} value={data.departureTime} onChange={(val) => onChange('departureTime', val)} />
+        </div>
+        <div className="md:col-span-2 lg:col-span-5">
+          <CustomDateTimeInput label={labels.arrTime} value={data.arrivalTime} onChange={(val) => onChange('arrivalTime', val)} />
+        </div>
+        <div className="space-y-1 md:col-span-2 lg:col-span-2">
           <label className="text-[10px] text-slate-500 font-bold uppercase">{labels.terminal}</label>
           <input value={data.terminal || ''} onChange={e => onChange('terminal', e.target.value)} placeholder="2" className="w-full bg-white dark:bg-slate-800 dark:text-white px-3 py-2.5 rounded-xl border border-gray-200 dark:border-slate-700 text-sm font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/10" />
         </div>
@@ -190,11 +194,11 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
         </button>
       </div>
       {isEditing ? (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-8">
+        // 編輯模式：增加底部 padding (pb-24) 確保金額不會被底部導覽遮住
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-slate-700 space-y-8 pb-24 lg:pb-8">
            <FlightSegmentInput lang={language} title={labels.outbound} isOutbound={true} data={flightData.outbound} date={trip.startDate} loading={loadingField === 'outbound'} onSearch={() => handleTdxSearch('outbound')} onChange={(f, v) => setFlightData(p => ({ ...p, outbound: { ...p.outbound, [f]: v } }))} />
            <FlightSegmentInput lang={language} title={labels.inbound} isOutbound={false} data={flightData.inbound!} date={trip.endDate} loading={loadingField === 'inbound'} onSearch={() => handleTdxSearch('inbound')} onChange={(f, v) => setFlightData(p => ({ ...p, inbound: { ...p.inbound!, [f]: v } }))} />
            
-           {/* 機票費用設定：加入動態邊框提醒樣式 */}
            <div className={`transition-all duration-500 p-6 rounded-2xl border ${
              isPricePending 
                ? 'bg-red-50/20 dark:bg-red-900/10 border-red-400/60 dark:border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.05)] ring-1 ring-red-400/10' 

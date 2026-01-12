@@ -31,12 +31,14 @@ export const DateTimeUtils = {
 
   /**
    * Formats any date/string to friendly display (Local Time)
+   * Supports locale based on current language
    */
-  formatDateFriendly: (date: Date | string | undefined | null): string => {
+  formatDateFriendly: (date: Date | string | undefined | null, lang: 'zh' | 'en' = 'zh'): string => {
     if (!date) return "";
     const d = new Date(date);
     if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', year: 'numeric' });
+    const locale = lang === 'zh' ? 'zh-TW' : 'en-US';
+    return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
   },
 
   /**
