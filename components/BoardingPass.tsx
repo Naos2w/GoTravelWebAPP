@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { FlightSegment } from '../types';
 import { Plane, QrCode, Briefcase, ShoppingBag, MapPin } from 'lucide-react';
@@ -14,22 +13,8 @@ interface Props {
 const getAirlineLogo = (id: string | undefined) => id ? `https://pics.avs.io/200/200/${id}.png` : null;
 
 export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVELER", cabinClass = "Economy" }) => {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const logoUrl = getAirlineLogo(segment.airlineID);
-
-  const labels = {
-    airline: language === 'zh' ? '航空公司' : 'Airline',
-    cabin: language === 'zh' ? '艙等' : 'Cabin',
-    Economy: language === 'zh' ? '經濟艙' : 'Economy',
-    Business: language === 'zh' ? '商務艙' : 'Business',
-    First: language === 'zh' ? '頭等艙' : 'First Class',
-    passenger: language === 'zh' ? '旅客姓名' : 'Passenger Name',
-    terminal: language === 'zh' ? '航廈' : 'Terminal',
-    flight: language === 'zh' ? '航班' : 'Flight',
-    dep: language === 'zh' ? '起飛' : 'Dep',
-    arr: language === 'zh' ? '目的地' : 'Arr',
-    depTime: language === 'zh' ? '起飛時間' : 'Boarding Time'
-  };
 
   const airlineName = language === 'zh' 
     ? (segment.airlineNameZh || segment.airline) 
@@ -47,7 +32,7 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
     if (weightDisplay) {
       finalLabel = data.count > 1 ? `${weightDisplay} × ${data.count}` : weightDisplay;
     } else {
-      finalLabel = `${data.count} PC`;
+      finalLabel = `${data.count} ${t('count')}`;
     }
     
     if (!finalLabel) return null;
@@ -68,14 +53,14 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
                 <img src={logoUrl || ''} alt={segment.airline} className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/64x64?text=' + (segment.airlineID || 'AIR'); }} />
              </div>
              <div>
-               <div className="text-[9px] md:text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mb-0.5">{labels.airline}</div>
+               <div className="text-[9px] md:text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mb-0.5">{t('airline')}</div>
                <div className="font-black text-lg md:text-xl text-slate-900 dark:text-white leading-tight">{airlineName}</div>
              </div>
            </div>
            <div className="flex flex-col items-end gap-2">
              <div className="text-right">
-               <div className="text-[9px] md:text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mb-0.5">{labels.cabin}</div>
-               <div className="font-black text-sm md:text-base text-slate-800 dark:text-slate-200">{(labels as any)[cabinClass] || cabinClass}</div>
+               <div className="text-[9px] md:text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mb-0.5">{t('cabin')}</div>
+               <div className="font-black text-sm md:text-base text-slate-800 dark:text-slate-200">{cabinClass}</div>
              </div>
              {segment.baggage && (
                <div className="flex flex-wrap justify-end gap-1.5">
@@ -104,8 +89,8 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
            </div>
         </div>
         <div className="flex justify-between items-end bg-slate-50/50 dark:bg-slate-900/50 -mx-6 md:-mx-8 -mb-6 md:-mb-8 p-6 md:p-8 mt-6">
-           <div><div className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{labels.passenger}</div><div className="font-black text-base md:text-lg text-slate-900 dark:text-white">{passengerName}</div></div>
-           <div><div className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{labels.terminal}</div><div className="font-black text-base md:text-lg text-slate-900 dark:text-white flex items-center gap-1"><MapPin size={16} className="text-primary" />{segment.terminal ? `T${segment.terminal}` : 'TBA'}</div></div>
+           <div><div className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{t('traveler')}</div><div className="font-black text-base md:text-lg text-slate-900 dark:text-white">{passengerName}</div></div>
+           <div><div className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">{t('terminal')}</div><div className="font-black text-base md:text-lg text-slate-900 dark:text-white flex items-center gap-1"><MapPin size={16} className="text-primary" />{segment.terminal ? `T${segment.terminal}` : 'TBA'}</div></div>
            <div className="bg-white dark:bg-slate-700 p-2 md:p-3 rounded-2xl border border-slate-50 dark:border-slate-600 shadow-sm"><QrCode className="text-slate-900 dark:text-white" size={32} /></div>
         </div>
       </div>
@@ -113,15 +98,15 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
          <div className="space-y-8">
             <div className="flex items-center gap-2"><span className="font-black text-xs text-slate-400 dark:text-slate-500 tracking-widest truncate">{airlineName}</span></div>
             <div className="space-y-5">
-               <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{labels.flight}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.flightNumber}</div></div>
+               <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{t('flight')}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.flightNumber}</div></div>
                <div className="flex justify-between">
-                  <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{labels.dep}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.departureAirport}</div></div>
-                  <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{labels.arr}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.arrivalAirport}</div></div>
+                  <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{t('dep')}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.departureAirport}</div></div>
+                  <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{t('arr')}</div><div className="font-mono font-black text-base text-slate-900 dark:text-white">{segment.arrivalAirport}</div></div>
                </div>
-               <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{labels.terminal}</div><div className="font-black text-sm text-slate-900 dark:text-white">{segment.terminal ? `Terminal ${segment.terminal}` : 'TBA'}</div></div>
+               <div><div className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">{t('terminal')}</div><div className="font-black text-sm text-slate-900 dark:text-white">{segment.terminal ? `Terminal ${segment.terminal}` : 'TBA'}</div></div>
             </div>
          </div>
-         <div className="text-center pt-6 border-t border-slate-100 dark:border-slate-800"><div className="font-mono text-2xl font-black tracking-[0.2em] text-primary">{DateTimeUtils.formatTime24(segment.departureTime).replace(':','')}</div><div className="text-[9px] text-slate-400 font-black uppercase mt-1 tracking-[0.2em]">{labels.depTime}</div></div>
+         <div className="text-center pt-6 border-t border-slate-100 dark:border-slate-800"><div className="font-mono text-2xl font-black tracking-[0.2em] text-primary">{DateTimeUtils.formatTime24(segment.departureTime).replace(':','')}</div><div className="text-[9px] text-slate-400 font-black uppercase mt-1 tracking-[0.2em]">{t('boardingTime')}</div></div>
       </div>
     </div>
   );

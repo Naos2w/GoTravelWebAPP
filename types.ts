@@ -25,6 +25,8 @@ export interface BaggageInfo {
 export interface Expense {
   id: string;
   trip_id?: string;
+  user_id?: string;   // 支出建立者 ID
+  user_name?: string; // 支出建立者名稱
   amount: number;
   currency: Currency;
   category: 'Accommodation' | 'Transport' | 'Food' | 'Tickets' | 'Shopping' | 'Other';
@@ -51,6 +53,9 @@ export interface FlightSegment {
 }
 
 export interface FlightInfo {
+  id: string;         // 機票 ID
+  user_id: string;    // 持有人 ID
+  traveler_name: string; // 旅客姓名 (可與 User.name 不同)
   outbound: FlightSegment;
   inbound?: FlightSegment;
   price: number;
@@ -58,7 +63,7 @@ export interface FlightInfo {
   cabinClass: string;
   seat?: string;
   baggage: BaggageInfo;
-  budget?: number; // 儲存預算金額
+  budget?: number;
 }
 
 export interface ChecklistItem {
@@ -90,16 +95,16 @@ export interface DayPlan {
 
 export interface Trip {
   id: string;
-  user_id?: string; // 旅程建立者的 UID
+  user_id?: string; // 旅程建立者 (Owner) UID
   name: string;
   startDate: string; 
   endDate: string; 
   destination: string;
-  coverImage: string;
-  flight?: FlightInfo; 
+  flights: FlightInfo[]; // 更改為數組以支援多人機票
   expenses: Expense[];
   checklist: ChecklistItem[];
   itinerary: DayPlan[];
+  allowed_emails?: string[]; // New: List of emails allowed to view/edit
 }
 
 declare global {
