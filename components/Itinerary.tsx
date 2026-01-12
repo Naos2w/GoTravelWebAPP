@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Trip, DayPlan, ItineraryItem, TransportType } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Navigation, Loader2, Sparkles, Check, X
+  Navigation, Loader2, Check, X, Edit2
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { GoogleGenAI } from "@google/genai";
@@ -28,6 +28,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const [calculatingId, setCalculatingId] = useState<string | null>(null);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
   const [tempTransportType, setTempTransportType] = useState<TransportType>('Public');
+  const editRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!trip.startDate || !trip.endDate) return;
@@ -58,6 +59,16 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     setDays(trip.itinerary || []);
   }, [trip.itinerary]);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setInsertingAt(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const saveItineraryUpdate = (newItems: ItineraryItem[]) => {
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...newDays[selectedDayIndex], items: newItems };
@@ -85,10 +96,11 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     saveItineraryUpdate([...currentItems, newItem].sort((a,b) => a.time.localeCompare(b.time)));
   };
 
-  const confirmInsertTransport = async (index: number) => {
+  const confirmInsertTransport = async (index: number, isEditing: boolean = false) => {
     const currentItems = [...days[selectedDayIndex].items];
-    const prev = currentItems[index];
-    const next = currentItems[index + 1];
+    const targetIdx = isEditing ? index : index + 1;
+    const prev = currentItems[isEditing ? index - 1 : index];
+    const next = currentItems[isEditing ? index + 1 : index + 1];
 
     if (!prev || !next) return;
 
@@ -97,30 +109,33 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     const midMin = Math.floor(((h1 * 60 + m1) + (h2 * 60 + m2)) / 2);
     const midTime = `${Math.floor(midMin/60).toString().padStart(2, '0')}:${(midMin%60).toString().padStart(2, '0')}`;
 
-    const newTransportId = `trans-${Date.now()}`;
+    const newTransportId = isEditing ? currentItems[index].id : `trans-${Date.now()}`;
     const newTransport: ItineraryItem = {
       id: newTransportId,
       time: midTime,
       placeName: '移動中',
       type: 'Transport',
       transportType: tempTransportType,
-      note: '正在計算預估時間...'
+      note: '正在計算...'
     };
 
     const newItems = [...currentItems];
-    newItems.splice(index + 1, 0, newTransport);
+    if (isEditing) {
+      newItems[index] = newTransport;
+    } else {
+      newItems.splice(index + 1, 0, newTransport);
+    }
     
     setInsertingAt(null);
     setCalculatingId(newTransportId);
     
-    // UI 立即更新顯示載入狀態
     const tempDays = [...days];
     tempDays[selectedDayIndex] = { ...tempDays[selectedDayIndex], items: newItems };
     setDays(tempDays);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `請幫我查從「${prev.placeName}」到「${next.placeName}」使用「${tempTransportType}」交通工具的預估交通時間。請只回傳「預估時間：約 XX 分鐘」這樣的簡短文字。`;
+      const prompt = `請幫我查從「${prev.placeName}」到「${next.placeName}」使用「${tempTransportType}」交通工具的預估交通時間。請只回傳「約 XX 分鐘」或「約 XX 小時」這樣的簡短文字。`;
       
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -128,12 +143,12 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
         config: { tools: [{ googleSearch: {} }] }
       });
 
-      const resultText = response.text?.trim() || "無法取得預估時間";
+      const resultText = response.text?.trim() || "暫無資料";
       const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: resultText } : it);
       saveItineraryUpdate(finalItems);
     } catch (error) {
       console.error(error);
-      const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: '暫無時間資訊' } : it);
+      const finalItems = newItems.map(it => it.id === newTransportId ? { ...it, note: '暫無資料' } : it);
       saveItineraryUpdate(finalItems);
     } finally {
       setCalculatingId(null);
@@ -181,15 +196,15 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
 
       {/* Main Timeline */}
       <div className="flex-1 bg-white rounded-[32px] shadow-sm border border-gray-100 flex flex-col overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20">
-          <h2 className="text-xl font-bold text-slate-800">Day {selectedDayIndex + 1} 行程規劃</h2>
+        <div className="p-4 sm:p-6 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20">
+          <h2 className="text-xs sm:text-xl font-bold text-slate-800">Day {selectedDayIndex + 1} 行程規劃</h2>
           <div className="flex bg-gray-50 p-1 rounded-2xl border border-gray-100">
-            <button onClick={() => addActivity('Place')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-primary transition-all flex items-center gap-1.5 font-bold text-xs"><MapPin size={16}/> 新增景點</button>
-            <button onClick={() => addActivity('Food')} className="p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-orange-500 transition-all flex items-center gap-1.5 font-bold text-xs"><Coffee size={16}/> 新增餐廳</button>
+            <button onClick={() => addActivity('Place')} className="p-2 sm:p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-primary transition-all flex items-center gap-1 sm:gap-1.5 font-bold text-[10px] sm:text-xs"><MapPin size={16}/> <span className="hidden xs:inline">新增景點</span></button>
+            <button onClick={() => addActivity('Food')} className="p-2 sm:p-2.5 hover:bg-white hover:shadow-sm rounded-xl text-orange-500 transition-all flex items-center gap-1 sm:gap-1.5 font-bold text-[10px] sm:text-xs"><Coffee size={16}/> <span className="hidden xs:inline">新增餐廳</span></button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-0 relative">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-0 relative">
           {currentDay?.items.map((item, idx) => {
             const isFlightPoint = item.id.includes('flight');
             const isManualTransport = item.type === 'Transport' && !isFlightPoint;
@@ -197,17 +212,13 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
             const isPlace = item.type === 'Place';
             const nextItem = currentDay.items[idx + 1];
 
-            // 檢查是否為航班的起飛點與抵達點之間 (自動顯示固定飛機段)
             const isBetweenFlight = isFlightPoint && item.id.endsWith('-dep') && nextItem && nextItem.id.endsWith('-arr') && nextItem.id.replace('-arr', '') === item.id.replace('-dep', '');
-            
-            // 是否可以插入手動交通方式的間隙 (只有在兩個地點之間且中間還沒有交通時)
             const canInsertManualTransport = nextItem && !isManualTransport && nextItem.type !== 'Transport' && !isBetweenFlight;
+            const transportOpt = isManualTransport ? TRANSPORT_OPTIONS.find(o => o.type === item.transportType) : null;
 
             return (
               <React.Fragment key={item.id}>
-                <div className={`relative pl-12 ${isManualTransport ? 'pb-6' : 'pb-10'}`}>
-                  
-                  {/* Timeline Point */}
+                <div className={`relative pl-12 ${isManualTransport ? 'pb-4' : 'pb-10'}`}>
                   {!isManualTransport && (
                     <div className={`absolute -left-[11px] top-2 w-5 h-5 rounded-full border-2 bg-white z-10 flex items-center justify-center transition-all ${
                        isPlace ? 'border-primary' : isFood ? 'border-orange-500' : 'border-blue-500'
@@ -216,62 +227,71 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                     </div>
                   )}
 
-                  {/* Connecting Line */}
                   <div className={`absolute left-0 top-7 bottom-0 w-0.5 ${
                     isManualTransport || isBetweenFlight || (nextItem && nextItem.type === 'Transport') 
                     ? 'border-l-2 border-dashed border-slate-200' 
                     : 'bg-gray-100'
                   } last:hidden`} />
 
-                  {/* Card Content */}
                   {isManualTransport ? (
-                    <div className={`bg-slate-50/50 rounded-2xl p-4 border border-dashed border-slate-200 group relative transition-all ${calculatingId === item.id ? 'opacity-60 grayscale' : ''}`}>
-                      <div className="flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                             <Navigation size={14} className="text-slate-400" />
-                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">交通方式</span>
-                             {calculatingId === item.id && <Loader2 size={12} className="animate-spin text-indigo-500" />}
-                          </div>
-                          <button onClick={() => deleteItem(idx)} className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={14} /></button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                           <div className="flex bg-white/50 p-1 rounded-xl border border-slate-100">
-                             {TRANSPORT_OPTIONS.map(opt => (
-                               <button
-                                 key={opt.type}
-                                 onClick={() => updateItem(idx, 'transportType', opt.type)}
-                                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[11px] font-bold ${
-                                   item.transportType === opt.type ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'
-                                 }`}
-                               >
-                                 <opt.icon size={14} className={item.transportType === opt.type ? opt.color : 'text-slate-300'} />
-                                 {opt.label}
-                               </button>
-                             ))}
-                           </div>
-                        </div>
-                        <input 
-                          value={item.note || ''}
-                          onChange={(e) => updateItem(idx, 'note', e.target.value)}
-                          placeholder="備註資訊..."
-                          className="text-xs text-slate-500 font-medium bg-transparent border-none focus:ring-0 p-0 w-full placeholder:text-slate-300"
-                        />
-                      </div>
+                    /* --- 手動新增交通卡片 (高度 56px 固定) --- */
+                    <div className="relative flex items-center justify-center">
+                       <div className={`w-full bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 group transition-all h-[56px] flex items-center justify-center relative overflow-hidden ${calculatingId === item.id ? 'opacity-60 grayscale' : ''}`}>
+                          {insertingAt === idx ? (
+                            <div ref={editRef} className="absolute inset-0 bg-white border border-indigo-100 shadow-xl rounded-2xl p-1 flex flex-col gap-0.5 z-50 animate-in zoom-in-95 duration-200 h-full">
+                               <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg flex-1 items-center">
+                                  {TRANSPORT_OPTIONS.map(opt => (
+                                    <button
+                                      key={opt.type}
+                                      onClick={() => setTempTransportType(opt.type)}
+                                      className={`flex flex-col items-center justify-center h-full rounded-md transition-all flex-1 ${
+                                        tempTransportType === opt.type ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/10' : 'text-slate-400 hover:text-slate-600'
+                                      }`}
+                                    >
+                                      <opt.icon size={14} className={tempTransportType === opt.type ? opt.color : 'text-slate-300'} />
+                                    </button>
+                                  ))}
+                               </div>
+                               <div className="flex gap-1 h-5 shrink-0 px-0.5 mb-0.5">
+                                  <button onClick={() => setInsertingAt(null)} className="flex-1 text-slate-400 rounded-md text-[9px] font-bold hover:bg-slate-50 border border-gray-100 flex items-center justify-center gap-0.5">
+                                    <X size={10} /><span className="hidden sm:inline">取消</span>
+                                  </button>
+                                  <button onClick={() => confirmInsertTransport(idx, true)} className="flex-[1.5] bg-slate-900 text-white rounded-md text-[9px] font-bold shadow-sm flex items-center justify-center gap-0.5">
+                                    <Check size={10}/><span className="hidden sm:inline">確認</span>
+                                  </button>
+                               </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-3 w-full justify-center">
+                               <div className="flex items-center gap-2">
+                                 {transportOpt && <transportOpt.icon size={14} className={transportOpt.color} />}
+                                 <span className="text-xs font-mono font-bold text-slate-600">{item.note}</span>
+                                 {calculatingId === item.id && <Loader2 size={12} className="animate-spin text-indigo-500" />}
+                               </div>
+                               
+                               <div className="absolute right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={(e) => { e.stopPropagation(); setInsertingAt(idx); setTempTransportType(item.transportType || 'Public'); }} className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-white rounded-lg transition-all"><Edit2 size={12}/></button>
+                                  <button onClick={(e) => { e.stopPropagation(); deleteItem(idx); }} className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-white rounded-lg transition-all"><Trash2 size={12}/></button>
+                               </div>
+                            </div>
+                          )}
+                       </div>
                     </div>
                   ) : (
+                    /* --- 地點或機票卡片 --- */
                     <div className={`rounded-2xl p-4 group transition-all border ${
                       isFlightPoint ? 'bg-blue-50/50 border-blue-100 shadow-sm' : 'bg-white border-gray-100 hover:shadow-md'
                     }`}>
-                      <div className="flex items-start gap-4">
-                        <div className="flex flex-col items-center min-w-[70px] relative">
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="flex flex-col items-center min-w-[60px] sm:min-w-[70px] relative">
                           <button 
                             onClick={() => !isFlightPoint && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)}
-                            className={`font-mono text-base font-bold px-2 py-1 rounded-lg transition-all flex items-center gap-1.5 ${isFlightPoint ? 'text-blue-600 cursor-default' : 'text-slate-700 hover:bg-slate-50'}`}
+                            className={`font-mono text-sm sm:text-base font-bold px-1.5 sm:px-2 py-1 rounded-lg transition-all flex items-center gap-1 sm:gap-1.5 ${isFlightPoint ? 'text-blue-600 cursor-default' : 'text-slate-700 hover:bg-slate-50'}`}
                           >
                             {!isFlightPoint && <Clock size={12} className="opacity-30" />}
                             {item.time}
                           </button>
+                          
                           {showTimePickerId === item.id && (
                              <div className="absolute top-full left-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 p-3 flex gap-3 animate-in fade-in zoom-in-95">
                                 <div className="flex flex-col gap-1 max-h-40 overflow-y-auto no-scrollbar">
@@ -287,17 +307,25 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                              </div>
                           )}
                         </div>
-                        <div className="flex-1 space-y-1">
+
+                        <div className="flex-1 space-y-1 overflow-hidden">
                           <div className="flex items-center gap-2">
-                             {isFood && <Coffee size={14} className="text-orange-500" />}
-                             {isPlace && <MapPin size={14} className="text-primary" />}
-                             {isFlightPoint && <Plane size={14} className="text-blue-500" />}
+                             {isFood && <Coffee size={14} className="text-orange-500 shrink-0" />}
+                             {isPlace && <MapPin size={14} className="text-primary shrink-0" />}
+                             {isFlightPoint && <Plane size={14} className="text-blue-500 shrink-0" />}
+                             
                              {isFlightPoint ? (
-                               <div className="font-bold tracking-tight text-lg text-blue-900">{item.placeName}</div>
+                               <div className="font-bold tracking-tight text-base sm:text-lg text-blue-900 truncate">{item.placeName}</div>
                              ) : (
-                               <input value={item.placeName} onChange={(e) => updateItem(idx, 'placeName', e.target.value)} placeholder="名稱..." className={`font-bold tracking-tight text-lg bg-transparent border-none focus:ring-0 p-0 w-full ${isFood ? 'text-orange-900' : 'text-slate-800'}`} />
+                               <input 
+                                 value={item.placeName} 
+                                 onChange={(e) => updateItem(idx, 'placeName', e.target.value)} 
+                                 placeholder="名稱..." 
+                                 className={`font-bold tracking-tight text-base sm:text-lg bg-transparent border-none focus:ring-0 p-0 w-full ${isFood ? 'text-orange-900' : 'text-slate-800'}`} 
+                               />
                              )}
                           </div>
+                          
                           <input 
                             value={item.note || ''} 
                             onChange={(e) => !isFlightPoint && updateItem(idx, 'note', e.target.value)} 
@@ -306,10 +334,11 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                             className={`text-xs font-medium bg-transparent border-none focus:ring-0 p-0 w-full ${isFlightPoint ? 'text-blue-400/80 font-bold' : 'text-slate-400'}`} 
                           />
                         </div>
+
                         <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                           <button className={`p-2 bg-white rounded-xl shadow-sm border ${isFood ? 'text-orange-500 border-orange-100' : 'text-primary border-blue-100'}`} onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')}><Map size={16} /></button>
+                           <button className={`p-1.5 sm:p-2 bg-white rounded-xl shadow-sm border ${isFood ? 'text-orange-500 border-orange-100' : 'text-primary border-blue-100'}`} onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')}><Map size={16} /></button>
                            {!isFlightPoint && (
-                             <button onClick={() => deleteItem(idx)} className="p-2 bg-white text-slate-300 hover:text-red-500 rounded-xl shadow-sm border border-gray-50"><Trash2 size={16} /></button>
+                             <button onClick={() => deleteItem(idx)} className="p-1.5 sm:p-2 bg-white text-slate-300 hover:text-red-500 rounded-xl shadow-sm border border-gray-50"><Trash2 size={16} /></button>
                            )}
                         </div>
                       </div>
@@ -317,16 +346,14 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   )}
                 </div>
 
-                {/* 自動顯示的固定航班交通段 */}
+                {/* 自動航班段樣式 (高度 56px 固定) */}
                 {isBetweenFlight && (
-                  <div className="relative pl-12 pb-6">
+                  <div className="relative pl-12 pb-4">
                     <div className="absolute left-0 top-0 bottom-0 w-0.5 border-l-2 border-dashed border-blue-200" />
-                    <div className="bg-blue-50/30 rounded-2xl p-4 border border-dashed border-blue-100">
-                       <div className="flex items-center justify-between text-blue-500">
-                          <div className="flex items-center gap-2">
-                             <Plane size={14} />
-                             <span className="text-[10px] font-bold uppercase tracking-widest">飛行航程</span>
-                          </div>
+                    <div className="bg-blue-50/30 rounded-2xl p-3 border border-dashed border-blue-100 flex items-center justify-center h-[56px]">
+                       <div className="flex items-center gap-2 text-blue-500">
+                          <Plane size={14} />
+                          <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-widest">飛行航程</span>
                           <span className="text-xs font-mono font-bold">
                              {DateTimeUtils.getDuration(item.time, nextItem.time)}
                           </span>
@@ -335,49 +362,42 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   </div>
                 )}
 
-                {/* 手動點對點插入按鈕 */}
+                {/* 手動插入按鈕 */}
                 {canInsertManualTransport && (
                   <div className="relative flex items-center justify-center py-2 group/btn min-h-[40px]">
                     <div className="absolute left-0 w-0.5 bg-gray-100 h-full" />
                     
                     {insertingAt === idx ? (
-                      <div className="z-10 bg-white border border-indigo-100 shadow-2xl rounded-2xl p-4 flex flex-col gap-3 animate-in zoom-in-95 duration-200 min-w-[280px]">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">選擇交通工具</div>
-                        <div className="flex gap-1 bg-slate-50 p-1 rounded-xl">
+                      <div ref={editRef} className="z-10 bg-white border border-indigo-100 shadow-2xl rounded-2xl p-3 flex flex-col gap-2 animate-in zoom-in-95 duration-200 min-w-[220px] sm:min-w-[280px]">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1 text-center">選擇交通工具</div>
+                        <div className="flex gap-1 bg-slate-50 p-1 rounded-lg">
                           {TRANSPORT_OPTIONS.map(opt => (
                             <button
                               key={opt.type}
                               onClick={() => setTempTransportType(opt.type)}
-                              className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-all flex-1 ${
-                                tempTransportType === opt.type ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/50' : 'text-slate-400 hover:text-slate-600'
+                              className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-md transition-all flex-1 ${
+                                tempTransportType === opt.type ? 'bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/10' : 'text-slate-400 hover:text-slate-600'
                               }`}
                             >
                               <opt.icon size={16} className={tempTransportType === opt.type ? opt.color : 'text-slate-300'} />
-                              <span className="text-[9px] font-bold">{opt.label}</span>
                             </button>
                           ))}
                         </div>
                         <div className="flex gap-2">
-                           <button 
-                             onClick={() => setInsertingAt(null)}
-                             className="flex-1 py-2 text-slate-400 hover:bg-slate-50 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1"
-                           >
-                             <X size={14} /> 取消
+                           <button onClick={() => setInsertingAt(null)} className="flex-1 py-1.5 text-slate-400 hover:bg-slate-50 rounded-lg text-xs font-bold flex items-center justify-center gap-1 border border-transparent hover:border-gray-200">
+                             <X size={14} /><span className="hidden sm:inline">取消</span>
                            </button>
-                           <button 
-                             onClick={() => confirmInsertTransport(idx)}
-                             className="flex-[2] py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-md shadow-slate-200"
-                           >
-                             <Check size={14} /> 確認並計算時間
+                           <button onClick={() => confirmInsertTransport(idx)} className="flex-[2] py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 shadow-lg">
+                             <Check size={14} /><span className="hidden sm:inline">確認並計算</span>
                            </button>
                         </div>
                       </div>
                     ) : (
                       <button 
                         onClick={() => { setInsertingAt(idx); setTempTransportType('Public'); }} 
-                        className="z-10 bg-white border border-gray-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 px-4 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-1.5 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md"
+                        className="z-10 bg-white border border-gray-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[9px] sm:text-[10px] font-bold flex items-center gap-1.5 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md"
                       >
-                        <Plus size={12} /> 設定交通方式
+                        <Plus size={12} /> <span>設定交通方式</span>
                       </button>
                     )}
                   </div>
