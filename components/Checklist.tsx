@@ -268,7 +268,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                 key={cat}
                 className={`group space-y-4 p-5 sm:p-6 rounded-[32px] border transition-all duration-500 ${
                   !isComplete
-                    ? "border-red-300 dark:border-red-500 bg-red-50/20 dark:bg-red-500/[0.08] shadow-[0_0_25px_rgba(239,68,68,0.08)] dark:shadow-[0_0_45px_rgba(239,68,68,0.2)] ring-1 ring-red-500/10 dark:ring-red-500/30"
+                    ? "border-red-400 dark:border-red-500 bg-red-50/20 dark:bg-red-500/[0.12] shadow-[0_0_30px_rgba(239,68,68,0.12)] dark:shadow-[0_0_50px_rgba(239,68,68,0.25)] ring-1 ring-red-500/20 dark:ring-red-500/40"
                     : "border-slate-50 dark:border-slate-700 bg-white dark:bg-slate-800"
                 }`}
               >
@@ -292,7 +292,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                           className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
                             isComplete
                               ? "bg-green-100 text-green-600"
-                              : "bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-300"
+                              : "bg-red-100 text-red-600 dark:bg-red-500/30 dark:text-red-300"
                           }`}
                         >
                           {catProgress}%
