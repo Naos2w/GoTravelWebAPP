@@ -251,11 +251,6 @@ const App: React.FC = () => {
     }
   };
 
-  /**
-   * BUG FIX: 修復重複計算 Bug。
-   * 因為 FlightManager 會將機票費用同步至 trip.expenses 清單中，
-   * 所以總花費應直接加總 expenses 即可，不應再外加 trip.flight.price。
-   */
   const calculateTotalSpentTWD = (trip: Trip) => {
     return trip.expenses.reduce((acc, e) => acc + (e.amount * (e.exchangeRate || 1)), 0);
   };
@@ -280,16 +275,16 @@ const App: React.FC = () => {
 
   const GlobalNav = () => (
     <div className="flex items-center gap-2">
-      <button onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+      <button onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white transition-all duration-300">
         <Languages size={18} />
       </button>
-      <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
+      <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white transition-all duration-300">
         {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
       </button>
       {user ? (
         <div className="flex items-center gap-2 pl-2 ml-2 border-l border-slate-100 dark:border-slate-800">
            <img src={user.picture} className="w-8 h-8 rounded-full border border-slate-200" />
-           <button onClick={logout} className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+           <button onClick={logout} className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300">
              <LogOut size={18} />
            </button>
         </div>
@@ -308,7 +303,9 @@ const App: React.FC = () => {
             <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-30 h-16 sm:h-20 flex items-center">
               <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <button onClick={() => setView('list')} className="p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500"><ChevronLeft /></button>
+                  <button onClick={() => setView('list')} className="p-2.5 rounded-2xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
+                    <ChevronLeft />
+                  </button>
                   <div className="truncate">
                     <input value={currentTrip.name} onChange={(e) => updateCurrentTrip({ ...currentTrip, name: e.target.value })} className="text-sm sm:text-lg font-black bg-transparent w-full truncate dark:text-white outline-none" />
                     <div className="flex items-center gap-2">
@@ -337,7 +334,7 @@ const App: React.FC = () => {
                             ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' 
                             : (isLocked 
                                 ? 'text-red-400/30 dark:text-red-900/30 bg-red-50/10 dark:bg-red-900/5 cursor-not-allowed opacity-40 hover:bg-red-50/20' 
-                                : 'text-slate-500 dark:hover:text-slate-900')
+                                : 'text-slate-500 hover:bg-white/50 dark:hover:bg-white/5 dark:hover:text-white')
                         }`}
                       >
                         {isLocked ? <Lock size={14} className="text-red-500/50" /> : <tab.icon size={16} />} 
@@ -402,7 +399,7 @@ const App: React.FC = () => {
                         <button onClick={() => exportData(trips)} className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-3 rounded-2xl font-black text-xs transition-all hover:opacity-90">
                           <Download size={16} /> {t('export')}
                         </button>
-                        <button onClick={handleDeleteTrip} className="w-full flex items-center justify-center gap-2 border border-red-100 dark:border-red-900/30 text-red-500 py-3 rounded-2xl font-black text-xs transition-all hover:bg-red-50 dark:hover:bg-red-900/10">
+                        <button onClick={handleDeleteTrip} className="w-full flex items-center justify-center gap-2 border border-red-100 dark:border-red-900/30 text-red-500 py-3 rounded-2xl font-black text-xs transition-all hover:bg-red-50 dark:hover:bg-red-500/10">
                           <Trash2 size={16} /> {t('deleteTrip')}
                         </button>
                       </div>
@@ -429,7 +426,7 @@ const App: React.FC = () => {
                     className={`p-3 rounded-2xl transition-all duration-300 relative ${
                       activeTab === tab.id 
                         ? 'text-primary bg-primary/5 scale-110' 
-                        : (isLocked ? 'text-red-500/30 dark:text-red-900/30 scale-90 opacity-40' : 'text-slate-300')
+                        : (isLocked ? 'text-red-500/30 dark:text-red-900/30 scale-90 opacity-40' : 'text-slate-300 hover:text-slate-600')
                     }`}
                   >
                     {isLocked ? <Lock size={22} strokeWidth={2.5} className="text-red-500/30" /> : <tab.icon size={22} strokeWidth={2.5} />}
@@ -461,7 +458,7 @@ const App: React.FC = () => {
               ) : (
                 <div className="flex flex-col items-center gap-6">
                   <div id="google-login-hero"></div>
-                  {user && <button onClick={() => setView('list')} className="group bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-10 py-5 rounded-full text-lg font-black shadow-2xl">{t('startPlanning')} <ArrowRight size={22} className="inline ml-2 group-hover:translate-x-1 transition-transform" /></button>}
+                  {user && <button onClick={() => setView('list')} className="group bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-10 py-5 rounded-full text-lg font-black shadow-2xl hover:scale-105 transition-all">{t('startPlanning')} <ArrowRight size={22} className="inline ml-2 group-hover:translate-x-1 transition-transform" /></button>}
                 </div>
               )}
             </main>
@@ -492,14 +489,14 @@ const App: React.FC = () => {
                 <Plane className="mx-auto mb-8 text-blue-500 opacity-20" size={60} />
                 <h3 className="text-xl font-black mb-2">{t('noTrips')}</h3>
                 <p className="text-slate-500 mb-8">{t('noTripsSub')}</p>
-                <button onClick={() => setShowCreateForm(true)} className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-8 py-3.5 rounded-full font-black">{t('addFlight')}</button>
+                <button onClick={() => setShowCreateForm(true)} className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-8 py-3.5 rounded-full font-black hover:scale-105 transition-all">{t('addFlight')}</button>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {trips.map(trip => (
                   <div key={trip.id} onClick={() => { setCurrentTripId(trip.id); setView('detail'); }} className="group bg-white dark:bg-slate-800 rounded-[40px] shadow-ios overflow-hidden cursor-pointer transition-all transform hover:-translate-y-2 border border-transparent dark:border-slate-700">
                     <div className="h-52 relative overflow-hidden">
-                      <img src={trip.coverImage} className="w-full h-full object-cover group-hover:scale-110" />
+                      <img src={trip.coverImage} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 p-8 flex flex-col justify-end">
                         <h3 className="text-white text-xl font-black truncate">{trip.name}</h3>
                         <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{trip.startDate} - {trip.endDate}</p>

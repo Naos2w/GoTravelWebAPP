@@ -15,6 +15,16 @@ const isValidUUID = (id: string) => {
   return uuidRegex.test(id);
 };
 
+/**
+ * 格式化日期為 YYYY-MM-DD (本地時間)
+ */
+const formatDateStr = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const getTrips = async (userId: string): Promise<Trip[]> => {
   if (!userId) return [];
   try {
@@ -32,28 +42,49 @@ export const getTrips = async (userId: string): Promise<Trip[]> => {
     if (tripsError) throw tripsError;
 
     return (tripsData || []).map((row: any) => {
-      // 重組 Itinerary 結構 (ItineraryItem[] -> DayPlan[])
-      const items: ItineraryItem[] = (row.itinerary_items || []).map((it: any) => ({
-        id: it.id,
-        trip_id: it.trip_id,
-        time: it.time,
-        placeName: it.place_name,
-        note: it.note,
-        type: it.type,
-        transportType: it.transport_type,
-        date: it.date
-      }));
+      // 1. 根據開始與結束日期計算總天數
+      const start = new Date(row.start_date + 'T00:00:00');
+      const end = new Date(row.end_date + 'T00:00:00');
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
+      // 2. 預先產生所有日期的結構
+      const itinerary: DayPlan[] = [];
       const itineraryMap: Record<string, ItineraryItem[]> = {};
-      items.forEach(item => {
-        if (!itineraryMap[item.date]) itineraryMap[item.date] = [];
-        itineraryMap[item.date].push(item);
+      
+      for (let i = 0; i < diffDays; i++) {
+        const currentDate = new Date(start);
+        currentDate.setDate(currentDate.getDate() + i);
+        const dateKey = formatDateStr(currentDate);
+        itineraryMap[dateKey] = [];
+      }
+
+      // 3. 將資料庫讀出的項目填入對應日期
+      (row.itinerary_items || []).forEach((it: any) => {
+        if (itineraryMap[it.date]) {
+          itineraryMap[it.date].push({
+            id: it.id,
+            trip_id: it.trip_id,
+            time: it.time,
+            placeName: it.place_name,
+            note: it.note,
+            type: it.type,
+            transportType: it.transport_type,
+            date: it.date
+          });
+        }
       });
 
-      const itinerary: DayPlan[] = Object.entries(itineraryMap).map(([date, dayItems]) => ({
-        date,
-        items: dayItems.sort((a, b) => a.time.localeCompare(b.time))
-      }));
+      // 4. 重組為 DayPlan 陣列並排序時間
+      Object.entries(itineraryMap).forEach(([date, items]) => {
+        itinerary.push({
+          date,
+          items: items.sort((a, b) => a.time.localeCompare(b.time))
+        });
+      });
+
+      // 最後根據日期本身排序行程表
+      itinerary.sort((a, b) => a.date.localeCompare(b.date));
 
       return {
         id: row.id,
@@ -110,7 +141,6 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
   // 2. 同步 Checklist Items
   if (trip.checklist && trip.checklist.length > 0) {
     const checklistPayload = trip.checklist.map(ci => ({
-      // 如果 ID 不是有效的 UUID（例如前端產生的 manual-xxx），則不傳送 ID 讓資料庫自增
       ...(isValidUUID(ci.id) ? { id: ci.id } : {}),
       trip_id: trip.id,
       text: ci.text,

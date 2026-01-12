@@ -175,8 +175,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
 
     let currentExpenses = [...trip.expenses];
     /**
-     * UNIQUE IDENTIFICATION: 優化尋找既有機票紀錄的邏輯。
-     * 同時比對中英兩種預設名稱，確保無論當前語言為何，都能更新同一筆資料。
+     * BUG FIX: 修復機票重複產生 Bug。
+     * 同時比對中英兩種預設名稱，確保無論語系為何，都能正確定位同一筆支出紀錄並更新之。
      */
     const flightExpenseIndex = currentExpenses.findIndex(e => 
       e.category === 'Tickets' && 
@@ -190,7 +190,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       currency: flightData.currency,
       category: 'Tickets',
       date: trip.startDate,
-      // 使用當前語言標籤儲存
       note: language === 'zh' ? labels.flightExpenseNoteZh : labels.flightExpenseNoteEn,
       exchangeRate: rates[flightData.currency] || 1,
       createdAt: flightExpenseIndex > -1 ? currentExpenses[flightExpenseIndex].createdAt : new Date().toISOString()
@@ -254,7 +253,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
         <div className="space-y-6 animate-in fade-in duration-500">
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className={`p-8 rounded-[32px] border transition-all duration-300 shadow-ios ${isPriceInvalid ? 'bg-red-50/50 dark:bg-red-900/10 border-red-100 dark:border-red-900/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
-                 <h3 className={`font-black flex items-center gap-2 mb-6 text-xs uppercase tracking-widest ${isPriceInvalid ? 'text-red-500 font-black' : 'text-slate-800 dark:text-white'}`}>
+                 <h3 className={`font-black flex items-center gap-2 mb-6 text-xs uppercase tracking-widest ${isPriceInvalid ? 'text-red-500' : 'text-slate-800 dark:text-white'}`}>
                     <DollarSign size={16} className={isPriceInvalid ? 'text-red-500' : 'text-primary'}/> {labels.pricing}
                  </h3>
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -311,7 +310,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                                     value={getWeightNumeric(baggage.carryOn.weight)} 
                                     onChange={e => handleBaggageChange(key, 'carryOn', 'weight', e.target.value)} 
                                     disabled={baggage.carryOn.count === 0} 
-                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count === 0 ? 'bg-slate-100 dark:bg-slate-900/50 text-slate-400 opacity-60' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.carryOn.count > 0 && !baggage.carryOn.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
+                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count === 0 ? 'bg-slate-100/80 dark:bg-slate-900/80 text-slate-400/40 opacity-60 backdrop-blur-sm' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.carryOn.count > 0 && !baggage.carryOn.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
                                     placeholder="7" 
                                   />
                                   {baggage.carryOn.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
@@ -334,7 +333,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                                     value={getWeightNumeric(baggage.checked.weight)} 
                                     onChange={e => handleBaggageChange(key, 'checked', 'weight', e.target.value)} 
                                     disabled={baggage.checked.count === 0} 
-                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.checked.count === 0 ? 'bg-slate-100 dark:bg-slate-900/50 text-slate-400 opacity-60' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.checked.count > 0 && !baggage.checked.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
+                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.checked.count === 0 ? 'bg-slate-100/80 dark:bg-slate-900/80 text-slate-400/40 opacity-60 backdrop-blur-sm' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.checked.count > 0 && !baggage.checked.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
                                     placeholder="23" 
                                   />
                                   {baggage.checked.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
