@@ -24,11 +24,12 @@ export interface BaggageInfo {
 
 export interface Expense {
   id: string;
+  trip_id?: string;
   amount: number;
   currency: Currency;
   category: 'Accommodation' | 'Transport' | 'Food' | 'Tickets' | 'Shopping' | 'Other';
   date: string;
-  createdAt: string; 
+  createdAt?: string; 
   note: string;
   exchangeRate: number; 
 }
@@ -61,6 +62,7 @@ export interface FlightInfo {
 
 export interface ChecklistItem {
   id: string;
+  trip_id?: string;
   text: string;
   isCompleted: boolean;
   category: 'Documents' | 'Gear' | 'Toiletries' | 'Clothing' | 'Other';
@@ -70,12 +72,14 @@ export type TransportType = 'Public' | 'Car' | 'Bicycle' | 'Walking' | 'Flight';
 
 export interface ItineraryItem {
   id: string;
+  trip_id?: string;
   time: string;
   placeName: string;
   placeId?: string; 
   note?: string;
   type: 'Place' | 'Transport' | 'Food';
   transportType?: TransportType;
+  date: string; // 用於關聯資料庫
 }
 
 export interface DayPlan {
@@ -90,7 +94,7 @@ export interface Trip {
   endDate: string; 
   destination: string;
   coverImage: string;
-  flight?: FlightInfo;
+  flight?: FlightInfo; // 暫時保留 JSON
   expenses: Expense[];
   checklist: ChecklistItem[];
   itinerary: DayPlan[];

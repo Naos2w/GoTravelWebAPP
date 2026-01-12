@@ -67,7 +67,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
     desc: language === 'zh' ? '項目描述 (必填)' : 'Description (required)',
     addBtn: language === 'zh' ? '確認新增' : 'Confirm Entry',
     cancel: language === 'zh' ? '取消' : 'Cancel',
-    flightTicket: language === 'zh' ? '機票' : 'Flight Ticket',
+    flightTicket: language === 'zh' ? '機票 (Flight Ticket)' : 'Flight Ticket',
     flightSub: language === 'zh' ? '機票預訂費用' : 'Flight booking cost',
     noExpenses: language === 'zh' ? '尚無支出記錄' : 'No transactions recorded.',
     filterAll: language === 'zh' ? '全部' : 'All',
@@ -127,7 +127,10 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
 
   const expensesTotal = trip.expenses.reduce((sum, item) => sum + (item.amount * (item.exchangeRate || 1)), 0);
   const flightPriceTWD = (trip.flight?.price && trip.flight.price > 0) ? (trip.flight.price * (rates[trip.flight.currency] || 1)) : 0;
-  const totalTWD = expensesTotal + flightPriceTWD;
+  
+  // 因為 Expenses 列表現在已經包含了機票支出，所以 totalTWD 就直接是 expenses 的加總即可
+  // 除非 trip.flight.price 的更新沒有反應在 expenses 中
+  const totalTWD = expensesTotal;
 
   const processedExpenses = useMemo(() => {
     let list = [...trip.expenses];
@@ -150,22 +153,19 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
     acc[curr.category] = (acc[curr.category] || 0) + twdVal;
     return acc;
   }, {} as Record<string, number>);
-  if (flightPriceTWD > 0) dataMap['Transport'] = (dataMap['Transport'] || 0) + flightPriceTWD;
+  
   const chartData = Object.entries(dataMap).map(([name, value]) => ({ name: (labels as any)[name] || name, value }));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
       <div className="space-y-6 lg:col-span-1">
-        {/* 總額卡片 */}
         <div className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 relative overflow-hidden transition-all duration-300">
            <div className="relative z-10 flex flex-col items-center lg:items-start text-center lg:text-left">
              <div className="text-slate-400 dark:text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">{labels.totalCost}</div>
              <div className="text-4xl font-black tracking-tighter">NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-             {flightPriceTWD > 0 && (
-               <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-4 flex items-center gap-1 font-bold">
-                 <Plane size={12} /> {labels.includesFlight} NT$ {Math.round(flightPriceTWD).toLocaleString()}
-               </div>
-             )}
+             <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-4 flex items-center gap-1 font-bold">
+               <Plane size={12} /> {labels.includesFlight}
+             </div>
            </div>
            <TrendingUp className="absolute right-[-10%] bottom-[-10%] text-slate-100 dark:text-white/5 w-40 h-40" />
         </div>
@@ -188,16 +188,13 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
       </div>
 
       <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-[40px] shadow-ios border border-gray-100 dark:border-slate-700 overflow-hidden flex flex-col h-[750px] transition-all">
-        {/* 新增支出表單：平滑開合動畫 */}
         <div className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
-           {/* 摺疊時的觸發按鈕 */}
            <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isFormOpen ? 'max-h-0 opacity-0' : 'max-h-20 opacity-100'}`}>
              <button onClick={() => setIsFormOpen(true)} className="w-full py-6 flex items-center justify-center gap-2 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors font-black uppercase text-xs tracking-widest">
                <Plus size={18} /> {labels.addEntry}
              </button>
            </div>
            
-           {/* 展開時的表單容器 */}
            <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isFormOpen ? 'max-h-[600px] opacity-100 py-8 px-6 sm:px-10' : 'max-h-0 opacity-0'}`}>
              <div className="flex justify-between items-center mb-6">
                <h3 className="text-lg font-black text-slate-900 dark:text-white">{labels.addEntry}</h3>
@@ -228,9 +225,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
            </div>
         </div>
 
-        {/* 篩選與排序導航：優化水平捲軸 */}
         <div className="px-6 sm:px-10 py-4 flex flex-col sm:flex-row gap-4 items-center justify-between border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
-           {/* 類別篩選滑動區 */}
            <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar w-full sm:w-auto pb-2 sm:pb-0 whitespace-nowrap snap-x">
               <button onClick={() => setFilterCategory('All')} className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all snap-start flex items-center gap-2 ${filterCategory === 'All' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-700'}`}>
                 <Filter size={14} />
@@ -244,7 +239,6 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
               ))}
            </div>
            
-           {/* 排序下拉選單 */}
            <div className="relative group w-full sm:w-56 shrink-0">
               <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700 cursor-pointer relative transition-colors hover:bg-slate-100 dark:hover:bg-slate-800">
                  <ArrowUpDown size={14} className="text-slate-400 shrink-0" />
@@ -263,23 +257,17 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 sm:p-10 space-y-4 custom-scrollbar">
-           {flightPriceTWD > 0 && filterCategory === 'All' && (
-              <div className="flex items-center justify-between p-6 rounded-[28px] bg-blue-50/40 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-900/30 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-white dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-sm"><Plane size={20} strokeWidth={2.5} /></div>
-                  <div><div className="font-black text-slate-800 dark:text-white">{labels.flightTicket}</div><div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{labels.flightSub}</div></div>
-                </div>
-                <div className="text-right flex flex-col items-end"><div className="font-black text-slate-800 dark:text-white text-lg">{trip.flight?.currency} {trip.flight?.price.toLocaleString()}</div>{trip.flight?.currency !== Currency.TWD && <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">≈ NT$ {Math.round(flightPriceTWD).toLocaleString()}</div>}</div>
-              </div>
-           )}
-
            {processedExpenses.map(item => {
              const config = CATEGORY_CONFIG[item.category] || CATEGORY_CONFIG.Other;
              const Icon = config.icon;
+             const isSystemTicket = item.category === 'Tickets' && item.note.includes('Flight Ticket');
+
              return (
-               <div key={item.id} className="group flex items-center justify-between p-5 rounded-[28px] bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 border border-slate-100 dark:border-slate-700 transition-all">
+               <div key={item.id} className={`group flex items-center justify-between p-5 rounded-[28px] border transition-all ${isSystemTicket ? 'bg-blue-50/40 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30' : 'bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-slate-100 dark:border-slate-700'}`}>
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-2xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shadow-sm transition-transform group-hover:scale-110`}><Icon size={20} /></div>
+                    <div className={`w-12 h-12 rounded-2xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shadow-sm transition-transform group-hover:scale-110`}>
+                      {isSystemTicket ? <Plane size={20} /> : <Icon size={20} />}
+                    </div>
                     <div className="max-w-[140px] sm:max-w-[240px]">
                       <div className="font-black text-slate-800 dark:text-white truncate text-base">{item.note}</div>
                       <div className="flex flex-col gap-0.5 mt-0.5">
@@ -297,13 +285,22 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate }) => {
                       <div className="font-black text-slate-800 dark:text-white text-lg">{item.currency} {item.amount.toLocaleString()}</div>
                       {item.currency !== Currency.TWD && <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">≈ NT$ {Math.round(item.amount * (item.exchangeRate || 1)).toLocaleString()}</div>}
                     </div>
-                    <button onClick={() => deleteExpense(item.id)} className="p-2.5 bg-slate-50 dark:bg-slate-700 text-red-500/80 dark:text-red-400/80 hover:text-red-600 dark:hover:text-red-300 rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-sm border border-transparent hover:border-red-100 dark:hover:border-red-900/30"><Trash2 size={16}/></button>
+                    {/* 機票支出不顯示刪除按鈕 */}
+                    {!isSystemTicket ? (
+                      <button onClick={() => deleteExpense(item.id)} className="p-2.5 bg-slate-50 dark:bg-slate-700 text-red-500/80 dark:text-red-400/80 hover:text-red-600 dark:hover:text-red-300 rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-sm border border-transparent hover:border-red-100 dark:hover:border-red-900/30">
+                        <Trash2 size={16}/>
+                      </button>
+                    ) : (
+                      <div className="p-2.5 opacity-0 group-hover:opacity-100 transition-all">
+                        <Ticket size={16} className="text-blue-200 dark:text-blue-800" />
+                      </div>
+                    )}
                   </div>
                </div>
              );
            })}
            
-           {processedExpenses.length === 0 && (flightPriceTWD === 0 || filterCategory !== 'All') && (
+           {processedExpenses.length === 0 && (
              <div className="text-center py-24 text-slate-300 font-black uppercase text-[10px] tracking-widest flex flex-col items-center gap-4">
                 <Filter size={32} className="opacity-20" />
                 {labels.noExpenses}
