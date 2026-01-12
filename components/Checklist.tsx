@@ -6,7 +6,7 @@ import {
   Shirt, Sparkles, Tag, ChevronDown, ChevronUp, X as CloseIcon
 } from 'lucide-react';
 import { useTranslation } from "../contexts/LocalizationContext";
-import { supabase } from '../services/storageService';
+import { supabase, deleteChecklistItem } from '../services/storageService';
 
 interface Props {
   trip: Trip;
@@ -110,15 +110,22 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     setIsFormOpen(false);
   };
 
-  const deleteItem = (itemId: string) => {
-    if (!window.confirm(labels.confirmDelete)) return;
+  const deleteItem = async (itemId: string) => {
+    // No confirmation dialog as requested
     
     // Update local optimistic state first
     const updatedList = optimisticChecklist.filter(i => i.id !== itemId);
     setOptimisticChecklist(updatedList);
 
-    // Sync with server
-    onUpdate({ ...trip, checklist: updatedList });
+    // Delete from server directly
+    // We don't call onUpdate here because saveTrip (upsert) doesn't handle deletions.
+    // The real-time subscription in App.tsx will catch the DELETE event and refresh the trip.
+    try {
+      await deleteChecklistItem(itemId, trip.id);
+    } catch (e) {
+      console.error("Failed to delete item", e);
+      // Optional: Revert optimistic update on error
+    }
   };
 
   const toggleExpand = (cat: string) => {
