@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Trip, FlightInfo, FlightSegment, Currency, BaggageInfo } from '../types';
 import { Plane, Save, Edit2, Search, Loader2, DollarSign, Briefcase, ShoppingBag, ReceiptText } from 'lucide-react';
@@ -7,6 +6,7 @@ import { BoardingPass } from './BoardingPass';
 
 interface FlightSegmentInputProps {
   title: string;
+  isOutbound: boolean;
   data: FlightSegment;
   date: string;
   loading: boolean;
@@ -16,6 +16,7 @@ interface FlightSegmentInputProps {
 
 const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({ 
   title, 
+  isOutbound,
   data, 
   date,
   loading,
@@ -25,10 +26,10 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
   const baggage = data.baggage || { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } };
 
   return (
-    <div className="bg-gray-50 p-6 rounded-2xl space-y-4 relative border border-gray-100">
+    <div className="bg-gray-50 p-6 rounded-2xl space-y-4 relative border border-gray-100 shadow-sm">
       <div className="flex justify-between items-center">
         <h3 className="font-bold text-slate-800 flex items-center gap-2">
-          <Plane className={title.includes('回程') ? 'rotate-180' : ''} size={18} /> {title}
+          <Plane className={!isOutbound ? 'rotate-180' : ''} size={18} /> {title}
         </h3>
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white px-2 py-1 rounded border border-gray-100 shadow-sm">
           日期：{date}
@@ -38,7 +39,7 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Search Group */}
         <div className="space-y-1 col-span-2">
-          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">航班號碼 & 搜尋</label>
+          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">航班號碼</label>
           <div className="flex gap-2">
             <input 
               value={data.flightNumber} 
@@ -51,13 +52,13 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
               disabled={loading || !data.flightNumber}
               className="bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 p-2 px-4 rounded-xl transition-all flex items-center gap-2 shadow-sm font-bold text-xs"
             >
-              {loading ? <Loader2 className="animate-spin" size={16}/> : <><Search size={16}/> 搜尋 TDX</>}
+              {loading ? <Loader2 className="animate-spin" size={16}/> : <><Search size={16}/> 搜尋</>}
             </button>
           </div>
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-500 font-bold uppercase">出發機場 (IATA)</label>
+          <label className="text-[10px] text-slate-500 font-bold uppercase">起飛機場</label>
           <input 
             value={data.departureAirport} 
             onChange={e => onChange('departureAirport', e.target.value.toUpperCase())}
@@ -67,7 +68,7 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
         </div>
 
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-500 font-bold uppercase">目的地機場 (IATA)</label>
+          <label className="text-[10px] text-slate-500 font-bold uppercase">目的地機場</label>
           <input 
             value={data.arrivalAirport} 
             onChange={e => onChange('arrivalAirport', e.target.value.toUpperCase())}
@@ -86,8 +87,10 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
              className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
            />
         </div>
-        <div className="space-y-1 col-span-2">
-           <label className="text-[10px] text-slate-500 font-bold uppercase">抵達時間</label>
+        
+        {/* Inbound includes Arrival Time per request, but keeping it for Outbound too if hidden/optional - requested: Inbound adds Arrival Time */}
+        <div className={`space-y-1 col-span-2 ${!isOutbound ? 'opacity-100' : 'opacity-40'}`}>
+           <label className="text-[10px] text-slate-500 font-bold uppercase">抵達時間 {!isOutbound && '(必填)'}</label>
            <input 
              type="datetime-local"
              value={data.arrivalTime} 
@@ -99,19 +102,16 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
 
       {/* Baggage Section per Segment */}
       <div className="pt-4 border-t border-gray-100">
-        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 block">行李規範 (此航段)</label>
+        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-3 block">行李規範</label>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
            <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold">手提重量 (Carry-on)</label>
-              <div className="relative">
-                <ShoppingBag className="absolute left-3 top-2.5 text-slate-300" size={14} />
-                <input 
-                  value={baggage.carryOn.weight}
-                  onChange={e => onChange('baggage', { ...baggage, carryOn: { ...baggage.carryOn, weight: e.target.value } })}
-                  placeholder="e.g. 7kg"
-                  className="w-full bg-white pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs font-bold shadow-sm"
-                />
-              </div>
+              <label className="text-[10px] text-slate-500 font-bold flex items-center gap-1"><ShoppingBag size={10}/> 手提重量</label>
+              <input 
+                value={baggage.carryOn.weight}
+                onChange={e => onChange('baggage', { ...baggage, carryOn: { ...baggage.carryOn, weight: e.target.value } })}
+                placeholder="e.g. 7kg"
+                className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold shadow-sm"
+              />
            </div>
            <div className="space-y-1">
               <label className="text-[10px] text-slate-500 font-bold">手提件數</label>
@@ -123,16 +123,13 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
               />
            </div>
            <div className="space-y-1">
-              <label className="text-[10px] text-slate-500 font-bold">托運重量 (Checked)</label>
-              <div className="relative">
-                <Briefcase className="absolute left-3 top-2.5 text-slate-300" size={14} />
-                <input 
-                  value={baggage.checked.weight}
-                  onChange={e => onChange('baggage', { ...baggage, checked: { ...baggage.checked, weight: e.target.value } })}
-                  placeholder="e.g. 23kg"
-                  className="w-full bg-white pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs font-bold shadow-sm"
-                />
-              </div>
+              <label className="text-[10px] text-slate-500 font-bold flex items-center gap-1"><Briefcase size={10}/> 托運重量</label>
+              <input 
+                value={baggage.checked.weight}
+                onChange={e => onChange('baggage', { ...baggage, checked: { ...baggage.checked, weight: e.target.value } })}
+                placeholder="e.g. 23kg"
+                className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold shadow-sm"
+              />
            </div>
            <div className="space-y-1">
               <label className="text-[10px] text-slate-500 font-bold">托運件數</label>
@@ -189,7 +186,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     const to = segment.arrivalAirport;
 
     if (!segment?.flightNumber || !from || !to) {
-      alert("請填入航班號碼、起飛與目的地機場代碼以進行精準搜尋。");
+      alert("請填入航班號碼、起飛與目的地機場代碼以進行搜尋。");
       return;
     }
 
@@ -212,7 +209,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
           }
         }));
       } else {
-        alert("找不到航班。請檢查航班號碼或機場 IATA 代碼是否正確。");
+        alert("找不到航班。");
       }
     } catch (e) {
       console.error(e);
@@ -229,7 +226,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       <div className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
         <div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">航班機票</h2>
-          <p className="text-slate-500 text-sm">管理您的行程與行李資訊</p>
+          <p className="text-slate-500 text-sm">編輯您的出發與回程航班詳情</p>
         </div>
         <button 
           onClick={() => isEditing ? handleSave() : setIsEditing(true)}
@@ -237,7 +234,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
             isEditing ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 text-slate-600 hover:bg-gray-200'
           }`}
         >
-          {isEditing ? <><Save size={18}/> 儲存變更</> : <><Edit2 size={18}/> 編輯資訊</>}
+          {isEditing ? <><Save size={18}/> 儲存並更新費用</> : <><Edit2 size={18}/> 編輯資訊</>}
         </button>
       </div>
 
@@ -245,6 +242,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-8">
            <FlightSegmentInput 
              title="去程航班" 
+             isOutbound={true}
              data={flightData.outbound} 
              date={trip.startDate}
              loading={loadingField === 'outbound'}
@@ -253,6 +251,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
            />
            <FlightSegmentInput 
              title="回程航班" 
+             isOutbound={false}
              data={flightData.inbound!} 
              date={trip.endDate}
              loading={loadingField === 'inbound'}
@@ -260,11 +259,11 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
              onChange={(f, v) => updateSegment('inbound', f, v)} 
            />
            
-           <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
-             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm"><DollarSign size={18}/> 機票預算</h3>
+           <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-sm"><DollarSign size={18}/> 機票費用設定</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase">總票價</label>
+                  <label className="text-[10px] text-slate-500 font-bold uppercase">總票價 (會自動計入總花費)</label>
                   <div className="flex gap-2">
                     <select 
                       value={flightData.currency}
@@ -322,20 +321,19 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                   )}
                 </div>
 
-                {/* Cost Card - Apple Style */}
                 {hasCost && (
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between">
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between border-l-4 border-l-primary">
                     <div className="flex items-center gap-4">
-                       <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center">
-                          <ReceiptText size={20} />
+                       <div className="w-12 h-12 bg-primary/5 text-primary rounded-2xl flex items-center justify-center">
+                          <ReceiptText size={24} />
                        </div>
                        <div>
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">機票總花費</div>
-                          <div className="text-lg font-bold text-slate-800">{flightData.currency} {flightData.price.toLocaleString()}</div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">機票總計費用</div>
+                          <div className="text-xl font-bold text-slate-800">{flightData.currency} {flightData.price.toLocaleString()}</div>
                        </div>
                     </div>
                     <div className="text-right">
-                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">艙等</div>
+                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">目前艙等</div>
                        <div className="font-bold text-slate-600">{flightData.cabinClass}</div>
                     </div>
                   </div>
