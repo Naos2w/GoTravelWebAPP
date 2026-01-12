@@ -107,51 +107,68 @@ export const useTranslation = () => {
 };
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [view, setView] = useState<'landing' | 'list' | 'detail'>(() => {
-    return localStorage.getItem('user') ? 'list' : 'landing';
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  // 移除 localStorage 依賴，改為 null
+  const [user, setUser] = useState<User | null>(null);
+  const [view, setView] = useState<'landing' | 'list' | 'detail'>('landing');
+  const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTripId, setCurrentTripId] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'itinerary' | 'checklist' | 'expenses' | 'flights'>('dashboard');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  
+  // 僅保留主題與語言的 localStorage
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('lang') as Language) || 'zh');
   
   const isEnvMissing = !GOOGLE_CLIENT_ID || !process.env.SUPABASE_URL;
 
   useEffect(() => {
+    // 初始載入時檢查 Session
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        handleAuthUser(session.user);
+      } else {
+        setIsLoading(false);
+      }
+    };
+    checkSession();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        const userData: User = {
-          id: session.user.id,
-          name: session.user.user_metadata.full_name || session.user.email?.split('@')[0] || 'User',
-          email: session.user.email!,
-          picture: session.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${session.user.email}`,
-        };
-        setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
-        if (view === 'landing') setView('list');
+        handleAuthUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
-        localStorage.removeItem('user');
         setView('landing');
+        setIsLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const handleAuthUser = (supabaseUser: any) => {
+    const userData: User = {
+      id: supabaseUser.id,
+      name: supabaseUser.user_metadata.full_name || supabaseUser.email?.split('@')[0] || 'User',
+      email: supabaseUser.email!,
+      picture: supabaseUser.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${supabaseUser.email}`,
+    };
+    setUser(userData);
+    if (view === 'landing') setView('list');
+    setIsLoading(false);
+  };
+
   useEffect(() => {
     if (user) loadTrips();
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('theme', theme);
   }, [user, theme]);
+
+  useEffect(() => {
+    localStorage.setItem('lang', language);
+  }, [language]);
 
   const loadTrips = async () => {
     if (!user) return;
@@ -293,6 +310,15 @@ const App: React.FC = () => {
       )}
     </div>
   );
+
+  if (isLoading && view === 'landing') {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center transition-colors ${theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#FBFBFD]'}`}>
+        <Loader2 className="animate-spin text-primary mb-4" size={32} />
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 animate-pulse">{t('loading')}</p>
+      </div>
+    );
+  }
 
   return (
     <LocalizationContext.Provider value={{ t, language, setLanguage: (l) => setLanguage(l) }}>
