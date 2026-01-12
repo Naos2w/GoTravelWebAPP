@@ -237,9 +237,9 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
            <TrendingUp className="absolute right-[-10%] bottom-[-10%] text-slate-100 dark:text-white/5 w-40 h-40" />
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 h-[320px]">
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 md:h-[320px] h-auto">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{t('breakdown')}</h3>
-          <div className="h-full overflow-y-auto custom-thin-scrollbar pr-1">
+          <div className="md:h-full max-h-[200px] md:max-h-none overflow-y-auto custom-thin-scrollbar pr-2 pb-4 [&::-webkit-scrollbar]:w-1">
             {chartData.length > 0 ? (
               <>
                  {/* Desktop Pie Chart */}
