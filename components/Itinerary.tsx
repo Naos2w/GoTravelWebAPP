@@ -265,7 +265,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     setCalculatingId(transportId);
     try {
       // Create a new GoogleGenAI instance right before making an API call to ensure it uses the most up-to-date key
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const prompt = `Estimate transport time from "${prev.placeName}" to "${
         next.placeName
       }" by "${type}". Return ONLY duration like "20 mins". Language: ${
@@ -390,7 +390,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const currentDay = days[selectedDayIndex];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] animate-in fade-in duration-500 overflow-hidden">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden">
       <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
