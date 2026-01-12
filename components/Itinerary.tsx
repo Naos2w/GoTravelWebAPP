@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Trip, DayPlan, ItineraryItem } from '../types';
-import { MapPin, Coffee, Bus, Trash2, Map, Plane } from 'lucide-react';
+import { MapPin, Coffee, Bus, Trash2, Map, Plane, Clock } from 'lucide-react';
+import { DateTimeUtils } from '../services/dateTimeUtils';
 
 interface Props {
   trip: Trip;
@@ -11,12 +12,14 @@ interface Props {
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [days, setDays] = useState<DayPlan[]>([]);
+  const [showTimePickerId, setShowTimePickerId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!trip.startDate || !trip.endDate) return;
 
-    const start = new Date(trip.startDate);
-    const end = new Date(trip.endDate);
+    // Fix: Using local-safe date creation
+    const start = new Date(trip.startDate + 'T00:00:00');
+    const end = new Date(trip.endDate + 'T00:00:00');
     const diffTime = Math.abs(end.getTime() - start.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
@@ -27,7 +30,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
       for (let i = 0; i < diffDays; i++) {
         const d = new Date(start);
         d.setDate(d.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = DateTimeUtils.formatDate(d);
         
         const existing = currentItinerary.find(p => p.date === dateStr);
         if (existing) {
@@ -76,45 +79,33 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
     onUpdate({ ...trip, itinerary: newDays });
   };
 
-  const getDurationString = (startTime: string, endTime: string) => {
-    const [h1, m1] = startTime.split(':').map(Number);
-    const [h2, m2] = endTime.split(':').map(Number);
-    
-    let totalMinutes = (h2 * 60 + m2) - (h1 * 60 + m1);
-    if (totalMinutes < 0) totalMinutes += 24 * 60;
-
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
-  };
-
   if (days.length === 0) return <div className="p-8 text-center text-gray-500">請先設定旅程日期。</div>;
 
   const currentDay = days[selectedDayIndex];
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)]">
-      {/* Optimized Sidebar: Narrower width for desktop */}
-      <div className="lg:w-40 xl:w-48 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0">
+      <div className="lg:w-28 xl:w-32 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0">
         {days.map((day, idx) => {
-          const dateObj = new Date(day.date);
+          // Use safer local date
+          const dateObj = new Date(day.date + 'T00:00:00');
           const isSelected = idx === selectedDayIndex;
           return (
             <button
               key={idx}
               onClick={() => setSelectedDayIndex(idx)}
-              className={`flex-shrink-0 lg:w-full p-3 md:p-4 rounded-2xl text-left transition-all border ${
+              className={`flex-shrink-0 lg:w-full p-2 rounded-2xl text-center transition-all border ${
                 isSelected ? 'bg-slate-800 text-white shadow-md border-slate-800' : 'bg-white text-slate-600 hover:bg-gray-50 border-gray-100'
               }`}
             >
-              <div className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>
+              <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>
                 Day {idx + 1}
               </div>
-              <div className="font-semibold text-sm md:text-base leading-tight">
+              <div className="font-bold text-xs md:text-sm leading-tight">
                 {dateObj.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}
-                <span className="ml-1 opacity-60 text-xs">({dateObj.toLocaleDateString('zh-TW', { weekday: 'short' })})</span>
+              </div>
+              <div className="text-[9px] opacity-60">
+                {dateObj.toLocaleDateString('zh-TW', { weekday: 'short' })}
               </div>
             </button>
           );
@@ -134,12 +125,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-0 relative">
-          {currentDay && currentDay.items.length === 0 && (
-             <div className="text-center py-20 text-gray-400">
-               目前尚未規劃任何行程。
-             </div>
-          )}
-          
           {currentDay?.items.map((item, idx) => {
             const isFlightDep = item.id.includes('flight-dep');
             const isFlightArr = item.id.includes('flight-arr');
@@ -150,22 +135,20 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                const prefix = item.id.replace('-dep', '');
                const arrItem = currentDay.items.find(i => i.id === `${prefix}-arr`);
                if (arrItem) {
-                  duration = getDurationString(item.time, arrItem.time);
+                  duration = DateTimeUtils.getDuration(item.time, arrItem.time);
                }
             }
 
             return (
               <div key={item.id} className="relative pl-12 border-l-2 border-gray-100 last:border-0 pb-12">
-                {/* Timeline Icon */}
                 <div className={`absolute -left-[9px] top-2 w-4 h-4 rounded-full border-2 bg-white z-10 ${
                    item.type === 'Place' ? 'border-primary' : item.type === 'Food' ? 'border-orange-500' : 'border-slate-500'
                 }`} />
 
-                {/* Duration Badge: Centered on the timeline line between two items */}
                 {duration && (
                   <div className="absolute left-[-1px] top-full -translate-y-[24px] z-30 pointer-events-none flex flex-col items-center">
-                    <div className="bg-slate-900 text-white shadow-lg px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap -translate-x-1/2 flex items-center gap-1.5 ring-2 ring-white">
-                      <Plane size={10} className="fill-white" />
+                    <div className="bg-slate-900 text-white shadow-lg px-2 py-0.5 rounded-full text-[9px] font-bold whitespace-nowrap -translate-x-1/2 flex items-center gap-1.5 ring-2 ring-white">
+                      <Plane size={9} className="fill-white" />
                       {duration}
                     </div>
                   </div>
@@ -173,24 +156,60 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                 
                 <div className={`rounded-2xl p-4 group transition-all border ${isAutoFlight ? 'bg-blue-50/50 border-blue-100 shadow-sm' : 'bg-gray-50 border-transparent hover:border-gray-200'}`}>
                    <div className="flex items-start gap-4">
-                     <div className="flex flex-col items-center min-w-[65px]">
-                        <input 
-                          type="time" 
-                          value={item.time}
-                          readOnly={isAutoFlight}
-                          step="60"
-                          onChange={(e) => updateItem(selectedDayIndex, idx, 'time', e.target.value)}
-                          className={`bg-transparent font-mono text-base focus:outline-none w-full text-center tracking-tight cursor-default ${isAutoFlight ? 'text-primary font-bold' : 'text-slate-500'}`}
-                          style={{ colorScheme: 'light' }}
-                        />
+                     <div className="flex flex-col items-center min-w-[80px] relative">
+                        <button 
+                          onClick={() => !isAutoFlight && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)}
+                          className={`font-mono text-base font-bold px-2 py-1 rounded-lg transition-colors flex items-center gap-1.5 ${isAutoFlight ? 'text-primary' : 'text-slate-600 hover:bg-white hover:shadow-sm'}`}
+                        >
+                          {!isAutoFlight && <Clock size={12} className="text-slate-400" />}
+                          {item.time}
+                        </button>
+                        
+                        {showTimePickerId === item.id && (
+                          <div className="absolute top-full left-0 mt-2 bg-white border border-gray-100 rounded-3xl shadow-2xl z-50 p-3 flex gap-3 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="flex flex-col gap-1 max-h-40 overflow-y-auto no-scrollbar pr-1">
+                              {Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0')).map(h => (
+                                <button
+                                  key={h}
+                                  onClick={() => {
+                                    const [_, currentMin] = item.time.split(':');
+                                    updateItem(selectedDayIndex, idx, 'time', `${h}:${currentMin}`);
+                                  }}
+                                  className={`w-8 h-8 rounded-lg text-xs font-mono font-bold flex items-center justify-center ${item.time.split(':')[0] === h ? 'bg-primary text-white' : 'hover:bg-gray-100 text-slate-600'}`}
+                                >
+                                  {h}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="w-px bg-gray-100"></div>
+                            <div className="flex flex-col gap-1 max-h-40 overflow-y-auto no-scrollbar pr-1">
+                              {Array.from({length: 12}, (_, i) => (i*5).toString().padStart(2, '0')).map(m => (
+                                <button
+                                  key={m}
+                                  onClick={() => {
+                                    const [currentHour, _] = item.time.split(':');
+                                    updateItem(selectedDayIndex, idx, 'time', `${currentHour}:${m}`);
+                                    setShowTimePickerId(null);
+                                  }}
+                                  className={`w-8 h-8 rounded-lg text-xs font-mono font-bold flex items-center justify-center ${item.time.split(':')[1] === m ? 'bg-primary text-white' : 'hover:bg-gray-100 text-slate-600'}`}
+                                >
+                                  {m}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                      </div>
                      <div className="flex-1 space-y-0.5">
                        <div className={`font-bold text-lg tracking-tight ${isAutoFlight ? 'text-blue-900' : 'text-slate-800'}`}>
                          {item.placeName}
                        </div>
-                       <div className="text-xs text-slate-500 font-medium">
-                         {item.note || '無備註'}
-                       </div>
+                       <input 
+                         value={item.note || ''}
+                         onChange={(e) => updateItem(selectedDayIndex, idx, 'note', e.target.value)}
+                         placeholder="新增備註..."
+                         className="text-xs text-slate-500 font-medium bg-transparent border-none focus:ring-0 p-0 w-full placeholder:text-slate-300"
+                       />
                      </div>
                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                        <button 

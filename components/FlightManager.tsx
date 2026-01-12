@@ -4,6 +4,8 @@ import { Trip, FlightInfo, FlightSegment, Currency, BaggageInfo, ItineraryItem, 
 import { Plane, Save, Edit2, Search, Loader2, DollarSign, Briefcase, ShoppingBag, ReceiptText, MapPin } from 'lucide-react';
 import { fetchTdxFlights } from '../services/tdxService';
 import { BoardingPass } from './BoardingPass';
+import { CustomDateTimeInput } from './CustomDateTimeInput';
+import { DateTimeUtils } from '../services/dateTimeUtils';
 
 interface FlightSegmentInputProps {
   title: string;
@@ -77,23 +79,19 @@ const FlightSegmentInput: React.FC<FlightSegmentInputProps> = ({
           />
         </div>
 
-        <div className="space-y-1 col-span-2">
-           <label className="text-[10px] text-slate-500 font-bold uppercase">起飛時間</label>
-           <input 
-             type="datetime-local"
-             value={data.departureTime} 
-             onChange={e => onChange('departureTime', e.target.value)}
-             className="w-full bg-white px-3 py-2 rounded-xl border border-gray-200 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+        <div className="col-span-2">
+           <CustomDateTimeInput 
+             label="起飛時間"
+             value={data.departureTime}
+             onChange={(val) => onChange('departureTime', val)}
            />
         </div>
         
-        <div className="space-y-1">
-           <label className="text-[10px] text-slate-500 font-bold uppercase">抵達時間</label>
-           <input 
-             type="datetime-local"
-             value={data.arrivalTime} 
-             onChange={e => onChange('arrivalTime', e.target.value)}
-             className="w-full bg-white px-3 py-2 rounded-xl border border-gray-100 text-sm font-medium focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+        <div className="col-span-2 md:col-span-1">
+           <CustomDateTimeInput 
+             label="抵達時間"
+             value={data.arrivalTime}
+             onChange={(val) => onChange('arrivalTime', val)}
            />
         </div>
 
@@ -190,8 +188,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     // Outbound - Day 1
     const outbound = info.outbound;
     if (outbound.flightNumber && outbound.departureAirport) {
-      const depTime = outbound.departureTime.split('T')[1]?.substring(0, 5) || '00:00';
-      const arrTime = outbound.arrivalTime.split('T')[1]?.substring(0, 5) || '00:00';
+      const depTime = DateTimeUtils.formatTime24(outbound.departureTime);
+      const arrTime = DateTimeUtils.formatTime24(outbound.arrivalTime);
       
       const depItem: ItineraryItem = {
         id: 'outbound-flight-dep',
@@ -219,8 +217,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     const inbound = info.inbound;
     if (inbound && inbound.flightNumber && inbound.departureAirport) {
       const lastIdx = newItinerary.length - 1;
-      const depTime = inbound.departureTime.split('T')[1]?.substring(0, 5) || '00:00';
-      const arrTime = inbound.arrivalTime.split('T')[1]?.substring(0, 5) || '00:00';
+      const depTime = DateTimeUtils.formatTime24(inbound.departureTime);
+      const arrTime = DateTimeUtils.formatTime24(inbound.arrivalTime);
       
       const depItem: ItineraryItem = {
         id: 'inbound-flight-dep',
@@ -354,7 +352,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                       {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input 
-                      type="number"
+                      type="number" 
                       value={flightData.price}
                       onChange={e => setFlightData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
                       className="flex-1 bg-white p-2 px-3 rounded-xl border border-gray-200 text-sm font-bold shadow-sm outline-none"

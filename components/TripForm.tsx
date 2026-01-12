@@ -4,6 +4,7 @@ import { X, Calendar, MapPin, Plane, ArrowRight, Loader2, Check, Info, ChevronLe
 import { fetchTdxFlights } from '../services/tdxService';
 import { FlightSegment, Trip, Currency, ItineraryItem, DayPlan } from '../types';
 import { createNewTrip } from '../services/storageService';
+import { DateTimeUtils } from '../services/dateTimeUtils';
 
 interface Props {
   onClose: () => void;
@@ -11,13 +12,6 @@ interface Props {
 }
 
 type Step = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-select' | 'review';
-
-const formatTime = (iso: string) => {
-  if (!iso) return "--:--";
-  const date = new Date(iso);
-  // Force 24-hour format
-  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-};
 
 const getAirlineLogo = (id: string | undefined) => {
   if (!id) return null;
@@ -180,7 +174,7 @@ const SelectStep: React.FC<SelectStepProps> = ({
              
              <div className="flex items-center justify-between text-sm">
                 <div className="flex-1">
-                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{formatTime(f.departureTime)}</div>
+                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{DateTimeUtils.formatTime24(f.departureTime)}</div>
                   <div className="text-slate-400 text-xs font-bold uppercase">{f.departureAirport}</div>
                   {f.terminal && <div className="text-[10px] text-slate-300">Terminal {f.terminal}</div>}
                 </div>
@@ -192,7 +186,7 @@ const SelectStep: React.FC<SelectStepProps> = ({
                 </div>
                 
                 <div className="flex-1 text-right">
-                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{formatTime(f.arrivalTime)}</div>
+                  <div className="font-mono font-bold text-xl text-slate-800 tracking-tight">{DateTimeUtils.formatTime24(f.arrivalTime)}</div>
                   <div className="text-slate-400 text-xs font-bold uppercase">{f.arrivalAirport}</div>
                 </div>
              </div>
@@ -238,12 +232,12 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
            <div className="flex items-center gap-3">
               <div className="text-center">
                  <div className="font-mono font-bold text-slate-800 text-lg">{outboundFlight?.departureAirport}</div>
-                 <div className="text-[10px] text-slate-400">{formatTime(outboundFlight?.departureTime || '')}</div>
+                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(outboundFlight?.departureTime)}</div>
               </div>
               <ArrowRight size={16} className="text-primary" />
               <div className="text-center">
                  <div className="font-mono font-bold text-slate-800 text-lg">{outboundFlight?.arrivalAirport}</div>
-                 <div className="text-[10px] text-slate-400">{formatTime(outboundFlight?.arrivalTime || '')}</div>
+                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(outboundFlight?.arrivalTime)}</div>
               </div>
            </div>
            <div className="text-right">
@@ -257,12 +251,12 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
            <div className="flex items-center gap-3">
               <div className="text-center">
                  <div className="font-mono font-bold text-slate-800 text-lg">{inboundFlight?.departureAirport}</div>
-                 <div className="text-[10px] text-slate-400">{formatTime(inboundFlight?.departureTime || '')}</div>
+                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(inboundFlight?.departureTime)}</div>
               </div>
               <ArrowRight size={16} className="text-primary" />
               <div className="text-center">
                  <div className="font-mono font-bold text-slate-800 text-lg">{inboundFlight?.arrivalAirport}</div>
-                 <div className="text-[10px] text-slate-400">{formatTime(inboundFlight?.arrivalTime || '')}</div>
+                 <div className="text-[10px] text-slate-400">{DateTimeUtils.formatTime24(inboundFlight?.arrivalTime)}</div>
               </div>
            </div>
            <div className="text-right">
@@ -370,14 +364,14 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         // Day 1
         items.push({
           id: 'outbound-flight-dep',
-          time: outboundFlight.departureTime.split('T')[1]?.substring(0, 5) || '09:00',
+          time: DateTimeUtils.formatTime24(outboundFlight.departureTime),
           placeName: `Airport ${outboundFlight.departureAirport}`,
           type: 'Transport',
           note: `航班: ${outboundFlight.flightNumber}, 航廈: ${outboundFlight.terminal || 'TBA'}`
         });
         items.push({
           id: 'outbound-flight-arr',
-          time: outboundFlight.arrivalTime.split('T')[1]?.substring(0, 5) || '12:00',
+          time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime),
           placeName: `Airport ${outboundFlight.arrivalAirport}`,
           type: 'Transport',
           note: `航廈: ${outboundFlight.terminal || 'TBA'}`
@@ -388,14 +382,14 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         // Last Day
         items.push({
           id: 'inbound-flight-dep',
-          time: inboundFlight.departureTime.split('T')[1]?.substring(0, 5) || '18:00',
+          time: DateTimeUtils.formatTime24(inboundFlight.departureTime),
           placeName: `Airport ${inboundFlight.departureAirport}`,
           type: 'Transport',
           note: `航班: ${inboundFlight.flightNumber}, 航廈: ${inboundFlight.terminal || 'TBA'}`
         });
         items.push({
           id: 'inbound-flight-arr',
-          time: inboundFlight.arrivalTime.split('T')[1]?.substring(0, 5) || '22:00',
+          time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime),
           placeName: `Airport ${inboundFlight.arrivalAirport}`,
           type: 'Transport',
           note: `航廈: ${inboundFlight.terminal || 'TBA'}`
