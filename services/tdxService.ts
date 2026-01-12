@@ -1,10 +1,11 @@
+
 import { FlightSegment } from "../types";
 
 const TOKEN_KEY = 'tdx_access_token';
 const EXPIRY_KEY = 'tdx_token_expiry';
 
 // Cache for airline names to minimize API calls
-const airlineCache = new Map<string, string>();
+const airlineCache = new Map<string, {zh: string, en: string}>();
 
 async function getTdxToken(): Promise<string | null> {
   const clientId = process.env.TDX_CLIENT_ID;
@@ -50,9 +51,10 @@ async function getTdxToken(): Promise<string | null> {
 }
 
 /**
- * Fetch Airline Chinese Name from TDX
+ * Fetch Airline Chinese & English Name from TDX Airline API
+ * Specifically using Zh_tw for Traditional Chinese
  */
-async function fetchAirlineName(airlineID: string, token: string): Promise<string> {
+async function fetchAirlineName(airlineID: string, token: string): Promise<{zh: string, en: string}> {
   if (airlineCache.has(airlineID)) {
     return airlineCache.get(airlineID)!;
   }
@@ -65,18 +67,19 @@ async function fetchAirlineName(airlineID: string, token: string): Promise<strin
     
     if (response.ok) {
       const data = await response.json();
-      // data is an array or a single object depending on endpoint version, usually single object for /{ID}
       const item = Array.isArray(data) ? data[0] : data;
-      if (item?.AirlineName?.Zh_tw) {
-        airlineCache.set(airlineID, item.AirlineName.Zh_tw);
-        return item.AirlineName.Zh_tw;
-      }
+      const names = {
+        zh: item?.AirlineName?.Zh_tw || airlineID,
+        en: item?.AirlineName?.En || airlineID
+      };
+      airlineCache.set(airlineID, names);
+      return names;
     }
   } catch (e) {
     console.error(`Error fetching airline ${airlineID}:`, e);
   }
   
-  return airlineID; // Fallback to ID
+  return { zh: airlineID, en: airlineID };
 }
 
 export async function fetchTdxFlights(
@@ -91,7 +94,6 @@ export async function fetchTdxFlights(
   try {
     let filter = `DepartureAirportID eq '${origin}' and ArrivalAirportID eq '${destination}' and ScheduleStartDate le ${date} and ScheduleEndDate ge ${date}`;
     
-    // Add exact flight number filtering if provided
     if (flightNumber && flightNumber.trim()) {
       filter += ` and FlightNumber eq '${flightNumber.trim().toUpperCase()}'`;
     }
@@ -111,18 +113,19 @@ export async function fetchTdxFlights(
     const data = await response.json();
     if (!Array.isArray(data)) return [];
 
-    // Fetch unique airline names in parallel
     const uniqueAirlines = Array.from(new Set(data.map((item: any) => item.AirlineID)));
     await Promise.all(uniqueAirlines.map(id => fetchAirlineName(id, token)));
 
     return data.map((item: any) => {
       const depTime = `${date}T${item.DepartureTime}`;
       const arrTime = `${date}T${item.ArrivalTime}`;
+      const names = airlineCache.get(item.AirlineID) || { zh: item.AirlineID, en: item.AirlineID };
 
       return {
-        airline: airlineCache.get(item.AirlineID) || item.AirlineID, 
+        airline: names.zh, 
         airlineID: item.AirlineID,
-        airlineNameZh: airlineCache.get(item.AirlineID),
+        airlineNameZh: names.zh,
+        airlineNameEn: names.en,
         flightNumber: item.FlightNumber,
         departureTime: depTime,
         arrivalTime: arrTime,
@@ -130,7 +133,11 @@ export async function fetchTdxFlights(
         arrivalAirport: item.ArrivalAirportID,
         terminal: item.Terminal || '',
         gate: '', 
-        status: (item.CodeShare && item.CodeShare.length > 0) ? 'Codeshare' : 'Scheduled'
+        status: (item.CodeShare && item.CodeShare.length > 0) ? 'Codeshare' : 'Scheduled',
+        baggage: {
+          carryOn: { count: 1, weight: '' },
+          checked: { count: 0, weight: '' }
+        }
       };
     });
   } catch (e) {

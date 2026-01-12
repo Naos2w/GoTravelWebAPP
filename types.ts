@@ -30,6 +30,7 @@ export interface FlightSegment {
   airline: string;
   airlineID?: string;
   airlineNameZh?: string;
+  airlineNameEn?: string;
   flightNumber: string;
   departureTime: string;
   arrivalTime: string;
