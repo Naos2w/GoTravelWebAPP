@@ -69,6 +69,7 @@ export interface FlightInfo {
 export interface ChecklistItem {
   id: string;
   trip_id?: string;
+  user_id?: string; // 新增：用於區分是誰的清單項目
   text: string;
   isCompleted: boolean;
   category: 'Documents' | 'Gear' | 'Toiletries' | 'Clothing' | 'Other';
@@ -79,6 +80,7 @@ export type TransportType = 'Public' | 'Car' | 'Bicycle' | 'Walking' | 'Flight';
 export interface ItineraryItem {
   id: string;
   trip_id?: string;
+  user_id?: string; // 新增：用於綁定行程建立者
   time: string;
   placeName: string;
   placeId?: string; 

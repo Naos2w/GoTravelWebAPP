@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Trip, FlightInfo, FlightSegment, Currency, User, Expense } from '../types';
+import { Trip, FlightInfo, FlightSegment, Currency, User, Expense, ItineraryItem } from '../types';
 import { 
   Plane, Save, Edit2, DollarSign, RefreshCw, X, Search, Loader2, Check, ChevronLeft, ShoppingBag, Lock, Plus, User as UserIcon, AlertCircle, Briefcase, Luggage
 } from 'lucide-react';
@@ -260,10 +261,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     const errs: { carryOn?: boolean; checked?: boolean } = {};
     const isWeightValid = (w: string) => w && w.replace(/[^0-9.]/g, '').length > 0;
     
-    // Strict Logic:
-    // 1. If Count > 0, Weight Must be valid.
-    // 2. If Weight is present (> 0 length), Count must be > 0.
-    
     if (bag.carryOn?.count > 0 && !isWeightValid(bag.carryOn.weight)) errs.carryOn = true;
     if (isWeightValid(bag.carryOn.weight) && bag.carryOn?.count <= 0) errs.carryOn = true;
 
@@ -271,6 +268,104 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     if (isWeightValid(bag.checked.weight) && bag.checked?.count <= 0) errs.checked = true;
 
     return errs;
+  };
+
+  // Helper to generate itinerary items from flight segment
+  const generateFlightItems = (segment: FlightSegment, travelerName: string): { date: string, items: ItineraryItem[] } | null => {
+      if (!segment.flightNumber || !currentUser) return null;
+      
+      const depDate = segment.departureTime.split('T')[0];
+      const items: ItineraryItem[] = [];
+      const noteSuffix = ` (${travelerName})`;
+
+      // 1. Departure Airport
+      items.push({
+          id: crypto.randomUUID(),
+          user_id: currentUser.id,
+          time: DateTimeUtils.formatTime24(segment.departureTime),
+          placeName: `${segment.departureAirport} Airport`,
+          type: 'Place',
+          transportType: 'Flight',
+          note: `Flight: ${segment.flightNumber}${noteSuffix}`,
+          date: depDate
+      });
+
+      // 2. Transport (Duration)
+      const calculateDuration = (start: string, end: string) => {
+        const s = new Date(start).getTime();
+        const e = new Date(end).getTime();
+        if (isNaN(s) || isNaN(e)) return '';
+        let diffMins = Math.floor((e - s) / 60000);
+        if (diffMins < 0) diffMins += 24 * 60; 
+        const h = Math.floor(diffMins / 60);
+        const m = diffMins % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+      };
+
+      const getMidPointTime = (t1: string, t2: string) => {
+        const [h1, m1] = t1.split(':').map(Number);
+        const [h2, m2] = t2.split(':').map(Number);
+        let min1 = h1 * 60 + m1;
+        let min2 = h2 * 60 + m2;
+        if (min2 < min1) min2 += 24 * 60;
+        const mid = Math.floor((min1 + min2) / 2) % (24 * 60);
+        return `${Math.floor(mid/60).toString().padStart(2, '0')}:${(mid%60).toString().padStart(2, '0')}`;
+      };
+
+      items.push({
+          id: crypto.randomUUID(),
+          user_id: currentUser.id,
+          time: getMidPointTime(DateTimeUtils.formatTime24(segment.departureTime), DateTimeUtils.formatTime24(segment.arrivalTime)),
+          placeName: 'Flight',
+          type: 'Transport',
+          transportType: 'Flight',
+          note: calculateDuration(segment.departureTime, segment.arrivalTime),
+          date: depDate
+      });
+
+      // 3. Arrival Airport
+      const arrDate = segment.arrivalTime.split('T')[0];
+      // Note: If arrival is on next day, the item still logically belongs to the flow, but usually we place it on arrival date.
+      // Current system maps items to dates. 
+      // If arrival is same day:
+      if (arrDate === depDate) {
+          items.push({
+              id: crypto.randomUUID(),
+              user_id: currentUser.id,
+              time: DateTimeUtils.formatTime24(segment.arrivalTime),
+              placeName: `${segment.arrivalAirport} Airport`,
+              type: 'Place',
+              transportType: 'Flight',
+              note: `Arrival${noteSuffix}`,
+              date: depDate
+          });
+          return { date: depDate, items };
+      } else {
+          // If arrival is next day, we might return just the dep+transport part for depDate
+          // And caller needs to handle arrival. 
+          // For simplicity in this iteration, we return items for depDate. 
+          // Arrival airport item for next day requires finding the next DayPlan.
+          // Let's stick to adding arrival to depDate strictly for visual flow if user mostly cares about "Flight Day"
+          // OR: split them. Let's start with simple: Add arrival to depDate list if simpler, 
+          // BUT `Itinerary` component splits by day.
+          
+          // Better Strategy: Return an array of {date, items} but the helper signature gets complex.
+          // Let's just return the items and let the caller inject them into the matching day in trip.itinerary
+          
+          const arrivalItem: ItineraryItem = {
+              id: crypto.randomUUID(),
+              user_id: currentUser.id,
+              time: DateTimeUtils.formatTime24(segment.arrivalTime),
+              placeName: `${segment.arrivalAirport} Airport`,
+              type: 'Place',
+              transportType: 'Flight',
+              note: `Arrival${noteSuffix}`,
+              date: arrDate
+          };
+          
+          // We return both sets flattened, with date property attached
+          return { date: 'SPLIT', items: [...items, arrivalItem] };
+      }
   };
 
   const handleSave = () => {
@@ -296,12 +391,42 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
 
     if (hasError) return;
     
+    // 1. Update Flights List
     let newFlights = [...(trip.flights || [])];
     const idx = newFlights.findIndex(f => f.id === tempFlightData.id);
     if (idx > -1) newFlights[idx] = tempFlightData;
     else newFlights.push(tempFlightData);
 
-    onUpdate({ ...trip, flights: newFlights });
+    // 2. Inject into Itinerary
+    let newItinerary = [...(trip.itinerary || [])];
+    
+    const injectItems = (segment: FlightSegment) => {
+       const res = generateFlightItems(segment, tempFlightData.traveler_name);
+       if (!res) return;
+       
+       res.items.forEach(item => {
+           // Find matching day
+           const dayIdx = newItinerary.findIndex(d => d.date === item.date);
+           if (dayIdx > -1) {
+               // Add item if not duplicate (simple check based on time and place)
+               // Note: This appends. It doesn't strictly sort/insert. Itinerary component sorts on render or transform.
+               // Ideally we push then sort.
+               const dayItems = [...newItinerary[dayIdx].items];
+               // Check duplicate?
+               const exists = dayItems.some(i => i.time === item.time && i.placeName === item.placeName && i.note === item.note);
+               if (!exists) {
+                   dayItems.push(item);
+                   dayItems.sort((a,b) => a.time.localeCompare(b.time));
+                   newItinerary[dayIdx] = { ...newItinerary[dayIdx], items: dayItems };
+               }
+           }
+       });
+    };
+
+    injectItems(tempFlightData.outbound);
+    if (tempFlightData.inbound) injectItems(tempFlightData.inbound);
+
+    onUpdate({ ...trip, flights: newFlights, itinerary: newItinerary });
     setEditingFlightId(null);
     setTempFlightData(null);
   };

@@ -13,6 +13,7 @@ import {
   saveTrip,
   deleteTrip,
   joinTrip,
+  leaveTrip,
   saveExpenseOnly,
   supabase,
 } from "./services/storageService";
@@ -52,7 +53,8 @@ import {
   AlertCircle,
   Map as MapIcon,
   Mail,
-  X as CloseIcon
+  X as CloseIcon,
+  Bell
 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 
@@ -105,6 +107,7 @@ const translations = {
     addFood: "新增餐廳",
     editActivity: "編輯行程",
     newActivity: "新增行程",
+    addChecklistItem: "新增項目",
     placeName: "地點名稱",
     time: "時間",
     note: "備註",
@@ -182,7 +185,10 @@ const translations = {
     owner: "擁有者",
     accessDenied: "存取被拒",
     askOwner: "請將此 Email 提供給擁有者以獲取權限：",
-    join: "加入旅程"
+    join: "加入旅程",
+    revoked: "您的權限已被移除",
+    spent: "已支出",
+    limit: "預算"
   },
   en: {
     appName: "Go Travel",
@@ -231,6 +237,7 @@ const translations = {
     addFood: "Add Food",
     editActivity: "Edit Item",
     newActivity: "New Item",
+    addChecklistItem: "Add Item",
     placeName: "Place Name",
     time: "Time",
     note: "Notes",
@@ -308,7 +315,10 @@ const translations = {
     owner: "Owner",
     accessDenied: "Access Denied",
     askOwner: "Please give this email to the owner to get access:",
-    join: "Join Trip"
+    join: "Join Trip",
+    revoked: "Access Revoked",
+    spent: "Spent",
+    limit: "Limit"
   },
 };
 
@@ -351,14 +361,43 @@ export const useTranslation = () => {
   return context;
 };
 
+const NotificationToast: React.FC<{
+  message: string;
+  type?: 'success' | 'error' | 'info';
+  onClose: () => void;
+}> = ({ message, type = 'info', onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColors = {
+    success: 'bg-green-500',
+    error: 'bg-red-500',
+    info: 'bg-slate-900 dark:bg-white'
+  };
+
+  const textColors = {
+    success: 'text-white',
+    error: 'text-white',
+    info: 'text-white dark:text-slate-900'
+  };
+
+  return (
+    <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] ${bgColors[type]} ${textColors[type]} px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-300`}>
+      {type === 'error' ? <AlertCircle size={18} /> : <Check size={18} />}
+      <span className="text-sm font-black tracking-wide">{message}</span>
+    </div>
+  );
+};
+
 const ShareModal: React.FC<{
   trip: Trip;
   onClose: () => void;
   onInvite: (email: string) => void;
   onRemoveInvite: (email: string) => void;
   copyLink: () => void;
-  copyFeedback: boolean;
-}> = ({ trip, onClose, onInvite, onRemoveInvite, copyLink, copyFeedback }) => {
+}> = ({ trip, onClose, onInvite, onRemoveInvite, copyLink }) => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
 
@@ -375,8 +414,8 @@ const ShareModal: React.FC<{
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('shareLink')}</label>
                 <div className="flex gap-2">
                    <div className="flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-mono text-slate-500 truncate select-all">{`${window.location.origin}/?tripId=${trip.id}`}</div>
-                   <button onClick={copyLink} className={`px-4 py-2 rounded-xl font-black text-xs transition-all ${copyFeedback ? 'bg-green-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                      {copyFeedback ? t('copied') : t('copy')}
+                   <button onClick={copyLink} className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-xl font-black text-xs transition-all hover:bg-slate-200 dark:hover:bg-slate-600">
+                      {t('copy')}
                    </button>
                 </div>
              </div>
@@ -451,7 +490,7 @@ const App: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("theme") as Theme) || "light");
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem("lang") as Language) || "zh");
-  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState("");
@@ -461,6 +500,8 @@ const App: React.FC = () => {
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
+
+  const currentTrip = trips.find((t) => t.id === currentTripId);
 
   useEffect(() => {
     if (!currentTripId) return;
@@ -540,6 +581,21 @@ const App: React.FC = () => {
 
   useEffect(() => { if (user) loadTrips(); }, [user]);
 
+  // Real-time access check
+  useEffect(() => {
+    if (currentTrip && user && currentTrip.user_id !== user.id) {
+       // If current user is not owner and not in allowed_emails anymore
+       if (!currentTrip.allowed_emails?.includes(user.email)) {
+          setNotification({ message: translations[language].revoked || "Access Revoked", type: 'error' });
+          setView('list');
+          setCurrentTripId(null);
+          // Remove from local state immediately so it disappears from the list
+          setTrips(prev => prev.filter(t => t.id !== currentTrip.id));
+          leaveTrip(currentTrip.id, user.id);
+       }
+    }
+  }, [currentTrip, user, language]);
+
   const loadTrips = async () => {
     if (!user) return;
     setError(null);
@@ -552,23 +608,39 @@ const App: React.FC = () => {
       if (sharedId) {
         const alreadyHas = allTrips.find(t => t.id === sharedId);
         if (!alreadyHas) {
-           const sharedTrip = await getTripById(sharedId);
+           let sharedTrip = await getTripById(sharedId);
            if (sharedTrip) {
               // Check if user is allowed to view/join
               const isOwner = sharedTrip.user_id === user.id;
               const isAllowed = sharedTrip.allowed_emails?.includes(user.email);
               
               if (isOwner || isAllowed) {
-                 allTrips.push(sharedTrip);
-                 // If not owner but allowed, auto join collaborators table
                  if (!isOwner && isAllowed) {
                     await joinTrip(sharedId, user.id);
+                    // Refresh trip data to get any generated checklist items
+                    const refreshed = await getTripById(sharedId);
+                    if (refreshed) sharedTrip = refreshed;
                  }
+                 allTrips.push(sharedTrip);
               }
            }
         }
       }
-      setTrips(allTrips);
+
+      // Filter and cleanup revoked trips
+      const validTrips = allTrips.filter(t => {
+         const isOwner = t.user_id === user.id;
+         const isAllowed = t.allowed_emails?.includes(user.email);
+         
+         if (isOwner || isAllowed) return true;
+         
+         // If we are here, we have the trip data (likely from trip_collaborators)
+         // but we are no longer allowed. Remove self from DB and filter from UI.
+         leaveTrip(t.id, user.id);
+         return false;
+      });
+
+      setTrips(validTrips);
     } catch (err: any) { 
       console.error(err);
       setError(err.message || "Failed to load trips");
@@ -599,7 +671,6 @@ const App: React.FC = () => {
     }
   };
 
-  const currentTrip = trips.find((t) => t.id === currentTripId);
   const isCreator = user && currentTrip && (currentTrip.user_id === user.id || !currentTrip.user_id);
   const isGuest = user && currentTrip && currentTrip.user_id !== user.id;
 
@@ -737,9 +808,20 @@ const App: React.FC = () => {
   const countdownPercent = daysDiff < 0 ? 0 : daysDiff > 30 ? 100 : (daysDiff / 30) * 100;
   const displayDays = Math.ceil(daysDiff);
 
-  const packingPercent = currentTrip?.checklist.length 
-      ? Math.round(currentTrip.checklist.filter(i => i.isCompleted).length / currentTrip.checklist.length * 100) 
-      : 0;
+  // Flight Info Extraction
+  const primaryFlight = currentTrip?.flights?.[0]; // Default to first flight, usually owner's
+  const myFlight = user && currentTrip?.flights?.find(f => f.user_id === user.id);
+  const displayFlight = myFlight || primaryFlight;
+  const arrivalCode = displayFlight?.outbound?.arrivalAirport || "";
+  
+  // Filter packing percent by current user
+  const packingPercent = useMemo(() => {
+      if (!currentTrip || !user) return 0;
+      // Filter items belonging to current user only
+      const myItems = currentTrip.checklist.filter(i => i.user_id === user.id);
+      if (myItems.length === 0) return 0;
+      return Math.round(myItems.filter(i => i.isCompleted).length / myItems.length * 100);
+  }, [currentTrip, user]);
       
   const chartData = useMemo(() => {
     if (!currentTrip) return [];
@@ -770,15 +852,17 @@ const App: React.FC = () => {
      return allItems.sort((a,b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime()).slice(0, 5);
   }, [currentTrip]);
   
+  // Filter checklist stats by current user
   const checklistStats = useMemo(() => {
-      if (!currentTrip) return [];
+      if (!currentTrip || !user) return [];
       const cats = ['Documents', 'Gear', 'Clothing', 'Toiletries', 'Other'];
       return cats.map(c => {
-          const items = currentTrip.checklist.filter(i => i.category === c);
+          // Filter items belonging to current user only
+          const items = currentTrip.checklist.filter(i => i.category === c && i.user_id === user.id);
           const completed = items.filter(i => i.isCompleted).length;
           return { category: c, total: items.length, completed };
       }).filter(c => c.total > 0);
-  }, [currentTrip]);
+  }, [currentTrip, user]);
 
   const collaboratorCount = useMemo(() => {
      if (!currentTrip) return 0;
@@ -832,10 +916,18 @@ const App: React.FC = () => {
   const MobileHero = () => (
     <div className="md:hidden space-y-4 mb-6">
       {/* Updated Hero Card - Removed Images, Added Gradient */}
-      <div className={`w-full rounded-[32px] p-8 shadow-ios border border-slate-100 dark:border-slate-700 bg-gradient-to-br ${getGradient(currentTrip?.destination || '')}`}>
+      <div className={`w-full rounded-[32px] p-8 shadow-ios border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}>
          <div className="flex flex-col gap-2">
-            <h2 className="text-4xl font-black text-white tracking-tighter">{currentTrip?.destination}</h2>
-            <div className="flex items-center gap-2 text-white/80 text-[10px] font-bold uppercase tracking-widest">
+            <div className="flex justify-between items-start">
+               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('destination')}</div>
+               {displayFlight && (
+                  <div className="text-[10px] font-black bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-lg text-slate-600 dark:text-white flex items-center gap-1">
+                     <Plane size={10}/> {displayFlight.outbound.flightNumber}
+                  </div>
+               )}
+            </div>
+            <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{currentTrip?.destination}</h2>
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
               <Calendar size={12}/> {currentTrip?.startDate} — {currentTrip?.endDate}
             </div>
          </div>
@@ -858,14 +950,16 @@ const App: React.FC = () => {
           <div onClick={() => !isGuest && setIsEditingBudget(true)} className={!isGuest ? "cursor-pointer active:opacity-70 transition-opacity" : ""}>
              <div className="flex justify-between items-end mb-2">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">{t("budgetStatus")} {!isGuest && <Edit2 size={10}/>}</span>
-                <span className="text-xs font-black text-slate-900 dark:text-white">{Math.round(budgetPercent)}%</span>
+                <span className="text-xs font-black text-slate-900 dark:text-white">
+                  {(spentTotal / 1000).toFixed(1)}k / {(budgetLimit / 1000).toFixed(1)}k ({Math.round(budgetPercent)}%)
+                </span>
              </div>
              <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${spentTotal > budgetLimit ? "bg-red-500" : "bg-indigo-500"}`} style={{width: `${budgetPercent}%`}} />
              </div>
           </div>
 
-          {/* Packing */}
+          {/* Packing - Uses the user-filtered packingPercent */}
           <div>
              <div className="flex justify-between items-end mb-2">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("packingProgress")}</span>
@@ -947,6 +1041,9 @@ const App: React.FC = () => {
   return (
     <LocalizationContext.Provider value={{ t, language, setLanguage }}>
       <div className={`min-h-screen transition-all duration-500 ${theme === "dark" ? "dark bg-[#1C1C1E] text-slate-100" : "bg-[#FBFBFD] text-slate-900"}`}>
+        
+        {notification && <NotificationToast message={notification.message} type={notification.type} onClose={() => setNotification(null)} />}
+
         {view === "landing" && (
           <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] -z-10" />
@@ -1015,22 +1112,27 @@ const App: React.FC = () => {
                   <div className="hidden md:grid grid-cols-12 grid-rows-2 gap-6 h-[700px]">
                     
                     {/* 1. Main Hero (Smaller) - Col 6 - Clean Design (Replaced Image with Gradient) */}
-                    <div className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group shadow-ios-lg p-12 flex flex-col justify-between border border-slate-100 dark:border-slate-700 bg-gradient-to-br ${getGradient(currentTrip.destination)}`}>
+                    <div className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group shadow-ios-lg p-12 flex flex-col justify-between border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}>
                        <div>
-                          <div className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-4">{t('destination')}</div>
-                          <h2 className="text-6xl font-black text-white tracking-tighter mb-2 leading-[0.9]">{currentTrip.destination}</h2>
+                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Trip to {arrivalCode}</div>
+                          <h2 className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 leading-[0.9]">{currentTrip.destination}</h2>
                        </div>
                        <div>
-                          <div className="flex items-center gap-3 text-white/80 font-bold uppercase tracking-[0.2em] text-xs">
+                          <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">
                              <Calendar size={14}/> {currentTrip.startDate} — {currentTrip.endDate}
                           </div>
-                          <div className="mt-4 flex gap-2">
-                             {currentTrip.flights && currentTrip.flights.length > 0 && (
-                                <div className="text-[10px] font-black bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-full text-white">
-                                   {currentTrip.flights[0].outbound.airline}
-                                </div>
-                             )}
-                          </div>
+                          {displayFlight && (
+                            <div className="mt-4 flex gap-2">
+                               <div className="text-[10px] font-black bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-full text-slate-600 dark:text-white flex items-center gap-2">
+                                  <Plane size={12}/> {displayFlight.outbound.flightNumber}
+                               </div>
+                               {displayFlight.inbound?.flightNumber && (
+                                 <div className="text-[10px] font-black bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-full text-slate-600 dark:text-white flex items-center gap-2">
+                                    <Plane size={12} className="rotate-180"/> {displayFlight.inbound.flightNumber}
+                                 </div>
+                               )}
+                            </div>
+                          )}
                        </div>
                     </div>
 
@@ -1049,8 +1151,8 @@ const App: React.FC = () => {
                                 <div className={`h-full ${spentTotal > budgetLimit ? "bg-red-500" : "bg-indigo-500"}`} style={{width: `${budgetPercent}%`}}/>
                             </div>
                             <div className="flex justify-between mt-2 text-xs font-bold text-slate-400">
-                                <span>Spent: ${(spentTotal/1000).toFixed(1)}k</span>
-                                <span>Limit: ${(budgetLimit/1000).toFixed(1)}k</span>
+                                <span>{t('spent')}: ${(spentTotal/1000).toFixed(1)}k</span>
+                                <span>{t('limit')}: ${(budgetLimit/1000).toFixed(1)}k</span>
                             </div>
                         </div>
                     </div>
@@ -1078,11 +1180,11 @@ const App: React.FC = () => {
                     <div className="col-span-4 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-8 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col overflow-hidden">
                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><MapPin size={14}/> {t("upcomingSchedule")}</div>
                        <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
-                           {upcomingItems.slice(0,3).map((item, i) => (
+                           {upcomingItems.slice(0,5).map((item, i) => (
                                <div key={i} className="flex gap-4 group cursor-pointer" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')}>
                                    <div className="flex flex-col items-center">
                                        <div className="w-2 h-2 rounded-full bg-primary mt-1.5"/>
-                                       {i !== 2 && <div className="w-0.5 flex-1 bg-slate-100 dark:bg-slate-700 my-1"/>}
+                                       {i !== 4 && <div className="w-0.5 flex-1 bg-slate-100 dark:bg-slate-700 my-1"/>}
                                    </div>
                                    <div>
                                        <div className="text-sm font-black text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">{item.placeName}</div>
@@ -1148,8 +1250,7 @@ const App: React.FC = () => {
                    onClose={() => setIsShareModalOpen(false)}
                    onInvite={handleInvite}
                    onRemoveInvite={handleRemoveInvite}
-                   copyLink={() => { navigator.clipboard.writeText(`${window.location.origin}/?tripId=${currentTrip.id}`); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}
-                   copyFeedback={copyFeedback}
+                   copyLink={() => { navigator.clipboard.writeText(`${window.location.origin}/?tripId=${currentTrip.id}`); setNotification({ message: t('copied'), type: 'success' }); }}
                 />
             )}
 
@@ -1209,7 +1310,7 @@ const App: React.FC = () => {
                <button onClick={() => setShowCreateForm(true)} className="bg-primary text-white px-8 py-5 rounded-[24px] flex items-center gap-2 font-black text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all"><Plus size={20} /> {t("newTrip")}</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-              {trips.map((trip) => (
+              {trips.filter(t => t.user_id === user?.id || t.allowed_emails?.includes(user?.email || '')).map((trip) => (
                 <div key={trip.id} onClick={() => { setCurrentTripId(trip.id); setView("detail"); }} className="group bg-white dark:bg-slate-800 rounded-[56px] shadow-ios overflow-hidden cursor-pointer transition-all hover:-translate-y-4 hover:shadow-ios-lg">
                   <div className={`h-72 relative overflow-hidden bg-gradient-to-br ${getGradient(trip.destination)} flex flex-col justify-end p-12 transition-all duration-1000 group-hover:scale-105`}>
                      <h3 className="text-white text-4xl font-black truncate mb-1">{trip.name}</h3>

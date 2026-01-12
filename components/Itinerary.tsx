@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Trip, DayPlan, ItineraryItem, TransportType } from '../types';
+import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
@@ -7,6 +8,7 @@ import {
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from '../App';
+import { supabase } from '../services/storageService';
 
 interface Props {
   trip: Trip;
@@ -57,6 +59,7 @@ const TimePicker: React.FC<{
 
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
   const [showTransportPickerId, setShowTransportPickerId] = useState<string | null>(null);
@@ -73,6 +76,19 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const scrollAnchorRef = useRef<string | null>(null);
   const editRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({data}) => {
+       if (data.user) {
+          setCurrentUser({
+             id: data.user.id,
+             name: data.user.user_metadata.full_name,
+             email: data.user.email!,
+             picture: data.user.user_metadata.avatar_url
+          });
+       }
+    });
+  }, []);
 
   const TRANSPORT_OPTIONS: { type: TransportType; label: string; icon: any; color: string }[] = [
     { type: 'Public', label: t('transportPublic'), icon: TrainFront, color: 'text-indigo-600 dark:text-indigo-400' },
@@ -150,7 +166,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   };
 
   const handleOpenAddForm = (type: 'Place' | 'Food') => {
-    if (isGuest) return;
+    if (isGuest || !currentUser) return;
     setIsAddingNew(true);
     let defaultTime = '09:00';
     if (currentDay.items.length > 0) {
@@ -166,6 +182,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     }
     setEditingItem({
       id: crypto.randomUUID(),
+      user_id: currentUser.id,
       time: defaultTime,
       placeName: '',
       type,
@@ -268,7 +285,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   };
 
   const handleInsertTransport = (index: number, type: TransportType) => {
-    if (isGuest) return;
+    if (isGuest || !currentUser) return;
     const currentItems = [...currentDay.items];
     const prev = currentItems[index];
     const next = currentItems[index + 1];
@@ -277,6 +294,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     // Create temp transport
     const tempTransport: ItineraryItem = {
       id: crypto.randomUUID(),
+      user_id: currentUser.id,
       time: '',
       placeName: t('moving'),
       type: 'Transport',
