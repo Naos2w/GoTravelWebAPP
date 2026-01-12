@@ -366,7 +366,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate }) => {
                           e.stopPropagation();
                           deleteItem(item.id);
                         }}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-all opacity-0 group-item-hover:opacity-100"
+                        className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"
                       >
                         <Trash2 size={16} />
                       </button>
