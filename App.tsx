@@ -8,7 +8,9 @@ import React, {
 import { Trip, Currency, Theme, Language, User } from "./types";
 import {
   getTrips,
+  getTripById,
   saveTrip,
+  saveExpenseOnly,
   deleteTrip,
   exportData,
   supabase,
@@ -34,7 +36,6 @@ import {
   Sun,
   Languages,
   Cloud,
-  Download,
   Share2,
   Luggage,
   Sparkles,
@@ -159,9 +160,10 @@ const App: React.FC = () => {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [currentTripId, setCurrentTripId] = useState<string | null>(() =>
-    sessionStorage.getItem("currentTripId")
-  );
+  const [currentTripId, setCurrentTripId] = useState<string | null>(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get("tripId") || sessionStorage.getItem("currentTripId");
+  });
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "itinerary" | "checklist" | "expenses" | "flights"
@@ -181,15 +183,90 @@ const App: React.FC = () => {
 
   const saveTimeoutRef = useRef<number | null>(null);
 
+  // --- Real-time Sync logic optimized ---
+  useEffect(() => {
+    if (!currentTripId) return;
+
+    const refreshActiveTrip = async () => {
+      // 僅針對當前正在看的旅程進行局部更新，效率更高
+      const updatedTrip = await getTripById(currentTripId);
+      if (updatedTrip) {
+        setTrips((prev) =>
+          prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
+        );
+      }
+    };
+
+    const channel = supabase
+      .channel(`trip-sync-${currentTripId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trips",
+          filter: `id=eq.${currentTripId}`,
+        },
+        refreshActiveTrip
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "checklist_items",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        refreshActiveTrip
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "itinerary_items",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        refreshActiveTrip
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "expenses",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        refreshActiveTrip
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTripId]);
+
   useEffect(() => {
     sessionStorage.setItem("appView", view);
   }, [view]);
+
   useEffect(() => {
-    if (currentTripId) sessionStorage.setItem("currentTripId", currentTripId);
+    if (currentTripId) {
+      sessionStorage.setItem("currentTripId", currentTripId);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tripId", currentTripId);
+      window.history.replaceState({}, "", url);
+    } else {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tripId");
+      window.history.replaceState({}, "", url);
+    }
   }, [currentTripId]);
+
   useEffect(() => {
     localStorage.setItem("lang", language);
   }, [language]);
+
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
@@ -269,7 +346,13 @@ const App: React.FC = () => {
       email: supabaseUser.email!,
       picture: supabaseUser.user_metadata.avatar_url || "",
     });
-    setView((prev) => (prev === "landing" ? "list" : prev));
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("tripId")) {
+      setView("detail");
+    } else {
+      setView((prev) => (prev === "landing" ? "list" : prev));
+    }
   };
 
   useEffect(() => {
@@ -278,10 +361,19 @@ const App: React.FC = () => {
 
   const loadTrips = async () => {
     if (!user) return;
-    setIsLoading(true);
     try {
-      const cloudTrips = await getTrips(user.id);
-      setTrips(cloudTrips);
+      const userTrips = await getTrips(user.id);
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const sharedId = urlParams.get("tripId");
+
+      let allTrips = [...userTrips];
+      if (sharedId && !userTrips.find((t) => t.id === sharedId)) {
+        const sharedTrip = await getTripById(sharedId);
+        if (sharedTrip) allTrips.push(sharedTrip);
+      }
+
+      setTrips(allTrips);
     } catch (err) {
       console.error(err);
     } finally {
@@ -290,12 +382,17 @@ const App: React.FC = () => {
   };
 
   const currentTrip = trips.find((t) => t.id === currentTripId);
+  const isCreator =
+    user &&
+    currentTrip &&
+    (currentTrip.user_id === user.id || !currentTrip.user_id);
+  const isGuest = user && currentTrip && currentTrip.user_id !== user.id;
 
   useEffect(() => {
     if (currentTrip) {
       load7DayWeather();
     }
-  }, [currentTripId, trips]);
+  }, [currentTripId]);
 
   const load7DayWeather = async () => {
     if (!currentTrip) return;
@@ -319,32 +416,43 @@ const App: React.FC = () => {
     }
   };
 
-  const isCreator =
-    user &&
-    currentTrip &&
-    (currentTrip.user_id === user.id || !currentTrip.user_id);
-  const isFlightMissing =
-    currentTrip && (!currentTrip.flight || currentTrip.flight.price === 0);
   const t = (key: keyof typeof translations.en) =>
     translations[language][key] || translations.en[key];
 
   const updateCurrentTrip = (updatedTrip: Trip) => {
     if (!user) return;
+
+    // UI 先行更新（這會讓操作的人立刻看到結果）
     setTrips((prev) =>
       prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
     );
+
     if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+
     saveTimeoutRef.current = window.setTimeout(async () => {
       setIsSyncing(true);
       try {
-        await saveTrip(updatedTrip, user.id);
+        if (isGuest) {
+          // 協作者：找出最新的一筆支出項目並單獨儲存
+          const originalTrip = trips.find((t) => t.id === updatedTrip.id);
+          if (
+            originalTrip &&
+            updatedTrip.expenses.length > originalTrip.expenses.length
+          ) {
+            const newExpense = updatedTrip.expenses[0];
+            await saveExpenseOnly(updatedTrip.id, newExpense);
+          }
+        } else {
+          // 擁有者：完整同步
+          await saveTrip(updatedTrip, user.id);
+        }
       } catch (err) {
-        console.error(err);
+        console.error("Save failed:", err);
       } finally {
         setIsSyncing(false);
         saveTimeoutRef.current = null;
       }
-    }, 1000);
+    }, 800);
   };
 
   const handleCreateTripSubmit = async (newTrip: Trip) => {
@@ -420,14 +528,9 @@ const App: React.FC = () => {
   const tabs = [
     { id: "dashboard", label: t("overview"), icon: LayoutDashboard },
     { id: "itinerary", label: t("itinerary"), icon: Calendar },
-    {
-      id: "checklist",
-      label: t("checklist"),
-      icon: CheckSquare,
-      restricted: true,
-    },
+    { id: "checklist", label: t("checklist"), icon: CheckSquare },
     { id: "expenses", label: t("expenses"), icon: DollarSign },
-    { id: "flights", label: t("tickets"), icon: Plane, restricted: true },
+    { id: "flights", label: t("tickets"), icon: Plane },
   ];
 
   const getDaysLeft = () => {
@@ -479,7 +582,6 @@ const App: React.FC = () => {
       >
         {view === "detail" && currentTrip && (
           <div className="min-h-screen flex flex-col pb-24 sm:pb-0">
-            {/* Desktop Navigation Header */}
             <nav className="hidden sm:flex bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-40 h-20 items-center px-8">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-4 min-w-0">
@@ -493,17 +595,22 @@ const App: React.FC = () => {
                     <ChevronLeft size={22} />
                   </button>
                   <div className="truncate">
-                    <input
-                      disabled={!isCreator}
-                      value={currentTrip.name}
-                      onChange={(e) =>
-                        updateCurrentTrip({
-                          ...currentTrip,
-                          name: e.target.value,
-                        })
-                      }
-                      className="text-xl font-black bg-transparent outline-none hover:bg-slate-100/10"
-                    />
+                    {isCreator ? (
+                      <input
+                        value={currentTrip.name}
+                        onChange={(e) =>
+                          updateCurrentTrip({
+                            ...currentTrip,
+                            name: e.target.value,
+                          })
+                        }
+                        className="text-xl font-black bg-transparent outline-none hover:bg-slate-100/10"
+                      />
+                    ) : (
+                      <div className="text-xl font-black">
+                        {currentTrip.name}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         {currentTrip.destination}
@@ -520,34 +627,18 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3">
                   <div className="flex bg-slate-100/60 dark:bg-slate-800/60 p-1.5 rounded-2xl">
                     {tabs.map((tab) => {
-                      const isLocked =
-                        (isFlightMissing &&
-                          !["flights", "dashboard"].includes(tab.id)) ||
-                        (tab.restricted && !isCreator);
                       const isActive = activeTab === tab.id;
                       return (
                         <button
                           key={tab.id}
-                          onClick={() =>
-                            !isLocked && setActiveTab(tab.id as any)
-                          }
-                          disabled={isLocked}
+                          onClick={() => setActiveTab(tab.id as any)}
                           className={`px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
                             isActive
                               ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios"
-                              : isLocked
-                              ? "opacity-30"
                               : "text-slate-500 hover:bg-slate-100"
                           }`}
                         >
-                          {isLocked ? (
-                            <Lock size={14} className="text-slate-300" />
-                          ) : (
-                            <tab.icon
-                              size={16}
-                              strokeWidth={isActive ? 3 : 2}
-                            />
-                          )}
+                          <tab.icon size={16} strokeWidth={isActive ? 3 : 2} />
                           <span className="hidden lg:inline">{tab.label}</span>
                         </button>
                       );
@@ -555,7 +646,9 @@ const App: React.FC = () => {
                   </div>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(window.location.href);
+                      const url = new URL(window.location.href);
+                      url.searchParams.set("tripId", currentTrip.id);
+                      navigator.clipboard.writeText(url.toString());
                       setCopyFeedback(true);
                       setTimeout(() => setCopyFeedback(false), 2000);
                     }}
@@ -573,7 +666,6 @@ const App: React.FC = () => {
               </div>
             </nav>
 
-            {/* Mobile Header */}
             <nav className="sm:hidden sticky top-0 z-40 bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-3xl px-6 py-4 flex justify-between items-center border-b border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => {
@@ -587,7 +679,9 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2 -mr-2">
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(window.location.href);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("tripId", currentTrip.id);
+                    navigator.clipboard.writeText(url.toString());
                     setCopyFeedback(true);
                     setTimeout(() => setCopyFeedback(false), 2000);
                   }}
@@ -606,30 +700,23 @@ const App: React.FC = () => {
             <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
               {activeTab === "dashboard" && (
                 <div className="space-y-8 sm:space-y-16 animate-in fade-in slide-in-from-bottom-3 duration-700">
-                  {/* Integrated Mobile Hero Block */}
                   <div className="bg-white dark:bg-slate-800 rounded-[48px] sm:rounded-[64px] p-8 sm:p-20 shadow-ios-lg border border-slate-100 dark:border-slate-800 overflow-hidden relative group">
                     <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] -mr-[250px] -mt-[250px] transition-all duration-1000 group-hover:scale-110" />
                     <div className="relative z-10">
                       <h2 className="text-4xl sm:text-8xl font-black tracking-tighter mb-6 text-slate-900 dark:text-white leading-tight">
                         {currentTrip.destination}
                       </h2>
-
                       <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-                        {/* Desktop Timeline Display */}
                         <div className="hidden sm:flex text-base font-black text-slate-400 uppercase tracking-[0.3em] items-center gap-3">
                           <Calendar size={14} className="text-primary" />{" "}
                           {currentTrip.startDate} — {currentTrip.endDate}
                         </div>
-
-                        {/* Mobile Integrated Panel (Refined Grid) */}
                         <div className="sm:hidden flex flex-col gap-6 p-6 bg-slate-50/70 dark:bg-slate-900/40 rounded-[32px] border border-slate-100 dark:border-slate-700/50 backdrop-blur-md">
                           <div className="flex items-center gap-3 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.2em]">
                             <Calendar size={12} className="text-primary" />{" "}
                             {currentTrip.startDate} — {currentTrip.endDate}
                           </div>
-
                           <div className="grid grid-cols-3 gap-2 px-1">
-                            {/* Countdown */}
                             <div className="flex flex-col items-center gap-1.5 border-r border-slate-200 dark:border-slate-700/50">
                               <div className="flex items-center gap-1.5">
                                 <Clock size={12} className="text-blue-500" />
@@ -644,8 +731,6 @@ const App: React.FC = () => {
                                 />
                               </div>
                             </div>
-
-                            {/* Packing */}
                             <div className="flex flex-col items-center gap-1.5 border-r border-slate-200 dark:border-slate-700/50">
                               <div className="flex items-center gap-1.5">
                                 <Luggage size={12} className="text-green-500" />
@@ -660,15 +745,13 @@ const App: React.FC = () => {
                                 />
                               </div>
                             </div>
-
-                            {/* Budget (Fixed Overflow) */}
                             <div className="flex flex-col items-center gap-1.5">
                               <button
-                                disabled={!isCreator}
-                                onClick={() => {
-                                  setTempBudget(budgetLimit);
-                                  setIsEditingBudget(true);
-                                }}
+                                onClick={() =>
+                                  isCreator &&
+                                  (setTempBudget(budgetLimit),
+                                  setIsEditingBudget(true))
+                                }
                                 className="flex items-center gap-1 min-w-0 max-w-full px-1 group/coin active:scale-95 transition-all"
                               >
                                 <Coins
@@ -723,7 +806,6 @@ const App: React.FC = () => {
                         {t("countdown")}
                       </span>
                     </div>
-
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-3xl p-10 sm:p-14 rounded-[56px] shadow-ios border border-slate-50 dark:border-slate-800/50 flex flex-col items-center group transition-all hover:scale-[1.02] hover:shadow-ios-lg">
                       <div className="w-24 h-24 rounded-[32px] bg-green-500/10 text-green-500 flex items-center justify-center mb-8 transition-all duration-500 group-hover:bg-green-500 group-hover:text-white">
                         <Luggage size={48} strokeWidth={2.5} />
@@ -742,7 +824,6 @@ const App: React.FC = () => {
                         {t("packingProgress")}
                       </span>
                     </div>
-
                     <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-3xl p-10 sm:p-14 rounded-[56px] shadow-ios border border-slate-50 dark:border-slate-800/50 flex flex-col items-center group transition-all hover:scale-[1.02] hover:shadow-ios-lg relative overflow-hidden">
                       <div className="w-24 h-24 rounded-[32px] bg-indigo-500/10 text-indigo-500 flex items-center justify-center mb-8 transition-all duration-500 group-hover:bg-indigo-500 group-hover:text-white">
                         <Wallet size={48} strokeWidth={2.5} />
@@ -768,10 +849,9 @@ const App: React.FC = () => {
                       </span>
                       {isCreator && (
                         <button
-                          onClick={() => {
-                            setTempBudget(budgetLimit);
-                            setIsEditingBudget(true);
-                          }}
+                          onClick={() => (
+                            setTempBudget(budgetLimit), setIsEditingBudget(true)
+                          )}
                           className="absolute bottom-6 right-6 p-3 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-primary transition-all active:scale-90"
                         >
                           <Edit2 size={16} />
@@ -822,20 +902,20 @@ const App: React.FC = () => {
                                 <div className="font-black text-lg text-slate-900 dark:text-white truncate">
                                   {it.placeName}
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
                                   {it.dDate} • {it.time}
                                 </div>
                               </div>
                               <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
+                                onClick={(e) => (
+                                  e.stopPropagation(),
                                   window.open(
                                     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                                       it.placeName
                                     )}`,
                                     "_blank"
-                                  );
-                                }}
+                                  )
+                                )}
                                 className="p-3 bg-white dark:bg-slate-700 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-xl shadow-sm border border-slate-100 dark:border-slate-600 transition-all active:scale-90"
                               >
                                 <Map size={18} />
@@ -845,7 +925,6 @@ const App: React.FC = () => {
                         })()}
                       </div>
                     </div>
-
                     <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 sm:p-16 shadow-ios border border-slate-100 dark:border-slate-800">
                       <div className="flex justify-between items-center mb-10">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-3">
@@ -893,43 +972,47 @@ const App: React.FC = () => {
                 </div>
               )}
 
+              {/* 移除 pointer-events-none 與 opacity-90，改為組件內部的控制 */}
               {activeTab === "itinerary" && (
-                <Itinerary trip={currentTrip} onUpdate={updateCurrentTrip} />
+                <Itinerary
+                  trip={currentTrip}
+                  onUpdate={updateCurrentTrip}
+                  isGuest={isGuest}
+                />
               )}
               {activeTab === "checklist" && (
-                <Checklist trip={currentTrip} onUpdate={updateCurrentTrip} />
+                <Checklist
+                  trip={currentTrip}
+                  onUpdate={updateCurrentTrip}
+                  isGuest={isGuest}
+                />
               )}
               {activeTab === "expenses" && (
-                <Expenses trip={currentTrip} onUpdate={updateCurrentTrip} />
+                <Expenses
+                  trip={currentTrip}
+                  onUpdate={updateCurrentTrip}
+                  isGuest={isGuest}
+                />
               )}
               {activeTab === "flights" && (
                 <FlightManager
                   trip={currentTrip}
                   onUpdate={updateCurrentTrip}
+                  isGuest={isGuest}
                 />
               )}
             </main>
 
-            {/* Symmetrical Mobile Bottom Navigation */}
             <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-3xl border-t border-slate-100 dark:border-slate-800 px-6 py-4 shadow-[0_-10px_40px_rgba(0,0,0,0.06)]">
               <div className="flex justify-between items-center max-w-md mx-auto">
                 {tabs.map((tab) => {
-                  const isLocked =
-                    (isFlightMissing &&
-                      !["flights", "dashboard"].includes(tab.id)) ||
-                    (tab.restricted && !isCreator);
                   const isActive = activeTab === tab.id;
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => !isLocked && setActiveTab(tab.id as any)}
-                      disabled={isLocked}
+                      onClick={() => setActiveTab(tab.id as any)}
                       className={`flex flex-col items-center transition-all duration-300 ${
-                        isActive
-                          ? "text-primary"
-                          : isLocked
-                          ? "text-slate-200 opacity-30"
-                          : "text-slate-400"
+                        isActive ? "text-primary" : "text-slate-400"
                       }`}
                     >
                       <div
@@ -937,11 +1020,7 @@ const App: React.FC = () => {
                           isActive ? "bg-primary/10" : ""
                         }`}
                       >
-                        {isLocked ? (
-                          <Lock size={20} />
-                        ) : (
-                          <tab.icon size={24} strokeWidth={isActive ? 3 : 2} />
-                        )}
+                        <tab.icon size={24} strokeWidth={isActive ? 3 : 2} />
                       </div>
                     </button>
                   );
@@ -949,7 +1028,6 @@ const App: React.FC = () => {
               </div>
             </nav>
 
-            {/* Budget Overlay */}
             {isEditingBudget && (
               <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
                 <div className="bg-white dark:bg-slate-800 p-10 rounded-[48px] shadow-2xl w-full max-w-sm border border-slate-100 dark:border-slate-700">
@@ -999,7 +1077,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Other Views */}
         {view === "landing" && (
           <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] relative overflow-hidden">
             <header className="p-6 flex justify-between items-center relative z-50">
