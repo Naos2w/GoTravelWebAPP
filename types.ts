@@ -10,6 +10,13 @@ export enum Currency {
 export type Theme = 'light' | 'dark';
 export type Language = 'zh' | 'en';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  picture: string;
+}
+
 export interface BaggageInfo {
   carryOn: { count: number; weight: string };
   checked: { count: number; weight: string };
@@ -21,9 +28,9 @@ export interface Expense {
   currency: Currency;
   category: 'Accommodation' | 'Transport' | 'Food' | 'Tickets' | 'Shopping' | 'Other';
   date: string;
-  createdAt: string; // 新增：記錄建立時間
+  createdAt: string; 
   note: string;
-  exchangeRate: number; // Rate to TWD at time of entry
+  exchangeRate: number; 
 }
 
 export interface FlightSegment {
@@ -79,8 +86,8 @@ export interface DayPlan {
 export interface Trip {
   id: string;
   name: string;
-  startDate: string; // ISO Date
-  endDate: string; // ISO Date
+  startDate: string; 
+  endDate: string; 
   destination: string;
   coverImage: string;
   flight?: FlightInfo;
@@ -97,5 +104,6 @@ declare global {
 
   interface Window {
     aistudio?: AIStudio;
+    google?: any;
   }
 }

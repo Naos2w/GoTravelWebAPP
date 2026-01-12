@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Go Travel - Your Journey Starts Here</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -15,7 +16,6 @@
             colors: {
               primary: '#007AFF',
               secondary: '#5856D6',
-              // 更新為更明亮的淺色底色
               background: {
                 light: '#FBFBFD', 
                 dark: '#1C1C1E'
@@ -47,7 +47,6 @@
         background-color: #1C1C1E;
         color: #F5F5F7;
       }
-      /* Hide scrollbar for clean UI but allow scrolling */
       .no-scrollbar::-webkit-scrollbar {
         display: none;
       }
