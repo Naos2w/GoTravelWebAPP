@@ -69,15 +69,25 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     confirmDelete: t('confirmDeleteItems')
   };
 
-  // Filter items that belong to the current user
-  const myItems = trip.checklist.filter(i => currentUser && i.user_id === currentUser.id);
+  // Optimistic UI state
+  const [optimisticChecklist, setOptimisticChecklist] = useState<ChecklistItem[]>(trip.checklist);
+
+  useEffect(() => {
+    setOptimisticChecklist(trip.checklist);
+  }, [trip.checklist]);
+
+  // Filter items that belong to the current user (using optimistic state)
+  const myItems = optimisticChecklist.filter(i => currentUser && i.user_id === currentUser.id);
 
   const toggleItem = (itemId: string) => {
-    // No guest restriction here because it's their own list
-    const newChecklist = trip.checklist.map(item => 
+    // 1. Optimistic update immediately
+    const updatedList = optimisticChecklist.map(item => 
       item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
     );
-    onUpdate({ ...trip, checklist: newChecklist });
+    setOptimisticChecklist(updatedList);
+
+    // 2. Persist to server
+    onUpdate({ ...trip, checklist: updatedList });
   };
 
   const addItem = () => {
@@ -89,14 +99,26 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
       isCompleted: false,
       category,
     };
-    onUpdate({ ...trip, checklist: [...trip.checklist, newItem] });
+    // Update local optimistic state first
+    const updatedList = [...optimisticChecklist, newItem];
+    setOptimisticChecklist(updatedList);
+    
+    // Sync with server
+    onUpdate({ ...trip, checklist: updatedList });
+    
     setNewItemText('');
     setIsFormOpen(false);
   };
 
   const deleteItem = (itemId: string) => {
     if (!window.confirm(labels.confirmDelete)) return;
-    onUpdate({ ...trip, checklist: trip.checklist.filter(i => i.id !== itemId) });
+    
+    // Update local optimistic state first
+    const updatedList = optimisticChecklist.filter(i => i.id !== itemId);
+    setOptimisticChecklist(updatedList);
+
+    // Sync with server
+    onUpdate({ ...trip, checklist: updatedList });
   };
 
   const toggleExpand = (cat: string) => {
@@ -158,15 +180,15 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                      {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
                    </select>
                  </div>
+                 <button 
+                   onClick={addItem} 
+                   className="h-14 sm:h-auto px-8 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-widest"
+                 >
+                   {labels.confirm}
+                 </button>
                </div>
                
                <div className="flex gap-3 mt-6">
-                 <button 
-                   onClick={addItem} 
-                   className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-2xl font-black shadow-xl transition-all active:scale-95 hover:bg-primary dark:hover:bg-primary dark:hover:text-white flex items-center justify-center gap-2"
-                 >
-                   <Plus size={20} /> {labels.confirm}
-                 </button>
                  <button 
                    onClick={() => setIsFormOpen(false)} 
                    className="px-6 py-4 bg-slate-200/50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
