@@ -1,13 +1,14 @@
 
 import React, { useState } from 'react';
-import { Trip, FlightInfo, FlightSegment, Currency, Expense } from '../types';
+import { Trip, FlightInfo, FlightSegment, Currency, Expense, User } from '../types';
 import { 
-  Plane, Save, Edit2, DollarSign, RefreshCw, X, Search, Loader2, Check, ChevronLeft, ShoppingBag
+  Plane, Save, Edit2, DollarSign, RefreshCw, X, Search, Loader2, Check, ChevronLeft, ShoppingBag, Lock
 } from 'lucide-react';
 import { fetchTdxFlights } from '../services/tdxService';
 import { BoardingPass } from './BoardingPass';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from '../App';
+import { supabase } from '../services/storageService';
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -94,7 +95,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({ onClose, onCo
                 {options.length > 0 ? options.map((f, i) => (
                   <div key={i} onClick={() => { if (step === 'outbound-select') { setTempOutbound(f); setStep('inbound-search'); setOptions([]); } else { setTempInbound(f); setStep('review'); } }} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all">
                     <div className="flex justify-between items-center font-black text-sm dark:text-white">
-                      <div className="flex flex-col"><span className="text-[10px] text-slate-400">{(f.airlineNameZh || f.airline)}</span><span>{f.flightNumber}</span></div>
+                      <div className="flex flex-col"><span className="text-[10px] text-slate-400">{(f.airlineNameZh || f.airline) || f.airline}</span><span>{f.flightNumber}</span></div>
                       <div className="flex items-center gap-2 text-right"><span className="text-xs">{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><Plane size={12} className="text-slate-300 shrink-0" /><span className="text-xs">{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
                     </div>
                   </div>
@@ -128,13 +129,29 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({data}) => {
+       if (data.user) {
+          setCurrentUser({
+             id: data.user.id,
+             name: data.user.user_metadata.full_name,
+             email: data.user.email!,
+             picture: data.user.user_metadata.avatar_url
+          });
+       }
+    });
+  }, []);
+
+  const isCreator = currentUser && (trip.user_id === currentUser.id || !trip.user_id);
+
   const defaultBaggage = {
     carryOn: { count: 1, weight: '7kg' },
     checked: { count: 0, weight: '23kg' }
   };
 
   const [flightData, setFlightData] = useState<FlightInfo>(trip.flight || { 
-    price: 0, currency: Currency.TWD, cabinClass: 'Economy', 
+    price: 0, currency: Currency.TWD, cabinClass: 'Economy',
     outbound: { airline: '', flightNumber: '', departureTime: '', arrivalTime: '', departureAirport: '', arrivalAirport: '', baggage: { ...defaultBaggage } }, 
     inbound: { airline: '', flightNumber: '', departureTime: '', arrivalTime: '', departureAirport: '', arrivalAirport: '', baggage: { ...defaultBaggage } }, 
     baggage: { ...defaultBaggage } 
@@ -157,7 +174,8 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
     pcs: language === 'zh' ? '件數 (Pcs)' : 'Pcs',
     weight: language === 'zh' ? '重量 (kg)' : 'Weight',
     flightExpenseNoteZh: '機票 (Flight Ticket)',
-    flightExpenseNoteEn: 'Flight Ticket'
+    flightExpenseNoteEn: 'Flight Ticket',
+    creatorOnly: language === 'zh' ? '僅建立者可編輯' : 'Creator Only'
   };
 
   const handleFlightSelect = (outbound: FlightSegment, inbound: FlightSegment) => {
@@ -171,13 +189,9 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
   };
 
   const handleSave = () => {
-    if (isPriceInvalid) return;
+    if (isPriceInvalid || !isCreator) return;
 
     let currentExpenses = [...trip.expenses];
-    /**
-     * BUG FIX: 修復機票重複產生 Bug。
-     * 同時比對中英兩種預設名稱，確保無論語系為何，都能正確定位同一筆支出紀錄並更新之。
-     */
     const flightExpenseIndex = currentExpenses.findIndex(e => 
       e.category === 'Tickets' && 
       (e.note === labels.flightExpenseNoteZh || e.note === labels.flightExpenseNoteEn)
@@ -210,7 +224,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       const segment = prev[segKey]!;
       const baggage = { ...(segment.baggage || { ...defaultBaggage }) };
       const currentConfig = { ...baggage[type] };
-
       if (field === 'count') {
         currentConfig.count = parseInt(value) || 0;
         if (currentConfig.count === 0) currentConfig.weight = '';
@@ -219,7 +232,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
         const num = value.replace(/[^0-9]/g, '');
         currentConfig.weight = num ? `${num}kg` : '';
       }
-
       baggage[type] = currentConfig;
       return { ...prev, [segKey]: { ...segment, baggage } };
     });
@@ -232,16 +244,14 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-black text-slate-800 dark:text-white">{labels.title}</h2>
         <div className="flex gap-3">
-          {isEditing ? (
+          {!isCreator ? (
+            <div className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 rounded-2xl flex items-center gap-2 text-xs font-black">
+              <Lock size={14} /> {labels.creatorOnly}
+            </div>
+          ) : isEditing ? (
             <>
               <button onClick={() => { setFlightData(trip.flight || flightData); setIsEditing(false); }} className="px-6 py-2.5 rounded-2xl font-black text-sm text-slate-400 hover:text-slate-600 transition-colors">{labels.cancel}</button>
-              <button 
-                onClick={handleSave} 
-                disabled={isPriceInvalid}
-                className={`px-8 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${isPriceInvalid ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:opacity-90'}`}
-              >
-                <Save size={18}/> {labels.save}
-              </button>
+              <button onClick={handleSave} disabled={isPriceInvalid} className={`px-8 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${isPriceInvalid ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:opacity-90'}`}><Save size={18}/> {labels.save}</button>
             </>
           ) : (
             <button onClick={() => setIsEditing(true)} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-6 py-2.5 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"><Edit2 size={16}/> {labels.edit}</button>
@@ -263,13 +273,7 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                           <select value={flightData.currency} onChange={e => setFlightData(p => ({ ...p, currency: e.target.value as Currency }))} className="bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold text-sm outline-none">
                              {Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
-                          <input 
-                            type="number" 
-                            value={flightData.price || ''} 
-                            onChange={e => setFlightData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} 
-                            className={`flex-1 min-w-0 p-3 rounded-xl border-none font-black text-sm outline-none transition-all bg-slate-50 dark:bg-slate-900 dark:text-white ${isPriceInvalid ? 'ring-2 ring-red-500 shadow-lg shadow-red-500/10' : ''}`} 
-                            placeholder="0" 
-                          />
+                          <input type="number" value={flightData.price || ''} onChange={e => setFlightData(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} className={`flex-1 min-w-0 p-3 rounded-xl border-none font-black text-sm outline-none transition-all bg-slate-50 dark:bg-slate-900 dark:text-white ${isPriceInvalid ? 'ring-2 ring-red-500 shadow-lg shadow-red-500/10' : ''}`} placeholder="0" />
                        </div>
                     </div>
                     <div className="space-y-1.5">
@@ -286,18 +290,13 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                  <button onClick={() => setIsSelectorOpen(true)} className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-2 rounded-2xl font-black text-[10px] hover:scale-105 shadow-md transition-all">{labels.changeFlight}</button>
               </div>
            </div>
-
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {(['outbound', 'inbound'] as const).map(key => {
-                 const data = flightData[key];
-                 if (!data || !data.flightNumber) return null;
+                 const data = flightData[key]; if (!data || !data.flightNumber) return null;
                  const baggage = data.baggage || { ...defaultBaggage };
-
                  return (
                     <div key={key} className="p-8 bg-white dark:bg-slate-800 rounded-[32px] border border-slate-100 dark:border-slate-700 shadow-ios">
-                       <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2 mb-8 text-xs uppercase tracking-widest">
-                         <ShoppingBag size={18} className="text-secondary"/> {key === 'outbound' ? (language === 'zh' ? '去程' : 'Outbound') : (language === 'zh' ? '回程' : 'Inbound')} {labels.baggage}
-                       </h3>
+                       <h3 className="font-black text-slate-800 dark:text-white flex items-center gap-2 mb-8 text-xs uppercase tracking-widest"><ShoppingBag size={18} className="text-secondary"/> {key === 'outbound' ? (language === 'zh' ? '去程' : 'Outbound') : (language === 'zh' ? '回程' : 'Inbound')} {labels.baggage}</h3>
                        <div className="space-y-8 sm:space-y-10">
                           <div className="space-y-4">
                             <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{labels.carryOn}</div>
@@ -305,43 +304,13 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
                               <div className="flex-1 space-y-2">
                                 <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.weight}</label>
                                 <div className="relative">
-                                  <input 
-                                    type="number" 
-                                    value={getWeightNumeric(baggage.carryOn.weight)} 
-                                    onChange={e => handleBaggageChange(key, 'carryOn', 'weight', e.target.value)} 
-                                    disabled={baggage.carryOn.count === 0} 
-                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count === 0 ? 'bg-slate-100/80 dark:bg-slate-900/80 text-slate-400/40 opacity-60 backdrop-blur-sm' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.carryOn.count > 0 && !baggage.carryOn.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
-                                    placeholder="7" 
-                                  />
+                                  <input type="number" value={getWeightNumeric(baggage.carryOn.weight)} onChange={e => handleBaggageChange(key, 'carryOn', 'weight', e.target.value)} disabled={baggage.carryOn.count === 0} className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.carryOn.count === 0 ? 'bg-slate-100/80 dark:bg-slate-900/80 text-slate-400/40 opacity-60 backdrop-blur-sm' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'}`} placeholder="7" />
                                   {baggage.carryOn.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
                                 </div>
                               </div>
                               <div className="flex-1 space-y-2">
                                 <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.pcs}</label>
-                                <input type="number" min="0" value={baggage.carryOn.count} onChange={e => handleBaggageChange(key, 'carryOn', 'count', e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-2xl border-none font-bold text-sm outline-none transition-shadow focus:ring-1 focus:ring-primary/20" />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="space-y-4">
-                            <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{labels.checked}</div>
-                            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                              <div className="flex-1 space-y-2">
-                                <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.weight}</label>
-                                <div className="relative">
-                                  <input 
-                                    type="number" 
-                                    value={getWeightNumeric(baggage.checked.weight)} 
-                                    onChange={e => handleBaggageChange(key, 'checked', 'weight', e.target.value)} 
-                                    disabled={baggage.checked.count === 0} 
-                                    className={`w-full p-3 rounded-2xl border-none font-bold text-sm outline-none transition-all ${baggage.checked.count === 0 ? 'bg-slate-100/80 dark:bg-slate-900/80 text-slate-400/40 opacity-60 backdrop-blur-sm' : 'bg-slate-50 dark:bg-slate-900 dark:text-white'} ${baggage.checked.count > 0 && !baggage.checked.weight ? 'ring-1 ring-red-500 bg-red-50/50' : 'focus:ring-1 focus:ring-primary/20'}`} 
-                                    placeholder="23" 
-                                  />
-                                  {baggage.checked.count > 0 && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">kg</span>}
-                                </div>
-                              </div>
-                              <div className="flex-1 space-y-2">
-                                <label className="text-[10px] text-slate-400 font-bold ml-1">{labels.pcs}</label>
-                                <input type="number" min="0" value={baggage.checked.count} onChange={e => handleBaggageChange(key, 'checked', 'count', e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-2xl border-none font-bold text-sm outline-none transition-shadow focus:ring-1 focus:ring-primary/20" />
+                                <input type="number" min="0" value={baggage.carryOn.count} onChange={e => handleBaggageChange(key, 'carryOn', 'count', e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-2xl border-none font-bold text-sm outline-none" />
                               </div>
                             </div>
                           </div>
@@ -366,7 +335,6 @@ export const FlightManager: React.FC<Props> = ({ trip, onUpdate }) => {
           )}
         </div>
       )}
-
       {isSelectorOpen && <FlightSelectorModal onClose={() => setIsSelectorOpen(false)} onConfirm={handleFlightSelect} initialOrigin={flightData.outbound.departureAirport || 'TPE'} initialDestination={flightData.outbound.arrivalAirport || ''} />}
     </div>
   );

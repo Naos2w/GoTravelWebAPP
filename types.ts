@@ -57,7 +57,8 @@ export interface FlightInfo {
   currency: Currency;
   cabinClass: string;
   seat?: string;
-  baggage: BaggageInfo; 
+  baggage: BaggageInfo;
+  budget?: number; // 儲存預算金額
 }
 
 export interface ChecklistItem {
@@ -79,7 +80,7 @@ export interface ItineraryItem {
   note?: string;
   type: 'Place' | 'Transport' | 'Food';
   transportType?: TransportType;
-  date: string; // 用於關聯資料庫
+  date: string; 
 }
 
 export interface DayPlan {
@@ -89,12 +90,13 @@ export interface DayPlan {
 
 export interface Trip {
   id: string;
+  user_id?: string; // 旅程建立者的 UID
   name: string;
   startDate: string; 
   endDate: string; 
   destination: string;
   coverImage: string;
-  flight?: FlightInfo; // 暫時保留 JSON
+  flight?: FlightInfo; 
   expenses: Expense[];
   checklist: ChecklistItem[];
   itinerary: DayPlan[];

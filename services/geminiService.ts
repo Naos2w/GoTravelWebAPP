@@ -2,7 +2,6 @@
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
 import { FlightSegment } from "../types";
 
-// Standardize Gemini initialization to use process.env.API_KEY exclusively
 const getAiClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
@@ -17,42 +16,40 @@ export const createChatSession = (systemInstruction: string): Chat => {
   });
 };
 
-export const generateTravelImage = async (
-  prompt: string, 
-  size: '1K' | '2K' | '4K'
-): Promise<string | null> => {
-  if (window.aistudio) {
-     const hasKey = await window.aistudio.hasSelectedApiKey();
-     if (!hasKey) {
-        throw new Error("API_KEY_REQUIRED");
-     }
-  }
-
+export const fetchFlightDetails = async (flightNumber: string, date: string): Promise<Partial<FlightSegment> | null> => {
   const ai = getAiClient();
-  
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
-      contents: {
-        parts: [{ text: prompt }]
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "4:3",
-          imageSize: size
-        }
-      }
+      model: 'gemini-3-flash-preview',
+      contents: `Find flight schedule for ${flightNumber} on ${date}. 
+      Need Airline Name, Departure IATA, Dep Time (ISO), Arrival IATA, Arr Time (ISO).
+      AIRLINE: <value>
+      DEP_CODE: <value>
+      DEP_TIME: <value>
+      ARR_CODE: <value>
+      ARR_TIME: <value>`,
+      config: { tools: [{ googleSearch: {} }] }
     });
 
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
-    }
-    return null;
+    const text = response.text || '';
+    const getValue = (key: string) => {
+      const match = text.match(new RegExp(`${key}:\\s*(.*)`));
+      return match ? match[1].trim() : '';
+    };
+
+    const airline = getValue('AIRLINE');
+    if (!airline) return null;
+
+    return {
+      airline,
+      flightNumber,
+      departureAirport: getValue('DEP_CODE'),
+      departureTime: getValue('DEP_TIME'),
+      arrivalAirport: getValue('ARR_CODE'),
+      arrivalTime: getValue('ARR_TIME')
+    };
   } catch (error) {
-    console.error("Image generation failed:", error);
-    throw error;
+    console.error("Flight fetch failed:", error);
+    return null;
   }
 };
-

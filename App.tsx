@@ -7,11 +7,15 @@ import { Itinerary } from './components/Itinerary';
 import { Expenses } from './components/Expenses';
 import { TripForm } from './components/TripForm';
 import { FlightManager } from './components/FlightManager';
+import { GoogleGenAI, Type } from "@google/genai";
 import { 
   Plane, Calendar, CheckSquare, DollarSign, 
   Plus, ArrowRight, ChevronLeft, LogOut, Loader2,
   LayoutDashboard, Trash2, Moon, Sun, Languages,
-  Database, Cloud, Download, AlertCircle, Lock
+  Database, Cloud, Download, AlertCircle, Lock,
+  Share2, Luggage, Sparkles, Check, User as UserIcon, 
+  Edit2, Clock, MapPin, CloudRain, SunMedium, Wind, X, ExternalLink,
+  Coffee
 } from 'lucide-react';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -19,77 +23,70 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const translations = {
   zh: {
     appName: 'Go Travel',
-    tagline: '讓旅行更簡單',
-    heroTitle: '聰明規劃，\n自在旅行。',
-    heroSubtitle: '全方位的旅程規劃空間。同步雲端，一切都在這個優美的平台。',
-    startPlanning: '立即體驗',
-    signIn: '使用 Google 登入',
     yourTrips: '您的旅程',
     newTrip: '新增',
-    noTrips: '尚無行程',
-    noTripsSub: '從加入機票資訊開始您的第一趟旅程吧。',
-    addFlight: '加入機票',
-    days: '天',
-    spent: '花費',
     overview: '概覽',
-    itinerary: '行程規劃',
-    checklist: '待辦清單',
-    expenses: '花費統計',
-    tickets: '機票資訊',
-    welcome: '歡迎回來',
-    quickStats: '快速統計',
-    totalSpent: '總花費',
+    itinerary: '行程',
+    checklist: '清單',
+    expenses: '花費',
+    tickets: '機票',
+    totalSpent: '總計',
+    syncing: '同步中...',
+    countdown: '倒數',
+    upcoming: '即將到來',
+    packingProgress: '行李',
+    budgetStatus: '預算進度',
+    daysLeft: '天',
+    budget: '預算',
+    permissionEditor: '編輯者模式',
+    noUpcoming: '尚無行程資料',
+    dataManagement: '數據管理',
+    export: '備份匯出',
+    weather7Day: '7 天預報',
+    source: '來源',
     deleteTrip: '刪除旅程',
-    confirmDelete: '確定要刪除這趟旅程嗎？此動作無法復原。',
-    logout: '登出',
-    devNotice: '開發者提示：尚未設定環境變數',
-    devNoticeSub: '請設定 GOOGLE_CLIENT_ID、SUPABASE_URL 與 SUPABASE_ANON_KEY。',
-    rlsNotice: '權限不足 (RLS Error)',
-    rlsNoticeSub: '請至 Supabase Dashboard 設定 RLS 策略以允許資料寫入。',
-    dataManagement: '資料管理',
-    dataDesc: '資料已與您的帳號同步。',
-    export: '匯出備份',
-    syncing: '雲端同步中...',
-    loading: '載入中...',
-    error: '同步失敗',
-    flightRequired: '請完成機票價格設定'
+    confirmDelete: '確定刪除？',
+    heroTitle: '聰明規劃，\n自在旅行。',
+    heroSubtitle: '全方位的旅程規劃空間。',
+    startPlanning: '立即體驗',
+    copied: '已複製',
+    shareTrip: '分享'
   },
   en: {
     appName: 'Go Travel',
-    tagline: 'Travel smarter',
-    heroTitle: 'Travel smarter,\nnot harder.',
-    heroSubtitle: 'All-in-one travel workspace. Cloud synced across all your devices.',
-    startPlanning: 'Start Planning',
-    yourTrips: 'Your Trips',
+    yourTrips: 'Trips',
     newTrip: 'New',
-    noTrips: 'No trips yet',
-    noTripsSub: 'Start by adding your flight details.',
-    addFlight: 'Add Flight Ticket',
-    days: 'Days',
-    spent: 'spent',
-    overview: 'Overview',
-    itinerary: 'Itinerary',
-    checklist: 'Checklist',
-    expenses: 'Expenses',
-    tickets: 'Tickets',
-    welcome: 'Welcome back',
-    quickStats: 'Quick Stats',
-    totalSpent: 'Total Spent',
-    deleteTrip: 'Delete Trip',
-    confirmDelete: 'Are you sure you want to delete this trip?',
-    logout: 'Logout',
-    devNotice: 'Developer Notice: Env Vars Missing',
-    devNoticeSub: 'Please set GOOGLE_CLIENT_ID, SUPABASE_URL, and SUPABASE_ANON_KEY.',
-    rlsNotice: 'Permission Denied (RLS)',
-    rlsNoticeSub: 'Please configure Supabase RLS policies to allow writes.',
-    dataManagement: 'Data Management',
-    dataDesc: 'Data is synced to your cloud account.',
-    export: 'Export JSON',
-    syncing: 'Syncing to cloud...',
-    loading: 'Loading...',
-    error: 'Sync failed',
-    flightRequired: 'Price setup required'
+    overview: 'Main',
+    itinerary: 'Plan',
+    checklist: 'List',
+    expenses: 'Cost',
+    tickets: 'Pass',
+    totalSpent: 'Total',
+    syncing: 'Syncing...',
+    countdown: 'Due',
+    upcoming: 'Upcoming',
+    packingProgress: 'Pack',
+    budgetStatus: 'Budget',
+    daysLeft: 'D',
+    budget: 'Budget',
+    permissionEditor: 'Editor',
+    noUpcoming: 'Empty',
+    dataManagement: 'Data',
+    export: 'Export',
+    weather7Day: '7-Day',
+    source: 'Source',
+    deleteTrip: 'Delete',
+    confirmDelete: 'Delete?',
+    heroTitle: 'Travel Smart.',
+    heroSubtitle: 'All-in-one workspace.',
+    startPlanning: 'Start',
+    copied: 'Copied',
+    shareTrip: 'Share'
   }
+};
+
+const calculateExpensesTotal = (trip: Trip): number => {
+  return trip.expenses.reduce((sum, item) => sum + (item.amount * (item.exchangeRate || 1)), 0);
 };
 
 type LocalizationContextType = {
@@ -106,148 +103,117 @@ export const useTranslation = () => {
   return context;
 };
 
+interface WeatherDay {
+  date: string;
+  temp: string;
+  condition: string;
+  icon: string;
+}
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<'landing' | 'list' | 'detail'>(() => {
-    const savedView = sessionStorage.getItem('appView');
-    return (savedView as any) || 'landing';
-  });
-  
+  const [view, setView] = useState<'landing' | 'list' | 'detail'>(() => (sessionStorage.getItem('appView') as any) || 'landing');
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTripId, setCurrentTripId] = useState<string | null>(() => sessionStorage.getItem('currentTripId'));
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'itinerary' | 'checklist' | 'expenses' | 'flights'>('dashboard');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
   const [language, setLanguage] = useState<Language>(() => (localStorage.getItem('lang') as Language) || 'zh');
-  
-  // 用於防抖儲存的 Ref
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [tempBudget, setTempBudget] = useState<number>(50000);
+  const [weatherForecast, setWeatherForecast] = useState<WeatherDay[]>([]);
+  const [weatherSource, setWeatherSource] = useState<string | null>(null);
+
   const saveTimeoutRef = useRef<number | null>(null);
 
-  const isEnvMissing = !GOOGLE_CLIENT_ID || !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('placeholder');
+  useEffect(() => { sessionStorage.setItem('appView', view); }, [view]);
+  useEffect(() => { if (currentTripId) sessionStorage.setItem('currentTripId', currentTripId); }, [currentTripId]);
+  useEffect(() => { localStorage.setItem('lang', language); }, [language]);
+  useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); localStorage.setItem('theme', theme); }, [theme]);
+
+  useEffect(() => {
+    const initializeGoogleSignIn = () => {
+      if (!window.google || user) return;
+      window.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleCredentialResponse });
+      const renderBtn = (id: string, width: number) => {
+        const el = document.getElementById(id);
+        if (el) window.google.accounts.id.renderButton(el, { theme: theme === 'dark' ? 'filled_black' : 'outline', size: 'large', shape: 'pill', width });
+      };
+      setTimeout(() => { renderBtn('google-login-nav', 120); renderBtn('google-login-hero', 280); }, 100);
+    };
+    const handleCredentialResponse = async (response: any) => {
+      try { await supabase.auth.signInWithIdToken({ provider: 'google', token: response.credential }); } 
+      catch (e) { console.error("Auth Error", e); }
+    };
+    const interval = setInterval(() => { if (window.google?.accounts?.id) { initializeGoogleSignIn(); clearInterval(interval); } }, 300);
+    return () => clearInterval(interval);
+  }, [view, theme, user]);
 
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        handleAuthUser(session.user);
-      } else {
-        setIsLoading(false);
-        if (view !== 'landing') setView('landing');
-      }
+      if (session?.user) handleAuthUser(session.user);
+      else { setIsLoading(false); if (view !== 'landing') setView('landing'); }
     };
     checkSession();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        handleAuthUser(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setView('landing');
-        sessionStorage.removeItem('currentTripId');
-        sessionStorage.removeItem('appView');
-        setIsLoading(false);
-      }
+      if (session?.user) handleAuthUser(session.user);
+      else if (event === 'SIGNED_OUT') { setUser(null); setView('landing'); setTrips([]); setIsLoading(false); }
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
   const handleAuthUser = (supabaseUser: any) => {
-    const userData: User = {
-      id: supabaseUser.id,
-      name: supabaseUser.user_metadata.full_name || supabaseUser.email?.split('@')[0] || 'User',
-      email: supabaseUser.email!,
-      picture: supabaseUser.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${supabaseUser.email}`,
-    };
-    setUser(userData);
-    setView(prev => {
-      if (prev === 'landing') return 'list';
-      return prev;
-    });
-    setIsLoading(false);
+    setUser({ id: supabaseUser.id, name: supabaseUser.user_metadata.full_name, email: supabaseUser.email!, picture: supabaseUser.user_metadata.avatar_url || '' });
+    setView(prev => (prev === 'landing' ? 'list' : prev));
   };
 
-  useEffect(() => {
-    sessionStorage.setItem('appView', view);
-  }, [view]);
-
-  useEffect(() => {
-    if (currentTripId) {
-      sessionStorage.setItem('currentTripId', currentTripId);
-    } else {
-      sessionStorage.removeItem('currentTripId');
-    }
-  }, [currentTripId]);
-
-  useEffect(() => {
-    if (user) loadTrips();
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('theme', theme);
-  }, [user, theme]);
-
-  useEffect(() => {
-    localStorage.setItem('lang', language);
-  }, [language]);
+  useEffect(() => { if (user) loadTrips(); }, [user]);
 
   const loadTrips = async () => {
     if (!user) return;
     setIsLoading(true);
-    try {
-      const cloudTrips = await getTrips(user.id);
-      setTrips(cloudTrips);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+    try { const cloudTrips = await getTrips(user.id); setTrips(cloudTrips); } catch (err) { console.error(err); }
+    finally { setIsLoading(false); }
   };
 
+  const currentTrip = trips.find(t => t.id === currentTripId);
+
   useEffect(() => {
-    const initializeGoogleSignIn = () => {
-      if (!window.google || isEnvMissing) return;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse,
+    if (currentTrip) { load7DayWeather(); }
+  }, [currentTripId, trips]);
+
+  const load7DayWeather = async () => {
+    if (!currentTrip) return;
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Provide a 7-day weather forecast for ${currentTrip.destination}. Return ONLY a JSON array. Date (MM/DD), Temp (min-max°C), Condition, Icon (sun, cloud, rain, wind).`,
+        config: { tools: [{ googleSearch: {} }], responseMimeType: "application/json" },
       });
-      
-      const navBtn = document.getElementById('google-login-nav');
-      const heroBtn = document.getElementById('google-login-hero');
-      
-      const renderOptions = {
-        theme: theme === 'dark' ? 'filled_black' : 'outline',
-        size: 'large',
-        shape: 'pill'
-      };
+      setWeatherForecast(JSON.parse(response.text || '[]'));
+      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+      if (chunks && chunks.length > 0 && chunks[0].web) setWeatherSource(chunks[0].web.uri);
+    } catch (e) { console.error(e); }
+  };
 
-      if (navBtn) window.google.accounts.id.renderButton(navBtn, { ...renderOptions, width: 120, text: 'signin', size: 'medium' });
-      if (heroBtn) window.google.accounts.id.renderButton(heroBtn, { ...renderOptions, width: 280, text: 'continue_with' });
-    };
-
-    const handleCredentialResponse = async (response: any) => {
-      try {
-        const { error } = await supabase.auth.signInWithIdToken({ 
-          provider: 'google', 
-          token: response.credential 
-        });
-        if (error) throw error;
-      } catch (e) { 
-        console.error("Auth Error", e);
-      }
-    };
-
-    const checkInterval = setInterval(() => {
-      if (window.google?.accounts?.id) { initializeGoogleSignIn(); clearInterval(checkInterval); }
-    }, 500);
-    return () => clearInterval(checkInterval);
-  }, [view, theme, user]);
-
+  const isCreator = user && currentTrip && (currentTrip.user_id === user.id || !currentTrip.user_id);
+  const isFlightMissing = currentTrip && (!currentTrip.flight || currentTrip.flight.price === 0);
   const t = (key: keyof typeof translations.en) => translations[language][key] || translations.en[key];
-  
-  const logout = () => { 
-    supabase.auth.signOut();
+
+  const updateCurrentTrip = (updatedTrip: Trip) => {
+    if (!user) return;
+    setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+    if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = window.setTimeout(async () => {
+      setIsSyncing(true);
+      try { await saveTrip(updatedTrip, user.id); } catch (err) { console.error(err); }
+      finally { setIsSyncing(false); saveTimeoutRef.current = null; }
+    }, 1000);
   };
 
   const handleCreateTripSubmit = async (newTrip: Trip) => {
@@ -255,64 +221,20 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       await saveTrip(newTrip, user.id);
-      await loadTrips();
+      setTrips(prev => [newTrip, ...prev]);
       setCurrentTripId(newTrip.id);
-      setShowCreateForm(false);
       setView('detail');
-      setActiveTab('flights');
-    } catch (err: any) {
-      alert(err.message);
-    } finally { setIsSyncing(false); }
+      setShowCreateForm(false);
+    } catch (err) { console.error(err); } finally { setIsSyncing(false); }
   };
 
-  /**
-   * 核心更新函數：支援防抖儲存，解決 409 Conflict 問題
-   */
-  const updateCurrentTrip = (updatedTrip: Trip) => {
-    if (!user) return;
-    
-    // 立即更新本地 UI 狀態
-    setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
-
-    // 清除先前的計時器
-    if (saveTimeoutRef.current) {
-      window.clearTimeout(saveTimeoutRef.current);
-    }
-
-    // 設定新的儲存計時器 (1秒後執行)
-    saveTimeoutRef.current = window.setTimeout(async () => {
-      setIsSyncing(true);
-      try {
-        await saveTrip(updatedTrip, user.id);
-      } catch (err: any) {
-        console.error("Debounced save failed:", err);
-      } finally {
-        setIsSyncing(false);
-        saveTimeoutRef.current = null;
-      }
-    }, 1000);
-  };
-
-  const handleDeleteTrip = async () => {
-    if (!currentTripId || !user) return;
-    if (window.confirm(t('confirmDelete'))) {
-      setIsSyncing(true);
-      try {
-        await deleteTrip(currentTripId, user.id);
-        await loadTrips();
-        setView('list');
-        setCurrentTripId(null);
-      } catch (err: any) { alert(err.message); }
-      finally { setIsSyncing(false); }
-    }
-  };
-
-  const calculateTotalSpentTWD = (trip: Trip) => {
-    return trip.expenses.reduce((acc, e) => acc + (e.amount * (e.exchangeRate || 1)), 0);
-  };
-
-  const currentTrip = trips.find(t => t.id === currentTripId);
-  const isFlightMissing = currentTrip && (!currentTrip.flight || currentTrip.flight.price === 0);
+  const GlobalNav = () => (
+    <div className="flex items-center gap-1 sm:gap-2 relative z-50">
+      <button onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-all"><Languages size={18} /></button>
+      <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-all">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
+      {user && <button onClick={() => supabase.auth.signOut()} className="p-2 ml-1 rounded-xl text-slate-400 hover:text-red-500 transition-all"><LogOut size={18} /></button>}
+    </div>
+  );
 
   const tabs = [
     { id: 'dashboard', label: t('overview'), icon: LayoutDashboard },
@@ -322,259 +244,274 @@ const App: React.FC = () => {
     { id: 'flights', label: t('tickets'), icon: Plane },
   ];
 
-  const handleTabChange = (tabId: any) => {
-    if (isFlightMissing && !['flights', 'dashboard'].includes(tabId)) {
-      return;
-    }
-    setActiveTab(tabId);
-  };
-
-  const GlobalNav = () => (
-    <div className="flex items-center gap-2">
-      <button onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white transition-all duration-300">
-        <Languages size={18} />
-      </button>
-      <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white transition-all duration-300">
-        {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-      </button>
-      {user ? (
-        <div className="flex items-center gap-2 pl-2 ml-2 border-l border-slate-100 dark:border-slate-800">
-           <img src={user.picture} className="w-8 h-8 rounded-full border border-slate-200" />
-           <button onClick={logout} className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-300">
-             <LogOut size={18} />
-           </button>
-        </div>
-      ) : (
-        <div id="google-login-nav" className="ml-2"></div>
-      )}
-    </div>
-  );
-
-  if (isLoading && view === 'landing') {
+  if (isLoading && view !== 'landing') {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center transition-colors ${theme === 'dark' ? 'bg-[#1C1C1E]' : 'bg-[#FBFBFD]'}`}>
-        <Loader2 className="animate-spin text-primary mb-4" size={32} />
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400 animate-pulse">{t('loading')}</p>
+      <div className="min-h-screen bg-[#FBFBFD] dark:bg-[#1C1C1E] flex flex-col items-center justify-center p-8">
+        <Loader2 className="animate-spin text-primary mb-6" size={48} />
+        <div className="font-black text-slate-400 uppercase tracking-widest text-[10px]">{t('syncing')}</div>
       </div>
     );
   }
 
   return (
-    <LocalizationContext.Provider value={{ t, language, setLanguage: (l) => setLanguage(l) }}>
+    <LocalizationContext.Provider value={{ t, language, setLanguage }}>
       <div className={`min-h-screen transition-all duration-500 ${theme === 'dark' ? 'dark bg-[#1C1C1E] text-slate-100' : 'bg-[#FBFBFD] text-slate-900'}`}>
         
         {view === 'detail' && currentTrip && (
-          <div className="min-h-screen">
-            <nav className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-30 h-16 sm:h-20 flex items-center">
-              <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center gap-4">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <button onClick={() => { setView('list'); setCurrentTripId(null); }} className="p-2.5 rounded-2xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
-                    <ChevronLeft />
-                  </button>
+          <div className="min-h-screen flex flex-col pb-20 sm:pb-0">
+            {/* Header - Aligned Right with Responsive Text Hiding */}
+            <nav className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-40 h-16 sm:h-20 flex items-center px-4 sm:px-8">
+              <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
+                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                  <button onClick={() => { setView('list'); setCurrentTripId(null); }} className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"><ChevronLeft size={22}/></button>
                   <div className="truncate">
-                    <input value={currentTrip.name} onChange={(e) => updateCurrentTrip({ ...currentTrip, name: e.target.value })} className="text-sm sm:text-lg font-black bg-transparent w-full truncate dark:text-white outline-none" />
-                    <div className="flex items-center gap-2">
-                       <span className="text-[8px] sm:text-[9px] uppercase tracking-widest font-black text-slate-400">{currentTrip.destination}</span>
-                       {isFlightMissing && (
-                         <span className="text-[8px] font-black text-red-500 uppercase tracking-widest flex items-center gap-1 animate-pulse">
-                           <AlertCircle size={8} /> {t('flightRequired')}
-                         </span>
-                       )}
-                       {isSyncing && !isFlightMissing && <span className="text-[8px] font-black text-blue-500 animate-pulse uppercase tracking-widest flex items-center gap-1"><Cloud size={8} /> {t('syncing')}</span>}
+                    <input disabled={!isCreator} value={currentTrip.name} onChange={(e) => updateCurrentTrip({ ...currentTrip, name: e.target.value })} className={`text-base sm:text-xl font-black bg-transparent outline-none ${!isCreator ? '' : 'hover:bg-slate-100/10'}`} />
+                    <div className="hidden sm:flex items-center gap-2">
+                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{currentTrip.destination}</span>
+                       {isSyncing && <span className="text-[9px] font-black text-blue-500 animate-pulse uppercase"><Cloud size={9} className="inline mr-1" />{t('syncing')}</span>}
                     </div>
                   </div>
                 </div>
-                <div className="hidden md:flex bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-2xl">
-                  {tabs.map(tab => {
-                    const isLocked = isFlightMissing && !['flights', 'dashboard'].includes(tab.id);
-                    const isActionRequired = isFlightMissing && tab.id === 'flights';
-                    
-                    return (
-                      <button 
-                        key={tab.id} 
-                        onClick={() => handleTabChange(tab.id)} 
-                        disabled={isLocked}
-                        className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all duration-300 relative ${
-                          activeTab === tab.id 
-                            ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' 
-                            : (isLocked 
-                                ? 'text-red-400/30 dark:text-red-900/30 bg-red-50/10 dark:bg-red-900/5 cursor-not-allowed opacity-40 hover:bg-red-50/20' 
-                                : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 dark:hover:text-white')
-                        }`}
-                      >
-                        {isLocked ? <Lock size={14} className="text-red-500/50" /> : <tab.icon size={16} />} 
-                        <span className="hidden lg:inline">{tab.label}</span>
-                        {isActionRequired && (
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-800 rounded-full animate-bounce" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
+
+                {/* Combined Right Navigation Group */}
+                <div className="flex items-center gap-1 sm:gap-3">
+                  <div className="hidden sm:flex bg-slate-100/60 dark:bg-slate-800/60 p-1.5 rounded-2xl">
+                    {tabs.map(tab => {
+                      const isLocked = isFlightMissing && !['flights', 'dashboard'].includes(tab.id);
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button 
+                          key={tab.id} 
+                          onClick={() => !isLocked && setActiveTab(tab.id as any)} 
+                          disabled={isLocked} 
+                          className={`px-3 lg:px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${isActive ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios' : (isLocked ? 'opacity-30' : 'text-slate-500 hover:bg-slate-100')}`}
+                        >
+                          <tab.icon size={16} strokeWidth={isActive ? 3 : 2} /> 
+                          <span className="hidden lg:inline">{tab.label.slice(0, 2)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1 hidden sm:block"></div>
+                  <button onClick={() => { navigator.clipboard.writeText(window.location.href); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }} className={`p-2.5 rounded-xl transition-all ${copyFeedback ? 'text-green-500' : 'text-slate-400 hover:text-primary hover:bg-primary/5'}`}>
+                    {copyFeedback ? <Check size={22} /> : <Share2 size={22} />}
+                  </button>
                   <GlobalNav />
                 </div>
               </div>
             </nav>
 
-            <main className="max-w-7xl mx-auto p-4 md:p-12 pb-36">
+            <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
               {activeTab === 'dashboard' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="md:col-span-2 space-y-8">
-                    <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 md:p-12 shadow-ios border border-slate-100 dark:border-slate-700">
-                      <div className="flex items-center gap-4 mb-6">
-                        <img src={user?.picture} className="w-12 h-12 rounded-full border-2 border-primary/20 shadow-sm" />
-                        <div>
-                          <h2 className="text-3xl font-black tracking-tighter">{t('welcome')}{user ? `, ${user.name.split(' ')[0]}` : ''}!</h2>
-                          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{currentTrip.startDate} - {currentTrip.endDate}</p>
+                <div className="space-y-6 sm:space-y-12 animate-in fade-in slide-in-from-bottom-3 duration-700">
+                  
+                  {/* Hero Block - Pure Brand/Destination Focus */}
+                  <div className="bg-white dark:bg-slate-800 rounded-[40px] sm:rounded-[56px] p-8 sm:p-20 shadow-ios-lg border border-slate-100 dark:border-slate-800 overflow-hidden relative group">
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] -mr-[250px] -mt-[250px] transition-all duration-1000 group-hover:scale-110" />
+                    <div className="relative z-10 text-center sm:text-left">
+                       <h2 className="text-5xl sm:text-8xl font-black tracking-tighter mb-6 text-slate-900 dark:text-white leading-[0.9]">{currentTrip.destination}</h2>
+                       <div className="text-xs sm:text-base font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.4em] flex items-center justify-center sm:justify-start gap-4">
+                          <div className="w-10 h-0.5 bg-primary rounded-full hidden sm:block"></div>
+                          <Calendar size={18} className="text-primary" /> {currentTrip.startDate} — {currentTrip.endDate}
+                       </div>
+                    </div>
+
+                    {/* Integrated Stats Row (Mobile Version Only) */}
+                    <div className="sm:hidden mt-12 grid grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-900/60 p-5 rounded-[28px] border border-slate-100 dark:border-slate-800">
+                        <div className="flex flex-col items-center border-r border-slate-200 dark:border-slate-800">
+                          <span className="text-[9px] font-black text-slate-400 uppercase mb-1.5 tracking-wider">{t('countdown')}</span>
+                          <span className="text-xl font-black text-primary">{(() => {
+                            const start = new Date(currentTrip.startDate + 'T00:00:00');
+                            const diff = start.getTime() - new Date().getTime();
+                            return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                          })()}</span>
                         </div>
-                      </div>
-                      <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-800">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Destinations</div>
-                          <div className="font-black text-lg">{currentTrip.destination}</div>
+                        <div className="flex flex-col items-center border-r border-slate-200 dark:border-slate-800">
+                          <span className="text-[9px] font-black text-slate-400 uppercase mb-1.5 tracking-wider">{t('packingProgress')}</span>
+                          <span className="text-xl font-black text-green-500">{Math.round((currentTrip.checklist.filter(i => i.isCompleted).length / (currentTrip.checklist.length || 1)) * 100)}%</span>
                         </div>
-                         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-800">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Duration</div>
-                          <div className="font-black text-lg">{currentTrip.itinerary.length} {t('days')}</div>
+                        <div className="flex flex-col items-center">
+                          <span className="text-[9px] font-black text-slate-400 uppercase mb-1.5 tracking-wider">{t('totalSpent')}</span>
+                          <span className="text-xl font-black text-indigo-500">{(calculateExpensesTotal(currentTrip)/1000).toFixed(1)}k</span>
                         </div>
-                         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-800">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Items</div>
-                          <div className="font-black text-lg">{currentTrip.checklist.length}</div>
-                        </div>
-                         <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-800">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Expenses</div>
-                          <div className="font-black text-lg">{currentTrip.expenses.length}</div>
-                        </div>
-                      </div>
                     </div>
                   </div>
-                  <div className="space-y-8">
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] shadow-ios border border-slate-100 dark:border-slate-700">
-                      <h3 className="text-lg font-black mb-8 flex items-center gap-3"><LayoutDashboard size={20} className="text-primary" /> {t('quickStats')}</h3>
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('totalSpent')}</span>
-                        <span className="text-3xl font-black text-primary">NT$ {calculateTotalSpentTWD(currentTrip).toLocaleString()}</span>
-                      </div>
+
+                  {/* Desktop Only: Enhanced Aesthetic KPI Cards */}
+                  <div className="hidden sm:grid grid-cols-3 gap-8">
+                     <div className="bg-white dark:bg-slate-800 p-10 rounded-[48px] shadow-ios border border-slate-100 dark:border-slate-800 flex flex-col items-center group transition-all hover:shadow-ios-lg hover:-translate-y-1">
+                        <div className="w-16 h-16 rounded-3xl bg-blue-50 dark:bg-blue-900/20 text-blue-500 flex items-center justify-center mb-6 transition-transform group-hover:scale-110"><Clock size={32} strokeWidth={2.5}/></div>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{t('countdown')}</span>
+                        <div className="text-5xl font-black tracking-tighter text-slate-900 dark:text-white">
+                           {(() => {
+                              const start = new Date(currentTrip.startDate + 'T00:00:00');
+                              const diff = start.getTime() - new Date().getTime();
+                              return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+                            })()} <span className="text-lg text-slate-300 ml-1">{t('daysLeft')}</span>
+                        </div>
+                     </div>
+                     <div className="bg-white dark:bg-slate-800 p-10 rounded-[48px] shadow-ios border border-slate-100 dark:border-slate-800 flex flex-col items-center group transition-all hover:shadow-ios-lg hover:-translate-y-1">
+                        <div className="w-16 h-16 rounded-3xl bg-green-50 dark:bg-green-900/20 text-green-500 flex items-center justify-center mb-6 transition-transform group-hover:scale-110"><Luggage size={32} strokeWidth={2.5}/></div>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{t('packingProgress')}</span>
+                        <div className="text-5xl font-black tracking-tighter text-slate-900 dark:text-white">
+                           {Math.round((currentTrip.checklist.filter(i => i.isCompleted).length / (currentTrip.checklist.length || 1)) * 100)}<span className="text-lg text-slate-300 ml-1">%</span>
+                        </div>
+                     </div>
+                     <div className="bg-white dark:bg-slate-800 p-10 rounded-[48px] shadow-ios border border-slate-100 dark:border-slate-800 flex flex-col items-center group transition-all hover:shadow-ios-lg hover:-translate-y-1">
+                        <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 flex items-center justify-center mb-6 transition-transform group-hover:scale-110"><DollarSign size={32} strokeWidth={2.5}/></div>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-2">{t('totalSpent')}</span>
+                        <div className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white">
+                           <span className="text-lg text-slate-300 mr-2 uppercase">NT$</span>{calculateExpensesTotal(currentTrip).toLocaleString()}
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-12">
+                     {/* Upcoming Activities */}
+                     <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 sm:p-14 shadow-ios border border-slate-100 dark:border-slate-800">
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em] mb-10 text-slate-400 flex items-center gap-3"><Sparkles size={16} className="text-primary" /> {t('upcoming')}</h3>
+                        <div className="space-y-5">
+                           {(() => {
+                              const upcoming = currentTrip.itinerary.flatMap(d => d.items.map(it => ({ ...it, dDate: d.date }))).filter(it => it.type !== 'Transport').slice(0, 3);
+                              if (!upcoming.length) return <div className="py-16 text-center text-xs font-black text-slate-300 uppercase tracking-widest">{t('noUpcoming')}</div>;
+                              return upcoming.map((it, idx) => (
+                                 <div key={idx} className="flex items-center gap-6 p-6 bg-slate-50 dark:bg-slate-900/40 rounded-[32px] transition-all hover:bg-slate-100/80 hover:scale-[1.01] border border-transparent hover:border-slate-100 shadow-sm">
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${it.type === 'Food' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                                       {it.type === 'Food' ? <Coffee size={24}/> : <MapPin size={24}/>}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                       <div className="font-black text-lg text-slate-900 dark:text-white truncate">{it.placeName}</div>
+                                       <div className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em] mt-1">{it.dDate} • {it.time}</div>
+                                    </div>
+                                 </div>
+                              ));
+                           })()}
+                        </div>
+                     </div>
+
+                     {/* Weather Forecast */}
+                     <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 sm:p-14 shadow-ios border border-slate-100 dark:border-slate-800">
+                        <div className="flex justify-between items-center mb-10">
+                           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 flex items-center gap-3"><CloudRain size={16} className="text-blue-500" /> {t('weather7Day')}</h3>
+                           {weatherSource && <a href={weatherSource} target="_blank" rel="noreferrer" className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl text-slate-300 hover:text-primary transition-all"><ExternalLink size={16} /></a>}
+                        </div>
+                        <div className="flex lg:grid lg:grid-cols-7 gap-4 overflow-x-auto no-scrollbar pb-4 lg:pb-0">
+                           {weatherForecast.map((w, i) => (
+                              <div key={i} className="flex-shrink-0 w-32 lg:w-full flex flex-col items-center gap-4 p-5 bg-slate-50 dark:bg-slate-900/40 rounded-[28px] border border-transparent hover:border-slate-100 transition-all shadow-sm">
+                                 <span className="text-[10px] font-black opacity-40 uppercase tracking-widest">{w.date}</span>
+                                 {w.icon === 'sun' ? <SunMedium size={28} className="text-orange-500" /> : w.icon === 'rain' ? <CloudRain size={28} className="text-blue-500" /> : <Cloud size={28} className="text-slate-400" />}
+                                 <span className="text-base font-black tracking-tighter text-slate-900 dark:text-white">{w.temp}</span>
+                              </div>
+                           ))}
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Budget & Utilities */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-16">
+                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-[40px] p-10 sm:p-12 shadow-ios border border-slate-100 dark:border-slate-800 group">
+                       <div className="flex justify-between items-center mb-8">
+                          <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">{t('budgetStatus')}</h3>
+                          {isCreator && !isEditingBudget && <button onClick={() => { setTempBudget(currentTrip.flight?.budget || 50000); setIsEditingBudget(true); }} className="p-3 opacity-0 group-hover:opacity-100 text-primary hover:bg-primary/5 rounded-2xl transition-all"><Edit2 size={16} /></button>}
+                       </div>
+                       <div className="h-4 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden mb-6 p-0.5">
+                          <div className={`h-full transition-all duration-1000 rounded-full ${calculateExpensesTotal(currentTrip) > (currentTrip.flight?.budget || 50000) ? 'bg-red-500' : 'bg-primary'}`} style={{ width: `${Math.min(100, (calculateExpensesTotal(currentTrip) / (currentTrip.flight?.budget || 50000)) * 100)}%` }} />
+                       </div>
+                       <div className="flex justify-between items-end">
+                          <div className="text-3xl sm:text-4xl font-black tracking-tighter text-slate-900 dark:text-white">
+                             <span className="text-sm uppercase text-slate-300 mr-2">NT$</span>{calculateExpensesTotal(currentTrip).toLocaleString()} 
+                             <span className="text-base text-slate-400 dark:text-slate-600 font-bold ml-4">/ NT$ {(currentTrip.flight?.budget || 50000).toLocaleString()}</span>
+                          </div>
+                       </div>
+                       {isEditingBudget && (
+                          <div className="mt-8 flex items-center gap-4 animate-in slide-in-from-top-4 duration-300">
+                             <input autoFocus type="number" className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-base font-black w-full border-2 border-primary/20 outline-none" value={tempBudget} onChange={e => setTempBudget(parseInt(e.target.value) || 0)} />
+                             <button onClick={() => { updateCurrentTrip({ ...currentTrip, flight: { ...currentTrip.flight!, budget: tempBudget } }); setIsEditingBudget(false); }} className="p-4 bg-green-500 text-white rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all"><Check size={22} strokeWidth={3} /></button>
+                             <button onClick={() => setIsEditingBudget(false)} className="p-4 bg-slate-200 dark:bg-slate-700 rounded-2xl text-slate-500 hover:bg-slate-300 transition-all"><X size={22} /></button>
+                          </div>
+                       )}
                     </div>
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-[40px] shadow-ios border border-slate-100 dark:border-slate-700">
-                      <h3 className="text-lg font-black mb-4 flex items-center gap-3"><Database size={20} className="text-indigo-500" /> {t('dataManagement')}</h3>
-                      <p className="text-xs text-slate-500 mb-8 font-medium">{t('dataDesc')}</p>
-                      <div className="space-y-3">
-                        <button onClick={() => exportData(trips)} className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-3 rounded-2xl font-black text-xs transition-all hover:opacity-90">
-                          <Download size={16} /> {t('export')}
-                        </button>
-                        <button onClick={handleDeleteTrip} className="w-full flex items-center justify-center gap-2 border border-red-100 dark:border-red-900/30 text-red-500 py-3 rounded-2xl font-black text-xs transition-all hover:bg-red-50 dark:hover:bg-red-500/10">
-                          <Trash2 size={16} /> {t('deleteTrip')}
-                        </button>
-                      </div>
+                    
+                    <div className="bg-white dark:bg-slate-800 rounded-[40px] p-10 sm:p-12 shadow-ios border border-slate-100 dark:border-slate-800 flex flex-col justify-center gap-5">
+                        <button onClick={() => exportData(trips)} className="w-full flex items-center justify-center gap-3 bg-slate-50 dark:bg-slate-900 py-5 rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"><Download size={20} /> {t('export')}</button>
+                        {isCreator && <button onClick={async () => { if (window.confirm(t('confirmDelete'))) { await deleteTrip(currentTrip.id, user.id); setView('list'); } }} className="w-full text-red-500 py-3 font-black text-xs uppercase tracking-[0.2em] opacity-40 hover:opacity-100 transition-all">{t('deleteTrip')}</button>}
                     </div>
                   </div>
                 </div>
               )}
-              {activeTab === 'itinerary' && !isFlightMissing && <Itinerary trip={currentTrip} onUpdate={updateCurrentTrip} />}
-              {activeTab === 'checklist' && !isFlightMissing && <Checklist trip={currentTrip} onUpdate={updateCurrentTrip} />}
-              {activeTab === 'expenses' && !isFlightMissing && <Expenses trip={currentTrip} onUpdate={updateCurrentTrip} />}
+              
+              {activeTab === 'itinerary' && <Itinerary trip={currentTrip} onUpdate={updateCurrentTrip} />}
+              {activeTab === 'checklist' && <Checklist trip={currentTrip} onUpdate={updateCurrentTrip} />}
+              {activeTab === 'expenses' && <Expenses trip={currentTrip} onUpdate={updateCurrentTrip} />}
               {activeTab === 'flights' && <FlightManager trip={currentTrip} onUpdate={updateCurrentTrip} />}
             </main>
 
-            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 px-4 py-3 flex justify-around items-center z-40 shadow-2xl pb-safe">
-              {tabs.map(tab => {
-                const isLocked = isFlightMissing && !['flights', 'dashboard'].includes(tab.id);
-                const isActionRequired = isFlightMissing && tab.id === 'flights';
-                
-                return (
-                  <button 
-                    key={tab.id} 
-                    onClick={() => handleTabChange(tab.id)} 
-                    disabled={isLocked}
-                    className={`p-3 rounded-2xl transition-all duration-300 relative ${
-                      activeTab === tab.id 
-                        ? 'text-primary bg-primary/5 scale-110' 
-                        : (isLocked ? 'text-red-500/30 dark:text-red-900/30 scale-90 opacity-40' : 'text-slate-300 hover:text-slate-600')
-                    }`}
-                  >
-                    {isLocked ? <Lock size={22} strokeWidth={2.5} className="text-red-500/30" /> : <tab.icon size={22} strokeWidth={2.5} />}
-                    {isActionRequired && (
-                      <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-900 rounded-full animate-bounce" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Mobile Bottom Bar - Compact Height with Balanced Vertical Padding */}
+            <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl border-t border-slate-100 dark:border-slate-800 px-10 py-3 pb-4 shadow-[0_-12px_40px_rgba(0,0,0,0.06)]">
+               <div className="flex justify-between items-center max-w-md mx-auto">
+                  {tabs.map(tab => {
+                    const isLocked = isFlightMissing && !['flights', 'dashboard'].includes(tab.id);
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button 
+                        key={tab.id} 
+                        onClick={() => !isLocked && setActiveTab(tab.id as any)} 
+                        disabled={isLocked} 
+                        className={`p-2 transition-all duration-300 flex flex-col items-center ${isActive ? 'text-primary scale-115' : (isLocked ? 'text-slate-200' : 'text-slate-400')}`}
+                        aria-label={tab.label}
+                      >
+                        <tab.icon size={22} strokeWidth={isActive ? 3 : 2} />
+                      </button>
+                    );
+                  })}
+               </div>
+            </nav>
           </div>
         )}
 
+        {/* Landing View (Unchanged Logic, UI maintained) */}
         {view === 'landing' && (
-          <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] transition-colors overflow-x-hidden">
-            <header className="p-4 sm:p-6 flex justify-between items-center max-w-7xl mx-auto w-full relative z-10">
-              <div className="text-xl sm:text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">{t('appName')}</div>
-              <GlobalNav />
-            </header>
+          <div className="min-h-screen flex flex-col bg-white dark:bg-[#1C1C1E] relative overflow-hidden">
+            <header className="p-6 flex justify-between items-center relative z-50"><div className="text-2xl font-black text-primary tracking-tighter">{t('appName')}</div><GlobalNav /></header>
             <main className="flex-1 flex flex-col items-center justify-center text-center px-6 relative z-10">
-              <h1 className="text-5xl md:text-8xl font-black tracking-tighter mb-8 whitespace-pre-line animate-in fade-in slide-in-from-bottom-6 duration-1000">{t('heroTitle')}</h1>
-              <p className="text-lg md:text-xl text-slate-500 max-w-2xl mb-12 animate-in fade-in delay-200">{t('heroSubtitle')}</p>
-              {isEnvMissing ? (
-                <div className="bg-red-50 dark:bg-red-900/20 p-6 rounded-[32px] border border-red-100 max-w-sm">
-                  <AlertCircle className="mx-auto mb-4 text-red-500" />
-                  <h3 className="font-black text-red-900 dark:text-red-200 mb-2">{t('devNotice')}</h3>
-                  <p className="text-xs text-red-600 dark:text-red-400">{t('devNoticeSub')}</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-6">
-                  <div id="google-login-hero"></div>
-                  {user && <button onClick={() => setView('list')} className="group bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-10 py-5 rounded-full text-lg font-black shadow-2xl hover:scale-105 transition-all">{t('startPlanning')} <ArrowRight size={22} className="inline ml-2 group-hover:translate-x-1 transition-transform" /></button>}
-                </div>
-              )}
+              <h1 className="text-7xl md:text-9xl font-black tracking-tighter mb-10 whitespace-pre-line leading-tight animate-in fade-in slide-in-from-bottom-4 duration-1000">{t('heroTitle')}</h1>
+              <p className="text-xl md:text-2xl text-slate-500 mb-14 animate-in fade-in duration-1000 delay-300 max-w-2xl">{t('heroSubtitle')}</p>
+              {!user ? <div id="google-login-hero"></div> : <button onClick={() => setView('list')} className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-14 py-6 rounded-full text-xl font-black shadow-2xl hover:scale-105 transition-all active:scale-95 flex items-center gap-3">{t('startPlanning')} <ArrowRight size={26} /></button>}
             </main>
           </div>
         )}
 
+        {/* Trip List View */}
         {view === 'list' && (
-          <div className="p-4 sm:p-6 md:p-12 max-w-7xl mx-auto min-h-screen">
-            <header className="flex justify-between items-center mb-12">
-              <div className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 tracking-tight">{t('appName')}</div>
-              <GlobalNav />
-            </header>
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">{t('yourTrips')}</h2>
-              <div className="flex items-center gap-3">
-                {isLoading && <Loader2 className="animate-spin text-slate-400" size={20} />}
-                <button onClick={() => setShowCreateForm(true)} className="bg-primary text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 font-black text-xs shadow-lg hover:scale-105 transition-all"><Plus size={18} /> {t('newTrip')}</button>
-              </div>
+          <div className="p-6 sm:p-12 max-w-7xl mx-auto min-h-screen pb-24">
+            <header className="flex justify-between items-center mb-16"><div className="text-2xl font-black text-primary tracking-tighter">{t('appName')}</div><GlobalNav /></header>
+            <div className="flex justify-between items-end mb-12">
+               <div>
+                  <h2 className="text-4xl sm:text-5xl font-black tracking-tight mb-2">{t('yourTrips')}</h2>
+                  <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Total {trips.length} Adventures</p>
+               </div>
+               <button onClick={() => setShowCreateForm(true)} className="bg-primary text-white px-8 py-4 rounded-[20px] flex items-center gap-2 font-black text-sm shadow-xl hover:shadow-primary/20 transition-all hover:scale-105 active:scale-95"><Plus size={20} /> {t('newTrip')}</button>
             </div>
-
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-40 gap-4">
-                <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                <p className="font-black text-slate-400 animate-pulse-soft uppercase text-[10px] tracking-widest">{t('loading')}</p>
-              </div>
-            ) : trips.length === 0 ? (
-              <div className="text-center py-24 bg-white dark:bg-slate-800 rounded-[40px] shadow-ios border border-slate-100 dark:border-slate-700">
-                <Plane className="mx-auto mb-8 text-blue-500 opacity-20" size={60} />
-                <h3 className="text-xl font-black mb-2">{t('noTrips')}</h3>
-                <p className="text-slate-500 mb-8">{t('noTripsSub')}</p>
-                <button onClick={() => setShowCreateForm(true)} className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-8 py-3.5 rounded-full font-black hover:scale-105 transition-all">{t('addFlight')}</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {trips.map(trip => (
-                  <div key={trip.id} onClick={() => { setCurrentTripId(trip.id); setView('detail'); }} className="group bg-white dark:bg-slate-800 rounded-[40px] shadow-ios overflow-hidden cursor-pointer transition-all transform hover:-translate-y-2 border border-transparent dark:border-slate-700">
-                    <div className="h-52 relative overflow-hidden">
-                      <img src={trip.coverImage} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 p-8 flex flex-col justify-end">
-                        <h3 className="text-white text-xl font-black truncate">{trip.name}</h3>
-                        <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest">{trip.startDate} - {trip.endDate}</p>
-                      </div>
-                    </div>
-                    <div className="p-6 flex justify-between items-center text-xs">
-                      <span className="text-slate-400 font-black">{trip.itinerary.length} {t('days')}</span>
-                      <span className="text-primary font-black">NT$ {calculateTotalSpentTWD(trip).toLocaleString()}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {trips.map(trip => (
+                <div key={trip.id} onClick={() => { setCurrentTripId(trip.id); setView('detail'); }} className="group bg-white dark:bg-slate-800 rounded-[48px] shadow-ios overflow-hidden cursor-pointer transition-all border border-transparent dark:border-slate-700 hover:-translate-y-3 hover:shadow-ios-lg">
+                  <div className="h-64 relative overflow-hidden">
+                    <img src={trip.coverImage} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-1000" loading="lazy" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 p-10 flex flex-col justify-end">
+                      <h3 className="text-white text-3xl font-black truncate mb-1">{trip.name}</h3>
+                      <p className="text-white/60 text-[11px] font-bold uppercase tracking-[0.2em]">{trip.startDate} - {trip.endDate}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="p-8 flex justify-between items-center text-xs font-black text-slate-400 uppercase tracking-[0.2em]"><span>{trip.destination}</span><span className="text-primary">NT$ {calculateExpensesTotal(trip).toLocaleString()}</span></div>
+                </div>
+              ))}
+              {trips.length === 0 && !isLoading && (
+                <div className="col-span-full py-32 text-center text-slate-300 font-black uppercase text-xs tracking-[0.4em] border-2 border-dashed border-slate-50 dark:border-slate-800 rounded-[56px] flex flex-col items-center gap-6">
+                   <MapPin size={48} className="opacity-20" />
+                   {t('noUpcoming')}
+                </div>
+              )}
+            </div>
             {showCreateForm && <TripForm onClose={() => setShowCreateForm(false)} onSubmit={handleCreateTripSubmit} />}
           </div>
         )}
