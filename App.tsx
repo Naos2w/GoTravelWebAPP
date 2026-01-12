@@ -160,6 +160,17 @@ const App: React.FC = () => {
     );
   };
 
+  const calculateTotalSpentTWD = (trip: Trip) => {
+    const rates: Record<string, number> = {
+      'TWD': 1, 'USD': 31.5, 'JPY': 0.21, 'EUR': 34.2, 'KRW': 0.024
+    };
+    const expensesTotal = trip.expenses.reduce((acc, e) => acc + (e.amount * e.exchangeRate), 0);
+    const flightTotal = (trip.flight?.price && trip.flight.price > 0)
+      ? (trip.flight.price * (rates[trip.flight.currency] || 1))
+      : 0;
+    return expensesTotal + flightTotal;
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F5F7] text-slate-900 pb-20 md:pb-0">
       {view === 'landing' && <Landing onStart={() => setView('list')} />}
@@ -242,8 +253,8 @@ const App: React.FC = () => {
                       <h3 className="font-semibold mb-4 text-slate-800">Quick Stats</h3>
                       <div className="space-y-4">
                         <div className="flex justify-between">
-                           <span className="text-slate-500">Budget Spent</span>
-                           <span className="font-medium">NT$ {currentTrip.expenses.reduce((acc, e) => acc + (e.amount * e.exchangeRate), 0).toLocaleString()}</span>
+                           <span className="text-slate-500">Total Spent</span>
+                           <span className="font-bold text-primary">NT$ {calculateTotalSpentTWD(currentTrip).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
                            <span className="text-slate-500">Checklist</span>

@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { X, Calendar, MapPin, Plane, ArrowRight, Loader2, Check, Info, ChevronLeft } from 'lucide-react';
 import { fetchTdxFlights } from '../services/tdxService';
-import { FlightSegment, Trip, Currency } from '../types';
+import { FlightSegment, Trip, Currency, ItineraryItem, DayPlan } from '../types';
 import { createNewTrip } from '../services/storageService';
 
 interface Props {
@@ -11,19 +12,17 @@ interface Props {
 
 type Step = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-select' | 'review';
 
-// --- Utility Helpers ---
 const formatTime = (iso: string) => {
   if (!iso) return "--:--";
   const date = new Date(iso);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Force 24-hour format
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
 const getAirlineLogo = (id: string | undefined) => {
   if (!id) return null;
   return `https://pics.avs.io/120/120/${id}.png`;
 };
-
-// --- Extracted Sub-components ---
 
 interface SearchStepProps {
   type: 'outbound' | 'inbound';
@@ -39,7 +38,7 @@ interface SearchStepProps {
   setInboundDate: (val: string) => void;
   loading: boolean;
   handleSearch: (type: 'outbound' | 'inbound') => void;
-  onBack?: () => void; // New optional back handler
+  onBack?: () => void;
 }
 
 const SearchStep: React.FC<SearchStepProps> = ({ 
@@ -167,7 +166,7 @@ const SelectStep: React.FC<SelectStepProps> = ({
                       alt={f.airline} 
                       className="w-full h-full object-contain"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40x40?text=' + f.airlineID;
+                        (e.target as HTMLImageElement).src = 'https://via.placeholder.com/40x40?text=' + (f.airlineID || 'AIR');
                       }}
                     />
                   </div>
@@ -219,7 +218,7 @@ interface ReviewStepProps {
   inboundFlight: FlightSegment | null;
   destination: string;
   handleCreateTrip: () => void;
-  onBack: () => void; // New back handler for review step
+  onBack: () => void;
 }
 
 const ReviewStep: React.FC<ReviewStepProps> = ({ 
@@ -231,7 +230,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
          <Check size={24} />
        </div>
        <h3 className="text-xl font-bold text-slate-800">確認您的旅程</h3>
-       <p className="text-slate-500 text-sm">已成功從 TDX 取得航班班表</p>
+       <p className="text-slate-500 text-sm">航班資訊將自動同步至行程表</p>
      </div>
 
      <div className="space-y-3">
@@ -250,7 +249,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
            <div className="text-right">
               <div className="text-xs font-bold text-slate-400 uppercase tracking-tighter">去程</div>
               <div className="text-sm font-bold text-slate-700">{outboundFlight?.flightNumber}</div>
-              <div className="text-[10px] text-slate-400 font-medium">{outboundFlight?.airlineNameZh || outboundFlight?.airline}</div>
+              <div className="text-[10px] text-slate-400 font-medium">Terminal {outboundFlight?.terminal || 'TBA'}</div>
            </div>
         </div>
         
@@ -269,7 +268,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
            <div className="text-right">
               <div className="text-xs font-bold text-slate-400 uppercase tracking-tighter">回程</div>
               <div className="text-sm font-bold text-slate-700">{inboundFlight?.flightNumber}</div>
-              <div className="text-[10px] text-slate-400 font-medium">{inboundFlight?.airlineNameZh || inboundFlight?.airline}</div>
+              <div className="text-[10px] text-slate-400 font-medium">Terminal {inboundFlight?.terminal || 'TBA'}</div>
            </div>
         </div>
      </div>
@@ -277,7 +276,7 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
      <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 flex gap-3">
         <Info className="text-blue-500 shrink-0" size={18} />
         <p className="text-xs text-blue-800 leading-relaxed">
-           系統將根據目的地機場 <b>{destination}</b> 自動命名。您稍後可以在儀表板中自行更改。
+           系統已為您在行程的首尾兩日自動安排好航機時間點。
         </p>
      </div>
 
@@ -331,7 +330,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       setStep(type === 'outbound' ? 'outbound-select' : 'inbound-select');
     } catch (e) {
       console.error(e);
-      alert("抓取航班資料失敗，請稍後再試。");
+      alert("抓取航班資料失敗。");
     } finally {
       setLoading(false);
     }
@@ -355,12 +354,64 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   const handleCreateTrip = () => {
     if (!outboundFlight || !inboundFlight) return;
 
+    const start = new Date(outboundFlight.departureTime.split('T')[0]);
+    const end = new Date(inboundFlight.departureTime.split('T')[0]);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    const generatedItinerary: DayPlan[] = [];
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+      const items: ItineraryItem[] = [];
+
+      if (i === 0) {
+        // Day 1
+        items.push({
+          id: 'outbound-flight-dep',
+          time: outboundFlight.departureTime.split('T')[1]?.substring(0, 5) || '09:00',
+          placeName: `Airport ${outboundFlight.departureAirport}`,
+          type: 'Transport',
+          note: `航班: ${outboundFlight.flightNumber}, 航廈: ${outboundFlight.terminal || 'TBA'}`
+        });
+        items.push({
+          id: 'outbound-flight-arr',
+          time: outboundFlight.arrivalTime.split('T')[1]?.substring(0, 5) || '12:00',
+          placeName: `Airport ${outboundFlight.arrivalAirport}`,
+          type: 'Transport',
+          note: `航廈: ${outboundFlight.terminal || 'TBA'}`
+        });
+      }
+
+      if (i === totalDays - 1) {
+        // Last Day
+        items.push({
+          id: 'inbound-flight-dep',
+          time: inboundFlight.departureTime.split('T')[1]?.substring(0, 5) || '18:00',
+          placeName: `Airport ${inboundFlight.departureAirport}`,
+          type: 'Transport',
+          note: `航班: ${inboundFlight.flightNumber}, 航廈: ${inboundFlight.terminal || 'TBA'}`
+        });
+        items.push({
+          id: 'inbound-flight-arr',
+          time: inboundFlight.arrivalTime.split('T')[1]?.substring(0, 5) || '22:00',
+          placeName: `Airport ${inboundFlight.arrivalAirport}`,
+          type: 'Transport',
+          note: `航廈: ${inboundFlight.terminal || 'TBA'}`
+        });
+      }
+
+      generatedItinerary.push({ date: dateStr, items: items.sort((a,b) => a.time.localeCompare(b.time)) });
+    }
+
     const newTrip = createNewTrip({
       destination: destination,
       startDate: outboundFlight.departureTime.split('T')[0],
       endDate: inboundFlight.departureTime.split('T')[0]
     });
 
+    newTrip.itinerary = generatedItinerary;
     newTrip.flight = {
       price: 0,
       currency: Currency.TWD,
@@ -374,11 +425,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     };
 
     const airportMap: Record<string, string> = {
-      'TPE': '台北', 'TSA': '台北', 'KHH': '高雄',
-      'NRT': '東京', 'HND': '東京', 'KIX': '大阪',
-      'ICN': '首爾', 'GMP': '首爾', 'BKK': '曼谷',
-      'SIN': '新加坡', 'HKG': '香港', 'LHR': '倫敦',
-      'JFK': '紐約', 'CDG': '巴黎', 'LAX': '洛杉磯'
+      'TPE': '台北', 'TSA': '台北', 'KHH': '高雄', 'NRT': '東京', 'HND': '東京', 'KIX': '大阪', 'ICN': '首爾', 'GMP': '首爾', 'BKK': '曼谷', 'SIN': '新加坡', 'HKG': '香港', 'LHR': '倫敦', 'JFK': '紐約', 'CDG': '巴黎', 'LAX': '洛杉磯'
     };
     
     if (airportMap[destination]) {
