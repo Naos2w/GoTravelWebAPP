@@ -217,8 +217,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
   const currentDay = days[selectedDayIndex];
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 h-[calc(100vh-160px)] animate-in fade-in duration-500">
-      {/* 行動端：水平捲動選擇天數 / 桌機端：垂直選擇 */}
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 h-[calc(100vh-160px)] animate-in fade-in duration-500 overflow-hidden">
+      {/* 天數選擇：手機與平板在頂部滑動，桌機 lg 在左側垂直排列 */}
       <div className="lg:w-32 flex lg:flex-col gap-2 sm:gap-3 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-2 lg:pb-0 shrink-0">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
@@ -262,9 +262,9 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
 
             return (
               <React.Fragment key={item.id}>
-                {/* 行程節點 - 行動端保留時間軸間距 (pl-10) */}
-                <div className={`relative pl-10 sm:pl-16 ${isManualTransport ? 'pb-4 lg:pb-6' : 'pb-10 lg:pb-12'}`}>
-                  {/* 時間軸點 - 始終顯示 */}
+                {/* 行程卡片：行動端維持 pl-10 保留左側垂直導引線 */}
+                <div className={`relative pl-10 sm:pl-16 ${isManualTransport ? 'pb-4' : 'pb-10 lg:pb-12'}`}>
+                  {/* 時間軸點：始終顯示 */}
                   {!isManualTransport && (
                     <div className={`absolute left-[-11px] sm:left-[-14px] top-3 w-5.5 h-5.5 sm:w-7 sm:h-7 rounded-full border-4 bg-white dark:bg-slate-900 z-10 flex items-center justify-center shadow-sm transition-all ${
                        isPlace ? 'border-primary/20' : isFood ? 'border-orange-500/20' : 'border-blue-500/20'
@@ -272,7 +272,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                       <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isPlace ? 'bg-primary' : isFood ? 'bg-orange-500' : 'bg-blue-500'}`} />
                     </div>
                   )}
-                  {/* 時間軸線 - 始終顯示 */}
+                  {/* 時間軸垂直線：始終保留 */}
                   <div className={`absolute left-[-1px] top-10 sm:top-12 bottom-0 w-0.5 ${
                     isManualTransport || isBetweenFlight || (nextItem && nextItem.type === 'Transport') 
                     ? 'border-l-2 border-dashed border-slate-100 dark:border-slate-800' 
@@ -291,11 +291,11 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                                     </button>
                                   ))}
                                </div>
-                               <div className="flex gap-1 h-5 lg:h-6 shrink-0 px-1 mb-1">
-                                  <button onClick={() => setInsertingAt(null)} className="flex-1 text-slate-400 dark:text-slate-500 rounded-lg text-[9px] font-black hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 flex items-center justify-center gap-1">
+                               <div className="flex gap-1 h-6 shrink-0 px-1 mb-1">
+                                  <button onClick={() => setInsertingAt(null)} className="flex-1 text-slate-400 dark:text-slate-500 rounded-lg text-[9px] font-black hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-700 flex items-center justify-center gap-1 transition-colors">
                                     <X size={10} /><span className="hidden sm:inline">{labels.cancel}</span>
                                   </button>
-                                  <button onClick={() => confirmInsertTransport(idx, true)} className="flex-[1.5] bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center gap-1">
+                                  <button onClick={() => confirmInsertTransport(idx, true)} className="flex-[1.5] bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-lg text-[9px] font-black shadow-sm flex items-center justify-center gap-1 transition-all active:scale-95">
                                     <Check size={10}/><span className="hidden sm:inline">{labels.confirm}</span>
                                   </button>
                                </div>
@@ -304,44 +304,43 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                             <div className="flex items-center gap-2 lg:gap-3 w-full justify-center px-4">
                                <div className="flex items-center gap-2">
                                  {transportOpt && <transportOpt.icon size={16} className={transportOpt.color} />}
-                                 {/* 交通持續時間 - 僅在寬度真的不足時裁切 */}
-                                 <span className="text-xs sm:text-sm font-mono font-bold text-slate-600 dark:text-slate-400 tracking-tight truncate max-w-[120px] sm:max-w-none">
+                                 <span className="text-xs sm:text-sm font-mono font-bold text-slate-600 dark:text-slate-400 tracking-tight truncate max-w-[100px] sm:max-w-none">
                                    {item.note === labels.calculating ? <Loader2 size={12} className="animate-spin" /> : item.note}
                                  </span>
                                  {calculatingId === item.id && <Loader2 size={14} className="animate-spin text-primary hidden sm:inline" />}
                                </div>
                                <div className="absolute right-2 lg:right-4 flex gap-1 lg:gap-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
-                                  <button onClick={(e) => { e.stopPropagation(); setInsertingAt(idx); setTempTransportType(item.transportType || 'Public'); }} className="p-1.5 lg:p-2 text-slate-300 hover:text-primary dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg lg:rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-50 dark:hover:border-slate-600"><Edit2 size={12}/></button>
-                                  <button onClick={(e) => { e.stopPropagation(); deleteItem(idx); }} className="p-1.5 lg:p-2 text-slate-300 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg lg:rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-50 dark:hover:border-slate-600"><Trash2 size={12}/></button>
+                                  <button onClick={(e) => { e.stopPropagation(); setInsertingAt(idx); setTempTransportType(item.transportType || 'Public'); }} className="p-1.5 lg:p-2 text-slate-300 hover:text-primary dark:hover:text-blue-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-50 dark:hover:border-slate-600"><Edit2 size={12}/></button>
+                                  <button onClick={(e) => { e.stopPropagation(); deleteItem(idx); }} className="p-1.5 lg:p-2 text-red-500/80 dark:text-red-400/80 hover:text-red-600 dark:hover:text-red-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-all shadow-sm border border-transparent hover:border-slate-50 dark:hover:border-slate-600"><Trash2 size={12}/></button>
                                </div>
                             </div>
                           )}
                        </div>
                     </div>
                   ) : (
-                    <div className={`rounded-[24px] sm:rounded-[28px] p-5 sm:p-6 group transition-all border shadow-ios ${
+                    <div className={`rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 group transition-all border shadow-ios ${
                       isFlightPoint 
                         ? 'bg-blue-50/20 dark:bg-blue-900/10 border-blue-50/50 dark:border-blue-900/30' 
                         : 'bg-white dark:bg-slate-800/80 border-transparent dark:border-slate-700 hover:shadow-ios-lg transform hover:-translate-y-0.5'
                     }`}>
-                      {/* 卡片內容：行動端垂直佈局並置中 (flex-col items-center text-center) */}
-                      <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-5">
+                      {/* 三段式排列：手機端 flex-col items-center (垂直置中)；平板桌機 sm:flex-row (水平) */}
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4 sm:gap-6">
                         <div className="flex flex-col items-center min-w-[70px] sm:min-w-[80px] relative">
-                          <button onClick={() => !isFlightPoint && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)} className={`font-mono text-xs sm:text-sm lg:text-base font-black px-3 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all flex items-center gap-2 ${isFlightPoint ? 'text-blue-600 dark:text-blue-400 cursor-default' : 'text-slate-700 dark:text-slate-100 bg-slate-50 sm:bg-transparent dark:bg-slate-700 sm:dark:bg-transparent hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-100 sm:border-transparent dark:border-slate-600 shadow-sm sm:shadow-none'}`}>
-                            {!isFlightPoint && <Clock size={12} className="opacity-40" />}
+                          <button onClick={() => !isFlightPoint && setShowTimePickerId(showTimePickerId === item.id ? null : item.id)} className={`font-mono text-xs sm:text-sm lg:text-base font-black px-3.5 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all flex items-center gap-2 ${isFlightPoint ? 'text-blue-600 dark:text-blue-400 cursor-default' : 'text-slate-700 dark:text-slate-100 bg-slate-50 sm:bg-transparent dark:bg-slate-700 sm:dark:bg-transparent hover:bg-slate-100 dark:hover:bg-slate-600 border border-slate-100 sm:border-transparent dark:border-slate-600 shadow-sm sm:shadow-none'}`}>
+                            {!isFlightPoint && <Clock size={14} className="opacity-40" />}
                             {item.time}
                           </button>
                           {showTimePickerId === item.id && (
-                             <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] lg:rounded-[32px] shadow-2xl z-50 p-3 lg:p-4 flex gap-3 lg:gap-4 animate-in fade-in zoom-in-95">
-                                <div className="flex flex-col gap-1.5 max-h-40 lg:max-h-48 overflow-y-auto no-scrollbar pr-1">
+                             <div className="absolute top-full left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] lg:rounded-[32px] shadow-2xl z-50 p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="flex flex-col gap-1.5 max-h-40 sm:max-h-48 overflow-y-auto no-scrollbar pr-1">
                                   {Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0')).map(h => (
-                                    <button key={h} onClick={() => updateItem(idx, 'time', `${h}:${item.time.split(':')[1]}`)} className={`w-9 h-9 lg:w-10 lg:h-10 rounded-lg lg:rounded-xl text-xs font-mono font-black ${item.time.split(':')[0] === h ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200'}`}>{h}</button>
+                                    <button key={h} onClick={() => updateItem(idx, 'time', `${h}:${item.time.split(':')[1]}`)} className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${item.time.split(':')[0] === h ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200'}`}>{h}</button>
                                   ))}
                                 </div>
                                 <div className="w-px bg-slate-100 dark:bg-slate-700 my-2"></div>
-                                <div className="flex flex-col gap-1.5 max-h-40 lg:max-h-48 overflow-y-auto no-scrollbar pr-1">
+                                <div className="flex flex-col gap-1.5 max-h-40 sm:max-h-48 overflow-y-auto no-scrollbar pr-1">
                                   {Array.from({length: 12}, (_, i) => (i*5).toString().padStart(2, '0')).map(m => (
-                                    <button key={m} onClick={() => { updateItem(idx, 'time', `${item.time.split(':')[0]}:${m}`); setShowTimePickerId(null); }} className={`w-9 h-9 lg:w-10 lg:h-10 rounded-lg lg:rounded-xl text-xs font-mono font-black ${item.time.split(':')[1] === m ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200'}`}>{m}</button>
+                                    <button key={m} onClick={() => { updateItem(idx, 'time', `${item.time.split(':')[0]}:${m}`); setShowTimePickerId(null); }} className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${item.time.split(':')[1] === m ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-700 dark:text-slate-200'}`}>{m}</button>
                                   ))}
                                 </div>
                              </div>
@@ -349,10 +348,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                         </div>
                         <div className="flex-1 w-full space-y-2 overflow-hidden">
                           <div className="flex flex-col sm:flex-row items-center sm:items-baseline gap-1.5 sm:gap-2">
-                             <div className="flex items-center gap-1.5 shrink-0">
-                               {isFood && <Coffee size={14} className="text-orange-500" />}
-                               {isPlace && <MapPin size={14} className="text-primary" />}
-                               {isFlightPoint && <Plane size={14} className="text-blue-500" />}
+                             <div className="flex items-center gap-2 shrink-0">
+                               {isFood && <Coffee size={16} className="text-orange-500" />}
+                               {isPlace && <MapPin size={16} className="text-primary" />}
+                               {isFlightPoint && <Plane size={16} className="text-blue-500" />}
                              </div>
                              {isFlightPoint ? (
                                <div className="font-bold tracking-tight text-sm sm:text-base lg:text-lg text-blue-900 dark:text-blue-300 truncate">{item.placeName}</div>
@@ -362,21 +361,19 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                           </div>
                           <SafeInput value={item.note || ''} onChange={(val) => !isFlightPoint && updateItem(idx, 'note', val)} disabled={isFlightPoint} placeholder={isFlightPoint ? "" : "..."} className={`text-[11px] sm:text-xs lg:text-sm font-semibold bg-transparent border-none focus:ring-0 p-0 w-full text-center sm:text-left ${isFlightPoint ? 'text-blue-400/80' : 'text-slate-400 dark:text-slate-500'}`} />
                         </div>
-                        {/* 操作按鈕 - 始終保留，但在行動端置中 */}
-                        <div className="flex sm:flex-col gap-3 opacity-0 group-hover:opacity-100 transition-opacity mt-4 sm:mt-0">
+                        <div className="flex sm:flex-col gap-3 opacity-0 group-hover:opacity-100 transition-opacity mt-3 sm:mt-0">
                            <button className={`p-2.5 sm:p-2 bg-slate-50 dark:bg-slate-700 rounded-xl shadow-sm border border-transparent ${isFood ? 'text-orange-500 hover:border-orange-100' : 'text-primary hover:border-blue-100'}`} onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank')}><Map size={16} /></button>
-                           {!isFlightPoint && <button onClick={() => deleteItem(idx)} className="p-2.5 sm:p-2 bg-slate-50 dark:bg-slate-700 text-slate-300 dark:text-slate-600 hover:text-red-500 rounded-xl shadow-sm border border-transparent hover:border-slate-100 transition-colors"><Trash2 size={16} /></button>}
+                           {!isFlightPoint && <button onClick={() => deleteItem(idx)} className="p-2.5 sm:p-2 bg-slate-50 dark:bg-slate-700 text-red-500/80 dark:text-red-400/80 hover:text-red-600 dark:hover:text-red-300 rounded-xl shadow-sm border border-transparent hover:border-slate-100 transition-colors"><Trash2 size={16} /></button>}
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* 航程之間的間隔 */}
                 {isBetweenFlight && (
-                  <div className="relative pl-10 sm:pl-16 pb-4 lg:pb-6">
+                  <div className="relative pl-10 sm:pl-16 pb-4">
                     <div className="absolute left-[-1px] top-0 bottom-0 w-0.5 border-l-2 border-dashed border-blue-50 dark:border-blue-900/30 hidden sm:block" />
-                    <div className="bg-blue-50/30 dark:bg-blue-900/10 rounded-[16px] lg:rounded-[20px] p-3 lg:p-4 border border-dashed border-blue-100 dark:border-blue-900/30 flex items-center justify-center h-[52px] lg:h-[60px]">
+                    <div className="bg-blue-50/30 dark:bg-blue-900/10 rounded-[20px] p-3 sm:p-4 border border-dashed border-blue-100 dark:border-blue-900/30 flex items-center justify-center h-[52px] sm:h-[60px]">
                        <div className="flex items-center gap-2 lg:gap-3 text-blue-500 dark:text-blue-400">
                           <Plane size={14} />
                           <span className="hidden sm:inline text-[9px] font-black uppercase tracking-widest">{labels.flight}</span>
@@ -386,32 +383,31 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate }) => {
                   </div>
                 )}
 
-                {/* 設定交通工具按鈕 */}
                 {canInsertManualTransport && (
                   <div className="relative flex items-center justify-center py-4 lg:py-6 group/btn min-h-[48px]">
                     <div className="absolute left-[-1px] w-0.5 bg-slate-50 dark:bg-slate-800/50 h-full hidden sm:block" />
                     {insertingAt === idx ? (
-                      <div ref={editRef} className="z-10 bg-white dark:bg-slate-800 border border-indigo-50 dark:border-indigo-900 shadow-2xl rounded-[24px] lg:rounded-[28px] p-3 lg:p-4 flex flex-col gap-2 lg:gap-3 animate-in zoom-in-95 duration-200 min-w-[220px] sm:min-w-[320px]">
+                      <div ref={editRef} className="z-10 bg-white dark:bg-slate-800 border border-indigo-50 dark:border-indigo-900 shadow-2xl rounded-[28px] p-4 flex flex-col gap-3 animate-in zoom-in-95 duration-200 min-w-[240px] sm:min-w-[320px]">
                         <div className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-2 text-center">{labels.selectTransport}</div>
-                        <div className="flex gap-2 bg-slate-50 dark:bg-slate-900 p-1 rounded-xl lg:rounded-2xl">
+                        <div className="flex gap-2 bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl">
                           {TRANSPORT_OPTIONS.map(opt => (
                             <button key={opt.type} onClick={() => setTempTransportType(opt.type)} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all flex-1 ${tempTransportType === opt.type ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-slate-300 hover:text-slate-600'}`}>
-                              <opt.icon size={16} className={tempTransportType === opt.type ? opt.color : 'text-slate-200 dark:text-slate-700'} />
+                              <opt.icon size={18} className={tempTransportType === opt.type ? opt.color : 'text-slate-200 dark:text-slate-700'} />
                             </button>
                           ))}
                         </div>
-                        <div className="flex gap-2 lg:gap-3">
-                           <button onClick={() => setInsertingAt(null)} className="flex-1 py-2 text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl text-[9px] sm:text-[10px] font-bold flex items-center justify-center gap-1 border border-transparent hover:border-slate-50 transition-all">
+                        <div className="flex gap-2 sm:gap-3">
+                           <button onClick={() => setInsertingAt(null)} className="flex-1 py-2.5 text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition-all">
                              <X size={14} /><span className="hidden sm:inline">{labels.cancel}</span>
                            </button>
-                           <button onClick={() => confirmInsertTransport(idx)} className="flex-[2] py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[9px] sm:text-[10px] font-black flex items-center justify-center gap-1 shadow-xl hover:opacity-90 transition-all">
+                           <button onClick={() => confirmInsertTransport(idx)} className="flex-[2] py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[10px] font-black flex items-center justify-center gap-1 shadow-xl hover:opacity-90 active:scale-95 transition-all">
                              <Check size={14} /><span className="hidden sm:inline">{labels.confirmCalc}</span>
                            </button>
                         </div>
                       </div>
                     ) : (
                       <button onClick={() => { setInsertingAt(idx); setTempTransportType('Public'); }} className="z-10 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-100 dark:hover:border-indigo-900 px-5 py-2.5 rounded-full text-[10px] lg:text-[11px] font-black flex items-center gap-2 transition-all opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-xl hover:scale-105 active:scale-95">
-                        <Plus size={12} /> <span>{labels.setTransport}</span>
+                        <Plus size={14} /> <span>{labels.setTransport}</span>
                       </button>
                     )}
                   </div>
