@@ -2,7 +2,7 @@ import React from 'react';
 import { FlightSegment } from '../types';
 import { Plane, QrCode, Briefcase, ShoppingBag, MapPin } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
 
 interface Props {
   segment: FlightSegment;

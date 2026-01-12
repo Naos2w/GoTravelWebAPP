@@ -5,7 +5,7 @@ import {
   Check, Plus, Trash2, FileText, Zap, 
   Shirt, Sparkles, Tag, ChevronDown, ChevronUp, X as CloseIcon
 } from 'lucide-react';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
 
 interface Props {
@@ -83,7 +83,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   const addItem = () => {
     if (!newItemText.trim() || !currentUser) return;
     const newItem: ChecklistItem = {
-      id: `manual-${Date.now()}`,
+      id: crypto.randomUUID(),
       user_id: currentUser.id, // Assign to current user
       text: newItemText,
       isCompleted: false,
