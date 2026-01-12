@@ -1,0 +1,5 @@
+{
+  "name": "Go Travel",
+  "description": "A comprehensive, Apple-style travel planning application for managing flights, itineraries, expenses, and packing lists, featuring AI-powered assistance and image generation.",
+  "requestFramePermissions": []
+}
