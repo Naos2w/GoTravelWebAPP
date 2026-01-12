@@ -845,32 +845,60 @@ const App: React.FC = () => {
     }
   };
 
+  // Use a ref to track the latest user state.
+  // This allows us to access the current user inside the onAuthStateChange callback
+  // (which runs only once on mount) without adding 'user' to the dependency array,
+  // preventing the infinite loop the user encountered.
+  const userRef = useRef<User | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   useEffect(() => {
     const initAuth = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      
+      // Initial check
       if (session?.user) {
-        handleAuthUser(session.user);
+         // Only run if we are effectively changing users (or initializing)
+         if (!userRef.current || userRef.current.id !== session.user.id) {
+            handleAuthUser(session.user);
+         }
       } else {
         if (!window.location.hash.includes("access_token")) {
-          setIsLoading(false);
-          setView("landing");
+           // Prevent clearing view if we have a user (though theoretically session should exist)
+           if (!userRef.current) {
+              setIsLoading(false);
+              setView("landing");
+           }
         }
       }
+
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
+          // KEY FIX: Check against the Ref (latest state).
+          // If IDs match, it's just a token refresh or redundant event -> content remains untouched.
+          if (userRef.current && userRef.current.id === session.user.id) {
+             console.log("Skipping redundant auth and view reset for same user [Token Refresh]");
+             return;
+          }
           handleAuthUser(session.user);
         } else if (event === "SIGNED_OUT") {
+          window.history.replaceState(null, "", window.location.pathname);
           setUser(null);
           setView("landing");
           setTrips([]);
           setIsLoading(false);
         } else {
           if (!session && !window.location.hash.includes("access_token")) {
-            setIsLoading(false);
+             // Only clear loading if we really aren't logged in
+             if (!userRef.current) {
+                setIsLoading(false);
+             }
           }
         }
       });
@@ -1343,6 +1371,24 @@ const App: React.FC = () => {
               <Calendar size={12} /> {currentTrip?.startDate} —{" "}
               {currentTrip?.endDate}
             </div>
+            {/* Mobile Flight Numbers */}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {(currentTrip?.flights || [])
+                .filter(f => f.user_id === user?.id)
+                .map(f => {
+                   // Collect outgoing and returning flight numbers
+                   const numbers = [];
+                   if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
+                   if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
+                   return numbers;
+                })
+                .flat()
+                .map((item, idx) => (
+                  <div key={idx} className={`text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${item.isReturn ? 'bg-slate-100 dark:bg-slate-700 text-slate-400' : 'bg-primary/10 text-primary'}`}>
+                     <Plane size={10} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
 
@@ -1628,32 +1674,26 @@ const App: React.FC = () => {
                           {currentTrip.endDate}
                         </div>
                         <div className="mt-6 flex flex-wrap gap-2">
-                          {Array.from(
-                            new Set(
-                              allFlights
-                                .map((f) => f.outbound.flightNumber)
-                                .filter(Boolean)
-                            )
-                          ).map((fn) => (
+                          {(currentTrip.flights || [])
+                            .filter((f) => f.user_id === user?.id)
+                            .map((f) => {
+                               // Collect outgoing and returning flight numbers
+                               const numbers = [];
+                               if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
+                               if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
+                               return numbers;
+                            })
+                            .flat()
+                            .map((item, i) => (
                             <div
-                              key={fn}
-                              className="text-[10px] font-black bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg hover:scale-105 transition-all"
+                              key={i}
+                              className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:scale-105 ${
+                                item.isReturn
+                                 ? "bg-slate-100 dark:bg-slate-700 text-slate-400"
+                                 : "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg"
+                              }`}
                             >
-                              <Plane size={12} /> {fn}
-                            </div>
-                          ))}
-                          {Array.from(
-                            new Set(
-                              allFlights
-                                .map((f) => f.inbound?.flightNumber)
-                                .filter(Boolean)
-                            )
-                          ).map((fn) => (
-                            <div
-                              key={fn}
-                              className="text-[10px] font-black bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-xl text-slate-400 flex items-center gap-2 hover:scale-105 transition-all"
-                            >
-                              <Plane size={12} className="rotate-180" /> {fn}
+                              <Plane size={12} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
                             </div>
                           ))}
                         </div>
