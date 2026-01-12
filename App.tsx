@@ -892,7 +892,7 @@ const App: React.FC = () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: window.location.href },
       });
       if (error) throw error;
     } catch (error) {
