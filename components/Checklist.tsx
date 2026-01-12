@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Trip, ChecklistItem } from '../types';
+
+import React, { useState, useEffect } from 'react';
+import { Trip, ChecklistItem, User } from '../types';
 import { 
   Check, Plus, Trash2, FileText, Zap, 
-  Shirt, Sparkles, Tag, ChevronDown, ChevronUp, X as CloseIcon, Lock
+  Shirt, Sparkles, Tag, ChevronDown, ChevronUp, X as CloseIcon
 } from 'lucide-react';
-import { useTranslation } from '../App';
+import { useTranslation } from "../contexts/LocalizationContext";
+import { supabase } from '../services/storageService';
 
 interface Props {
   trip: Trip;
@@ -22,6 +24,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 
 export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newItemText, setNewItemText] = useState('');
   const [category, setCategory] = useState<ChecklistItem['category']>('Other');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -32,6 +35,19 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     Toiletries: true,
     Other: true
   });
+
+  useEffect(() => {
+     supabase.auth.getUser().then(({data}) => {
+       if (data.user) {
+         setCurrentUser({
+            id: data.user.id,
+            name: data.user.user_metadata.full_name,
+            email: data.user.email!,
+            picture: data.user.user_metadata.avatar_url
+         });
+       }
+     });
+  }, []);
 
   const getCatName = (cat: string) => {
     switch(cat) {
@@ -46,15 +62,18 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   const labels = {
     title: t('checklist'),
     ready: t('packingProgress'),
-    addItem: t('newActivity'),
+    addItem: t('addChecklistItem'),
     inputPlaceholder: t('descRequired'),
     confirm: t('save'),
     cancel: t('cancel'),
     confirmDelete: t('confirmDeleteItems')
   };
 
+  // Filter items that belong to the current user
+  const myItems = trip.checklist.filter(i => currentUser && i.user_id === currentUser.id);
+
   const toggleItem = (itemId: string) => {
-    if (isGuest) return;
+    // No guest restriction here because it's their own list
     const newChecklist = trip.checklist.map(item => 
       item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
     );
@@ -62,9 +81,10 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   };
 
   const addItem = () => {
-    if (isGuest || !newItemText.trim()) return;
+    if (!newItemText.trim() || !currentUser) return;
     const newItem: ChecklistItem = {
-      id: `manual-${Date.now()}`,
+      id: crypto.randomUUID(),
+      user_id: currentUser.id, // Assign to current user
       text: newItemText,
       isCompleted: false,
       category,
@@ -75,7 +95,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   };
 
   const deleteItem = (itemId: string) => {
-    if (isGuest || !window.confirm(labels.confirmDelete)) return;
+    if (!window.confirm(labels.confirmDelete)) return;
     onUpdate({ ...trip, checklist: trip.checklist.filter(i => i.id !== itemId) });
   };
 
@@ -83,7 +103,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  const globalProgress = trip.checklist.length === 0 ? 0 : Math.round((trip.checklist.filter(i => i.isCompleted).length / trip.checklist.length) * 100);
+  const globalProgress = myItems.length === 0 ? 0 : Math.round((myItems.filter(i => i.isCompleted).length / myItems.length) * 100);
   const categories: ChecklistItem['category'][] = ['Documents', 'Gear', 'Clothing', 'Toiletries', 'Other'];
 
   return (
@@ -91,7 +111,6 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
       <div className="bg-white dark:bg-slate-800 p-6 sm:p-12 rounded-[40px] shadow-ios border border-slate-100 dark:border-slate-800">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">{labels.title}</h2>
-          {isGuest && <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-700"><Lock size={12}/> {t('readOnly')}</div>}
         </div>
         
         <div className="mb-10 bg-slate-50/50 dark:bg-slate-900/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 backdrop-blur-sm">
@@ -104,8 +123,7 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
           </div>
         </div>
 
-        {!isGuest && (
-          <div className="mb-10 bg-slate-50/30 dark:bg-slate-900/30 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all duration-500">
+        <div className="mb-10 bg-slate-50/30 dark:bg-slate-900/30 rounded-3xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-all duration-500">
              <div className={`transition-all duration-500 ease-in-out ${isFormOpen ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'}`}>
                <button 
                  onClick={() => setIsFormOpen(true)} 
@@ -158,11 +176,10 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                </div>
              </div>
           </div>
-        )}
 
         <div className="space-y-8">
           {categories.map(cat => {
-            const items = trip.checklist.filter(i => i.category === cat);
+            const items = myItems.filter(i => i.category === cat);
             if (items.length === 0) return null;
             
             const catCompleted = items.filter(i => i.isCompleted).length;
@@ -171,9 +188,6 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
             const isExpanded = expandedCats[cat];
             const Icon = CATEGORY_ICONS[cat] || Tag;
 
-            // Unified Warning Styles:
-            // Incomplete: Red warning style
-            // Complete: Neutral/Green success style
             const cardStyle = isComplete 
               ? 'border-green-100 bg-green-50/20 dark:border-green-900/30 dark:bg-green-900/10' 
               : 'border-red-200 bg-red-50/50 dark:border-red-900/30 dark:bg-red-900/10';
@@ -232,12 +246,11 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                     >
                       <div className="flex items-center gap-4 flex-1 min-w-0">
                         <button 
-                          disabled={isGuest}
                           onClick={(e) => { e.stopPropagation(); toggleItem(item.id); }} 
                           className={`w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all shrink-0 ${
                             item.isCompleted 
                             ? 'bg-green-500 border-green-500 text-white' 
-                            : isGuest ? 'border-slate-100 dark:border-slate-800 text-transparent' : 'border-slate-200 dark:border-slate-600 text-transparent hover:border-primary'
+                            : 'border-slate-200 dark:border-slate-600 text-transparent hover:border-primary'
                           }`}
                         >
                           <Check size={16} strokeWidth={4} />
@@ -251,14 +264,12 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                         </span>
                       </div>
                       
-                      {!isGuest && (
-                        <button 
+                      <button 
                           onClick={(e) => { e.stopPropagation(); deleteItem(item.id); }} 
                           className="p-2 text-slate-300 hover:text-red-500 transition-all active:scale-90 opacity-100 sm:opacity-0 sm:group-hover/item:opacity-100"
                         >
                           <Trash2 size={16}/>
-                        </button>
-                      )}
+                      </button>
                     </div>
                   ))}
                 </div>
