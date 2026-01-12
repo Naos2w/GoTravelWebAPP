@@ -30,7 +30,12 @@ import {
 } from "./contexts/LocalizationContext";
 import { Checklist } from "./components/Checklist";
 import { Itinerary } from "./components/Itinerary";
-import { Expenses } from "./components/Expenses";
+import {
+  Expenses,
+  CATEGORY_UI,
+  getCategoryName,
+} from "./components/Expenses";
+
 import { TripForm } from "./components/TripForm";
 import { FlightManager } from "./components/FlightManager";
 import {
@@ -1219,7 +1224,7 @@ const App: React.FC = () => {
       )
       .slice(0, 5);
   }, [currentTrip]);
-
+  
   const chartData = useMemo(() => {
     if (!currentTrip) return [];
     const dataMap: Record<string, number> = {};
@@ -1240,8 +1245,14 @@ const App: React.FC = () => {
     );
     if (flightsSum > 0)
       dataMap["Flight"] = (dataMap["Flight"] || 0) + flightsSum;
-    return Object.entries(dataMap).map(([name, value]) => ({ name, value }));
-  }, [currentTrip]);
+    return Object.entries(dataMap).map(([key, value]) => ({ 
+      name: key,
+      displayName: getCategoryName(key, t),
+      value 
+    }));
+  }, [currentTrip, t]);
+
+
 
   const checklistStats = useMemo(() => {
     if (!currentTrip || !user) return [];
@@ -1457,14 +1468,7 @@ const App: React.FC = () => {
       </div>
     );
 
-  const COLORS = [
-    "#0088FE",
-    "#00C49F",
-    "#FFBB28",
-    "#FF8042",
-    "#8884d8",
-    "#ffc658",
-  ];
+
 
   if (view === "landing") {
     return (
@@ -1706,7 +1710,7 @@ const App: React.FC = () => {
                                   : "text-slate-700 dark:text-slate-300"
                               }
                             >
-                              ${(spentTotal / 1000).toFixed(1)}k
+                              NT$ {(spentTotal / 1000).toFixed(1)}k
                             </div>
                           </div>
                           <div className="text-right">
@@ -1714,7 +1718,7 @@ const App: React.FC = () => {
                               {t("limit")}
                             </div>
                             <div className="text-slate-700 dark:text-slate-300">
-                              ${(budgetLimit / 1000).toFixed(1)}k
+                              NT$ {(budgetLimit / 1000).toFixed(1)}k
                             </div>
                           </div>
                         </div>
@@ -1735,15 +1739,19 @@ const App: React.FC = () => {
                               outerRadius={60}
                               paddingAngle={5}
                               dataKey="value"
+                              nameKey="displayName"
                             >
                               {chartData.map((e, i) => (
                                 <Cell
                                   key={`cell-${i}`}
-                                  fill={COLORS[i % COLORS.length]}
+                                  fill={
+                                    CATEGORY_UI[e.name]?.hexColor ||
+                                    CATEGORY_UI["Other"].hexColor
+                                  }
                                 />
                               ))}
                             </Pie>
-                            <RechartsTooltip />
+                            <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
