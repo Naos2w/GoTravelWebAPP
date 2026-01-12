@@ -48,7 +48,9 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     review: language === 'zh' ? '確認您的旅程' : 'Confirm Your Trip',
     reviewSub: language === 'zh' ? '航班資訊與預設待辦事項將自動同步' : 'Flights and default checklist will sync',
     confirmBtn: language === 'zh' ? '建立我的行程' : 'Create My Trip',
-    airport: language === 'zh' ? '機場' : 'Airport',
+    airport: language === 'zh' ? 'Airport' : 'Airport',
+    flight: language === 'zh' ? '航班' : 'Flight',
+    terminal: language === 'zh' ? '航廈' : 'Terminal',
     datePlaceholder: 'YYYY/MM/DD'
   };
 
@@ -73,8 +75,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
           { text: 'Cash & Credit Cards', cat: 'Other' }
         ];
 
-    return items.map((item, idx) => ({
-      id: `default-${idx}-${Date.now()}`,
+    return items.map((item) => ({
+      id: crypto.randomUUID(),
       text: item.text,
       isCompleted: false,
       category: item.cat as any
@@ -121,46 +123,73 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       const dateStr = d.toISOString().split('T')[0];
       const items: ItineraryItem[] = [];
 
-      // 第一天：自動加入去程機場資訊
+      // 第一天：自動加入去程機場資訊與交通項目
       if (i === 0) {
+        // 起飛機場 - 加上 transportType: 'Flight' 鎖定編輯
         items.push({ 
-          id: `outbound-flight-dep-${Date.now()}`, 
+          id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(outboundFlight.departureTime), 
           placeName: `${labels.airport} ${outboundFlight.departureAirport}`, 
-          type: 'Transport', 
+          type: 'Place', 
           transportType: 'Flight',
-          note: `Flight: ${outboundFlight.flightNumber} (Departure)`, 
+          note: `${labels.flight}: ${outboundFlight.flightNumber} | ${labels.terminal}: ${outboundFlight.terminal || 'TBA'}`, 
           date: dateStr 
         });
+        
+        // 飛行交通區間
+        items.push({
+           id: crypto.randomUUID(),
+           time: DateTimeUtils.formatTime24(outboundFlight.departureTime),
+           placeName: language === 'zh' ? '飛行中' : 'In Flight',
+           type: 'Transport',
+           transportType: 'Flight',
+           note: DateTimeUtils.getDuration(DateTimeUtils.formatTime24(outboundFlight.departureTime), DateTimeUtils.formatTime24(outboundFlight.arrivalTime)),
+           date: dateStr
+        });
+
+        // 抵達機場 - 加上 transportType: 'Flight' 鎖定編輯
         items.push({ 
-          id: `outbound-flight-arr-${Date.now()}`, 
+          id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime), 
           placeName: `${labels.airport} ${outboundFlight.arrivalAirport}`, 
-          type: 'Transport', 
+          type: 'Place', 
           transportType: 'Flight',
-          note: `Arrival at Destination`,
+          note: language === 'zh' ? '抵達目的地' : 'Arrival at Destination',
           date: dateStr 
         });
       }
       
       // 最後一天：自動加入回程機場資訊
       if (i === totalDays - 1) {
+        // 出發機場 (回程)
         items.push({ 
-          id: `inbound-flight-dep-${Date.now()}`, 
+          id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(inboundFlight.departureTime), 
           placeName: `${labels.airport} ${inboundFlight.departureAirport}`, 
-          type: 'Transport', 
+          type: 'Place', 
           transportType: 'Flight',
-          note: `Flight: ${inboundFlight.flightNumber} (Return)`, 
+          note: `${labels.flight}: ${inboundFlight.flightNumber} | ${labels.terminal}: ${inboundFlight.terminal || 'TBA'}`, 
           date: dateStr 
         });
+
+        items.push({
+           id: crypto.randomUUID(),
+           time: DateTimeUtils.formatTime24(inboundFlight.departureTime),
+           placeName: language === 'zh' ? '飛行中' : 'In Flight',
+           type: 'Transport',
+           transportType: 'Flight',
+           note: DateTimeUtils.getDuration(DateTimeUtils.formatTime24(inboundFlight.departureTime), DateTimeUtils.formatTime24(inboundFlight.arrivalTime)),
+           date: dateStr
+        });
+
+        // 抵達機場 (回程)
         items.push({ 
-          id: `inbound-flight-arr-${Date.now()}`, 
+          id: crypto.randomUUID(), 
           time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime), 
           placeName: `${labels.airport} ${inboundFlight.arrivalAirport}`, 
-          type: 'Transport', 
+          type: 'Place', 
           transportType: 'Flight',
-          note: `Back Home`,
+          note: language === 'zh' ? '返抵家門' : 'Back Home',
           date: dateStr 
         });
       }
