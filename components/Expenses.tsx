@@ -237,18 +237,47 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
 
         <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 h-[320px]">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{t('breakdown')}</h3>
-          <div className="h-full">
+          <div className="h-full overflow-y-auto custom-thin-scrollbar pr-1">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value">
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CATEGORY_UI[entry.category]?.hexColor || '#94a3b8'} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
-                </PieChart>
-              </ResponsiveContainer>
+              <>
+                 {/* Desktop Pie Chart */}
+                 <div className="hidden md:block h-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value">
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CATEGORY_UI[entry.category]?.hexColor || '#94a3b8'} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                 </div>
+
+                 {/* Mobile Bar View */}
+                 <div className="md:hidden space-y-4 pb-2">
+                    {chartData.sort((a,b) => b.value - a.value).map((entry, index) => {
+                       const percent = totalTWD > 0 ? (entry.value / totalTWD) * 100 : 0;
+                       const ui = CATEGORY_UI[entry.category] || CATEGORY_UI.Other;
+                       // Using inline style for width 
+                       return (
+                         <div key={index}>
+                           <div className="flex justify-between items-end mb-1">
+                             <div className="flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${ui.color}`}></div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{entry.name}</span>
+                             </div>
+                             <span className="text-xs font-black text-slate-900 dark:text-white">{Math.round(percent)}%</span>
+                           </div>
+                           <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden w-full">
+                              <div className={`h-full ${ui.color}`} style={{ width: `${percent}%` }} />
+                           </div>
+                           <div className="text-right text-[10px] font-bold text-slate-400 mt-1">NT$ {Math.round(entry.value).toLocaleString()}</div>
+                         </div>
+                       )
+                    })}
+                 </div>
+              </>
             ) : <div className="h-full flex items-center justify-center text-slate-300 font-bold">{t('noExpenses')}</div>}
           </div>
         </div>
@@ -304,13 +333,13 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
              const isFlightItem = !!item.isFlight;
 
              return (
-               <div key={item.id} className="group flex items-center justify-between p-5 bg-white dark:bg-slate-800/50 rounded-[28px] border border-slate-100 dark:border-slate-700 transition-all">
-                  <div className="flex items-center gap-4 min-w-0 flex-1">
-                    <div className={`w-12 h-12 rounded-2xl ${config.bgColor} ${config.textColor} flex items-center justify-center shrink-0`}>
-                      <Icon size={20} />
+               <div key={item.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/50 rounded-[28px] border border-slate-100 dark:border-slate-700 transition-all gap-4 sm:gap-0">
+                  <div className="flex items-center gap-4 min-w-0 w-full sm:flex-1">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${config.bgColor} ${config.textColor} flex items-center justify-center shrink-0`}>
+                      <Icon size={18} className="sm:w-5 sm:h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-black text-slate-800 dark:text-white truncate">{item.note}</div>
+                      <div className="font-black text-sm sm:text-base text-slate-800 dark:text-white truncate">{item.note}</div>
                       <div className="flex items-center gap-2 mt-1">
                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><UserIcon size={10}/> {item.user_name}</div>
                          <div className="w-1 h-1 bg-slate-200 rounded-full"/>
@@ -318,13 +347,13 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0 pl-4">
-                    <div className="text-right">
-                      <div className="font-black text-slate-800 dark:text-white">{item.currency} {item.amount.toLocaleString()}</div>
+                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 sm:pl-4 w-full sm:w-auto border-t sm:border-t-0 border-slate-50 dark:border-slate-700/50 pt-3 sm:pt-0">
+                    <div className="text-left sm:text-right">
+                      <div className="font-black text-base sm:text-lg text-slate-800 dark:text-white">{item.currency} {item.amount.toLocaleString()}</div>
                       {item.currency !== Currency.TWD && <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">≈ NT$ {Math.round(item.amount * item.exchangeRate).toLocaleString()}</div>}
                     </div>
                     {!isFlightItem && (item.user_id === currentUser?.id || trip.user_id === currentUser?.id) ? (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all">
                         <button onClick={() => startEdit(item)} className="p-2 text-slate-400 hover:text-primary"><Edit2 size={16}/></button>
                         <button onClick={() => deleteExpense(item.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
                       </div>
