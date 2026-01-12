@@ -11,7 +11,7 @@ import { ChatAssistant } from './components/ChatAssistant';
 import { 
   Plane, Calendar, CheckSquare, DollarSign, CloudSun, 
   Plus, ArrowRight, Home, Map as MapIcon, ChevronLeft,
-  LayoutDashboard, Settings, Key, X, Check
+  LayoutDashboard, Settings, Key, X, Check, Trash2
 } from 'lucide-react';
 
 // --- Sub-components for Layout (Moved outside for stability) ---
@@ -129,6 +129,16 @@ const App: React.FC = () => {
     setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
   };
 
+  const handleDeleteTrip = () => {
+    if (!currentTripId) return;
+    if (window.confirm("確定要刪除這趟旅程嗎？此動作無法復原。")) {
+      deleteTrip(currentTripId);
+      setTrips(getTrips());
+      setView('list');
+      setCurrentTripId(null);
+    }
+  };
+
   const renderWeather = () => {
     if (!currentTrip) return null;
     const days = Math.min(5, currentTrip.itinerary.length || 1);
@@ -180,24 +190,34 @@ const App: React.FC = () => {
                  />
                </div>
                
-               <div className="hidden md:flex gap-1">
-                 {[
-                   { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-                   { id: 'itinerary', label: 'Itinerary', icon: Calendar },
-                   { id: 'checklist', label: 'Checklist', icon: CheckSquare },
-                   { id: 'expenses', label: 'Expenses', icon: DollarSign },
-                   { id: 'flights', label: 'Tickets', icon: Plane },
-                 ].map(tab => (
-                   <button
-                     key={tab.id}
-                     onClick={() => setActiveTab(tab.id as any)}
-                     className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
-                       activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-gray-50'
-                     }`}
-                   >
-                     <tab.icon size={16} /> {tab.label}
-                   </button>
-                 ))}
+               <div className="hidden md:flex items-center gap-4">
+                 <div className="flex gap-1">
+                   {[
+                     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+                     { id: 'itinerary', label: 'Itinerary', icon: Calendar },
+                     { id: 'checklist', label: 'Checklist', icon: CheckSquare },
+                     { id: 'expenses', label: 'Expenses', icon: DollarSign },
+                     { id: 'flights', label: 'Tickets', icon: Plane },
+                   ].map(tab => (
+                     <button
+                       key={tab.id}
+                       onClick={() => setActiveTab(tab.id as any)}
+                       className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-all ${
+                         activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-gray-50'
+                       }`}
+                     >
+                       <tab.icon size={16} /> {tab.label}
+                     </button>
+                   ))}
+                 </div>
+                 <div className="w-px h-6 bg-gray-200 mx-2"></div>
+                 <button 
+                   onClick={handleDeleteTrip}
+                   className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                   title="刪除旅程"
+                 >
+                   <Trash2 size={20} />
+                 </button>
                </div>
             </div>
           </nav>
@@ -252,6 +272,9 @@ const App: React.FC = () => {
                 <tab.icon size={24} />
               </button>
             ))}
+            <button onClick={handleDeleteTrip} className="p-2 text-red-400">
+              <Trash2 size={24} />
+            </button>
           </div>
         </>
       )}

@@ -31,6 +31,8 @@ interface SearchStepProps {
   setOrigin: (val: string) => void;
   destination: string;
   setDestination: (val: string) => void;
+  flightNumber: string;
+  setFlightNumber: (val: string) => void;
   outboundDate: string;
   setOutboundDate: (val: string) => void;
   inboundDate: string;
@@ -42,6 +44,7 @@ interface SearchStepProps {
 
 const SearchStep: React.FC<SearchStepProps> = ({ 
   type, origin, setOrigin, destination, setDestination, 
+  flightNumber, setFlightNumber,
   outboundDate, setOutboundDate, inboundDate, setInboundDate, 
   loading, handleSearch, onBack
 }) => (
@@ -80,14 +83,25 @@ const SearchStep: React.FC<SearchStepProps> = ({
          </div>
        )}
        
-       <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-500 uppercase">日期</label>
-          <input 
-            type="date"
-            value={type === 'outbound' ? outboundDate : inboundDate}
-            onChange={e => type === 'outbound' ? setOutboundDate(e.target.value) : setInboundDate(e.target.value)}
-            className="w-full p-3 bg-gray-50 rounded-xl font-medium border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
-          />
+       <div className="grid grid-cols-2 gap-4">
+         <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase">日期</label>
+            <input 
+              type="date"
+              value={type === 'outbound' ? outboundDate : inboundDate}
+              onChange={e => type === 'outbound' ? setOutboundDate(e.target.value) : setInboundDate(e.target.value)}
+              className="w-full p-3 bg-gray-50 rounded-xl font-medium border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
+            />
+         </div>
+         <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase">航班代號 (選填)</label>
+            <input 
+              value={flightNumber} 
+              onChange={e => setFlightNumber(e.target.value.toUpperCase())}
+              placeholder="例如 BR198"
+              className="w-full p-3 bg-gray-50 rounded-xl font-mono font-bold border border-transparent focus:bg-white focus:border-primary/20 focus:outline-none"
+            />
+         </div>
        </div>
 
        <div className="space-y-3">
@@ -290,6 +304,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
 
   const [origin, setOrigin] = useState('TPE');
   const [destination, setDestination] = useState('');
+  const [outboundFlightNumber, setOutboundFlightNumber] = useState('');
+  const [inboundFlightNumber, setInboundFlightNumber] = useState('');
   const [outboundDate, setOutboundDate] = useState('');
   const [inboundDate, setInboundDate] = useState('');
 
@@ -308,8 +324,9 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       const from = type === 'outbound' ? origin : destination;
       const to = type === 'outbound' ? destination : origin;
       const date = type === 'outbound' ? outboundDate : inboundDate;
+      const fNo = type === 'outbound' ? outboundFlightNumber : inboundFlightNumber;
 
-      const results = await fetchTdxFlights(from, to, date);
+      const results = await fetchTdxFlights(from, to, date, fNo);
       setFlightOptions(results);
       setStep(type === 'outbound' ? 'outbound-select' : 'inbound-select');
     } catch (e) {
@@ -397,6 +414,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                type="outbound" 
                origin={origin} setOrigin={setOrigin} 
                destination={destination} setDestination={setDestination} 
+               flightNumber={outboundFlightNumber} setFlightNumber={setOutboundFlightNumber}
                outboundDate={outboundDate} setOutboundDate={setOutboundDate} 
                inboundDate={inboundDate} setInboundDate={setInboundDate} 
                loading={loading} handleSearch={handleSearch} 
@@ -416,6 +434,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                type="inbound" 
                origin={origin} setOrigin={setOrigin} 
                destination={destination} setDestination={setDestination} 
+               flightNumber={inboundFlightNumber} setFlightNumber={setInboundFlightNumber}
                outboundDate={outboundDate} setOutboundDate={setOutboundDate} 
                inboundDate={inboundDate} setInboundDate={setInboundDate} 
                loading={loading} handleSearch={handleSearch} 
