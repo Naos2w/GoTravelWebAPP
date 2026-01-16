@@ -1274,7 +1274,8 @@ const App: React.FC = () => {
     if (flightsSum > 0)
       dataMap["Flight"] = (dataMap["Flight"] || 0) + flightsSum;
     return Object.entries(dataMap).map(([key, value]) => ({ 
-      name: key,
+      category: key,
+      name: key, // Keep for backward compat inside App if any, but prefer category
       displayName: getCategoryName(key, t),
       value 
     }));
@@ -1785,7 +1786,7 @@ const App: React.FC = () => {
                                 <Cell
                                   key={`cell-${i}`}
                                   fill={
-                                    CATEGORY_UI[e.name]?.hexColor ||
+                                    CATEGORY_UI[e.category]?.hexColor ||
                                     CATEGORY_UI["Other"].hexColor
                                   }
                                 />

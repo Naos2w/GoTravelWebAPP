@@ -20,7 +20,7 @@ export const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: s
   Flight: { icon: Plane, color: 'bg-sky-500', hexColor: '#0ea5e9', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900', textColor: 'text-sky-600' },
   Food: { icon: Coffee, color: 'bg-orange-500', hexColor: '#f97316', bgColor: 'bg-orange-50', darkBgColor: 'dark:bg-orange-900', textColor: 'text-orange-600' },
   Accommodation: { icon: Home, color: 'bg-indigo-500', hexColor: '#6366f1', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900', textColor: 'text-indigo-600' },
-  Transport: { icon: Car, color: 'bg-slate-500', hexColor: '#64748b', bgColor: 'bg-slate-50', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-600' },
+  Transport: { icon: Car, color: 'bg-teal-500', hexColor: '#14b8a6', bgColor: 'bg-teal-50', darkBgColor: 'dark:bg-teal-900', textColor: 'text-teal-600' },
   Tickets: { icon: Ticket, color: 'bg-emerald-500', hexColor: '#10b981', bgColor: 'bg-emerald-50', darkBgColor: 'dark:bg-emerald-900', textColor: 'text-emerald-600' },
   Shopping: { icon: ShoppingBag, color: 'bg-pink-500', hexColor: '#ec4899', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900', textColor: 'text-pink-600' },
   Other: { icon: Tag, color: 'bg-slate-400', hexColor: '#94a3b8', bgColor: 'bg-slate-100', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-500' }
@@ -258,7 +258,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
 
                  {/* Mobile Bar View */}
                  <div className="md:hidden space-y-4 pb-2">
-                    {chartData.sort((a,b) => b.value - a.value).map((entry, index) => {
+                    {[...chartData].sort((a,b) => b.value - a.value).map((entry, index) => {
                        const percent = totalTWD > 0 ? (entry.value / totalTWD) * 100 : 0;
                        const ui = CATEGORY_UI[entry.category] || CATEGORY_UI.Other;
                        // Using inline style for width 
@@ -266,13 +266,13 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
                          <div key={index}>
                            <div className="flex justify-between items-end mb-1">
                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${ui.color}`}></div>
+                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ui.hexColor }}></div>
                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{entry.name}</span>
                              </div>
                              <span className="text-xs font-black text-slate-900 dark:text-white">{Math.round(percent)}%</span>
                            </div>
                            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden w-full">
-                              <div className={`h-full ${ui.color}`} style={{ width: `${percent}%` }} />
+                              <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: ui.hexColor }} />
                            </div>
                            <div className="text-right text-[10px] font-bold text-slate-400 mt-1">NT$ {Math.round(entry.value).toLocaleString()}</div>
                          </div>
