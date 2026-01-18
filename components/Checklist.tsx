@@ -10,7 +10,7 @@ import { supabase, deleteChecklistItem } from '../services/storageService';
 
 interface Props {
   trip: Trip;
-  onUpdate: (trip: Trip) => void;
+  onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
 
@@ -86,8 +86,8 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     );
     setOptimisticChecklist(updatedList);
 
-    // 2. Persist to server
-    onUpdate({ ...trip, checklist: updatedList });
+    // 2. Persist to server (Immediate)
+    onUpdate({ ...trip, checklist: updatedList }, "UPDATE_CHECKLIST_ITEM", null);
   };
 
   const addItem = () => {
@@ -103,8 +103,8 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     const updatedList = [...optimisticChecklist, newItem];
     setOptimisticChecklist(updatedList);
     
-    // Sync with server
-    onUpdate({ ...trip, checklist: updatedList });
+    // Sync with server (Immediate)
+    onUpdate({ ...trip, checklist: updatedList }, "ADD_CHECKLIST_ITEM", null);
     
     setNewItemText('');
     setIsFormOpen(false);
@@ -170,37 +170,35 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                  </button>
                </div>
                
-               <div className="flex flex-col sm:flex-row gap-3">
+               <div className="flex flex-col md:flex-row gap-3">
                  <input 
                    type="text" 
                    value={newItemText} 
                    onChange={(e) => setNewItemText(e.target.value)} 
                    placeholder={labels.inputPlaceholder} 
+                   onKeyDown={(e) => e.key === 'Enter' && addItem()}
                    className="flex-1 px-6 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none focus:ring-2 focus:ring-primary/20 outline-none font-bold shadow-sm" 
                  />
-                 <div className="flex gap-2 h-14 sm:h-auto">
-                   <select 
-                     value={category} 
-                     onChange={(e) => setCategory(e.target.value as any)} 
-                     className="flex-1 sm:w-40 px-4 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none font-black text-xs uppercase tracking-widest outline-none shadow-sm cursor-pointer"
-                   >
-                     {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
-                   </select>
+                 
+                 <div className="relative group/select min-w-[140px] h-14 md:h-auto">
+                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
+                      <ChevronDown size={14} />
+                    </div>
+                    <select 
+                      value={category} 
+                      onChange={(e) => setCategory(e.target.value as any)} 
+                      className="w-full h-full pl-6 pr-10 py-4 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border-none appearance-none font-black text-xs uppercase tracking-widest cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                    >
+                      {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
+                    </select>
                  </div>
+                 
                  <button 
                    onClick={addItem} 
-                   className="h-14 sm:h-auto px-8 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-widest"
+                   disabled={!newItemText.trim()}
+                   className="h-14 md:h-auto px-8 bg-primary text-white rounded-2xl font-black shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:scale-100 disabled:shadow-none shrink-0"
                  >
                    {labels.confirm}
-                 </button>
-               </div>
-               
-               <div className="flex gap-3 mt-6">
-                 <button 
-                   onClick={() => setIsFormOpen(false)} 
-                   className="px-6 py-4 bg-slate-200/50 dark:bg-slate-700 text-slate-500 dark:text-slate-300 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
-                 >
-                   {labels.cancel}
                  </button>
                </div>
              </div>

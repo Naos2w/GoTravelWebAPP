@@ -979,20 +979,25 @@ const App: React.FC = () => {
     // Immediate action handlers
     if (action === "DELETE_EXPENSE" && payload) {
        console.log("[App] Handling DELETE_EXPENSE for:", payload);
-       // Delete immediately from DB to avoid sync lag
        deleteExpense(payload, updatedTrip.id)
           .then(() => {
-              console.log("[App] DB Delete successful for:", payload);
-              // Broadcast the deletion event to all clients
-              activeChannelRef.current?.send({
-                  type: 'broadcast',
-                  event: 'EXPENSE_DELETED',
-                  payload: { id: payload }
-              });
+              activeChannelRef.current?.send({ type: 'broadcast', event: 'EXPENSE_DELETED', payload: { id: payload } });
           })
           .catch(err => console.error("[App] Delete expense failed:", err));
-       return; // Skip the debounced saveTrip for this action as it's already handled
+       return; 
     }
+
+    // Itinerary Delete is handled in component, just skip save
+    if (action === "DELETE_ITINERARY_ITEM") {
+       return;
+    }
+
+    // Immediate Save for explicit user actions (Add/Edit) to avoid "Waiting" feel
+    const immediateActions = [
+      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM",
+      "ADD_CHECKLIST_ITEM", "UPDATE_CHECKLIST_ITEM"
+    ];
+    const delay = action && immediateActions.includes(action) ? 0 : 2000;
 
     saveTimeoutRef.current = window.setTimeout(async () => {
       setIsSyncing(true);

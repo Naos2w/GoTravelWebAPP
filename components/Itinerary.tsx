@@ -12,7 +12,7 @@ import { supabase, deleteItineraryItem } from '../services/storageService';
 
 interface Props {
   trip: Trip;
-  onUpdate: (trip: Trip) => void;
+  onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
 
@@ -311,7 +311,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     
     scrollAnchorRef.current = editingItem.id;
     
-    onUpdate({ ...trip, itinerary: newDays });
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", editingItem);
     setIsFormOpen(false);
     setEditingItem(null);
   };
@@ -334,18 +334,23 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         newItems.splice(index, 1);
       }
 
-      // Sync with DB
-      try {
-        await Promise.all(idsToDelete.map(id => deleteItineraryItem(id, trip.id)));
-      } catch (e) {
-        console.error("Failed to delete items", e);
-      }
+      const updatedItems = maintainListIntegrity(newItems);
+      const newDays = [...days];
+      newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+      
+      // Update UI Immediately (Optimistic) w/ Action
+      onUpdate({ ...trip, itinerary: newDays }, "DELETE_ITINERARY_ITEM", idsToDelete);
+
+      // Delete from DB in background
+      Promise.all(idsToDelete.map(id => deleteItineraryItem(id, trip.id)))
+        .catch(err => console.error("Failed to delete items in background", err));
+    } else {
+       // Fallback if index not found (shouldn't happen)
+       const updatedItems = maintainListIntegrity(newItems);
+       const newDays = [...days];
+       newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+       onUpdate({ ...trip, itinerary: newDays });
     }
-    
-    const updatedItems = maintainListIntegrity(newItems);
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
-    onUpdate({ ...trip, itinerary: newDays });
   };
 
   const handleChangeTransportType = (transportId: string, type: TransportType) => {
@@ -355,7 +360,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     );
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...currentDay, items: newItems };
-    onUpdate({ ...trip, itinerary: newDays });
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", { id: transportId, transportType: type });
   };
 
   const handleInsertTransport = (index: number, type: TransportType) => {
@@ -387,7 +392,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     newDays[selectedDayIndex] = { ...currentDay, items: newItems };
     
     scrollAnchorRef.current = newTransport.id;
-    onUpdate({ ...trip, itinerary: newDays });
+    onUpdate({ ...trip, itinerary: newDays }, "ADD_ITINERARY_ITEM", newTransport);
   };
 
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
@@ -451,7 +456,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                   <div className={`absolute left-[-0.5px] top-8 bottom-0 w-0.5 ${isTransport ? 'border-l-2 border-dashed border-slate-100 dark:border-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'} last:hidden`} />
                   
                   {isTransport ? (
-                    <div className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all overflow-hidden ${isHighlighted ? 'ring-2 ring-primary bg-primary/5 border-primary shadow-lg' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}>
+                    <div className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all ${isHighlighted ? 'ring-2 ring-primary bg-primary/5 border-primary shadow-lg' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}>
                        <div className="flex items-center gap-2 relative max-w-full px-12 sm:px-4 justify-center sm:justify-start w-full">
                           <button 
                             disabled={isGuest || isFlight} // Lock flight transport type switching
@@ -461,48 +466,35 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                             {transportOpt ? <transportOpt.icon size={13} className={transportOpt.color} /> : null}
                           </button>
                           
-                          {/* Editable Note Section */}
-                          <div className="flex-1 min-w-0 flex flex-col items-start overflow-hidden">
-                               <span className={`text-[10px] sm:text-xs font-bold whitespace-nowrap text-slate-500 dark:text-slate-400 flex items-center gap-1 w-full`}>
+                          {/* Read-Only Note Section - Click to open Picker */}
+                          <div className="flex-1 min-w-0 flex flex-col items-start overflow-hidden cursor-pointer" onClick={() => !isGuest && !isFlight && setShowTransportPickerId(item.id)}>
+                               <span className={`text-[10px] sm:text-xs font-bold whitespace-nowrap text-slate-500 dark:text-slate-400 flex items-center gap-1 w-full hover:text-primary transition-colors`}>
                                   <span className="opacity-60 shrink-0">{t('moving')}: </span>
-                                  {editingTransportId === item.id ? (
-                                     <input 
-                                       autoFocus
-                                       className="w-full bg-white dark:bg-slate-700 px-2 py-0.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-600 outline-none text-slate-700 dark:text-slate-200 shadow-sm"
-                                       value={tempTransportNote}
-                                       onChange={e => setTempTransportNote(e.target.value)}
-                                       onBlur={() => saveTransportNote(item.id)}
-                                       onKeyDown={e => e.key === 'Enter' && saveTransportNote(item.id)}
-                                     />
-                                  ) : (
-                                     <span 
-                                       onClick={() => { if(!isGuest && !isFlight) { setEditingTransportId(item.id); setTempTransportNote(item.note || ""); } }}
-                                       className={`truncate w-full ${!isGuest && !isFlight ? 'cursor-text hover:text-primary transition-colors' : ''}`}
-                                     >
-                                       {item.note}
-                                     </span>
-                                  )}
+                                  <span className="truncate w-full">{item.note}</span>
                                </span>
                           </div>
                           
                           {showTransportPickerId === item.id && !isGuest && !isFlight && (
-                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-2xl p-2 flex gap-1 animate-in zoom-in-95 duration-200">
+                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 rounded-2xl shadow-xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
                                {TRANSPORT_OPTIONS.filter(o => o.type !== 'Flight').map(opt => (
                                  <button 
                                     key={opt.type} 
                                     onClick={() => { setShowTransportPickerId(null); handleChangeTransportType(item.id, opt.type); }} 
-                                    className={`p-2 rounded-lg transition-all ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-slate-700' : 'hover:bg-slate-50 dark:hover:bg-slate-700 opacity-40'}`}
+                                    className={`p-2 rounded-xl transition-all shrink-0 ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-700 opacity-60 hover:opacity-100'}`}
                                  >
-                                   <opt.icon size={14} className={opt.color} />
+                                   <opt.icon size={16} className={opt.color} />
                                  </button>
                                ))}
+                               <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
+                               <button onClick={(e) => { e.stopPropagation(); setShowTransportPickerId(null); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all">
+                                 <X size={16} />
+                               </button>
                             </div>
                           )}
                        </div>
                        
                        {!isGuest && !isFlight && (
                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <button onClick={() => { setEditingTransportId(item.id); setTempTransportNote(item.note || ""); }} className="p-1.5 bg-white/80 dark:bg-slate-700 text-slate-400 hover:text-primary rounded-lg shadow-sm border border-slate-100 dark:border-slate-600 active:scale-90"><Edit2 size={12}/></button>
                             <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 bg-white/80 dark:bg-slate-700 text-red-500/80 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600 active:scale-90"><Trash2 size={12}/></button>
                          </div>
                        )}
