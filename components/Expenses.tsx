@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { 
   Plus, DollarSign, TrendingUp, Plane, Trash2, 
   Coffee, Home, Car, 
-  Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon
+  Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon, Calendar, ArrowUpDown, Clock, Check, ChevronDown
 } from 'lucide-react';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
@@ -39,7 +39,58 @@ export const getCategoryName = (cat: string, t: (key: string) => string) => {
   }
 };
 
-type SortType = 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
+type SortType = 'date-desc' | 'date-asc' | 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
+
+const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass = "", variant = "filter", isError = false }: any) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (selectRef.current && !selectRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  const selectedOption = options.find((o:any) => o.value === value) || options[0];
+
+  return (
+    <div className={`relative ${wrapperClass} shrink-0`} ref={selectRef}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className={`flex items-center transition-colors pointer group outline-none ${
+          variant === 'filter' 
+            ? `gap-1.5 p-2 px-3 rounded-[14px] shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 ${isOpen ? 'bg-slate-200 dark:bg-slate-600 shadow-inner' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/50 dark:border-slate-700/50 hover:shadow-sm'}`
+            : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-black bg-slate-50 dark:bg-slate-900 border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800')}`
+        }`}
+      >
+        <Icon size={variant === 'filter' ? 12 : 16} className={`${isOpen ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
+        <span className={`${variant === 'filter' ? 'truncate max-w-[65px] sm:max-w-[90px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
+        <ChevronDown size={variant === 'filter' ? 10 : 14} className={`text-slate-400 opacity-50 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full mt-2 w-max min-w-[140px] max-w-[220px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-100 dark:border-slate-800/80 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 custom-thin-scrollbar p-1.5">
+          {options.map((opt:any) => (
+            <button
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setIsOpen(false); }}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-between group ${value === opt.value ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[0.98]' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            >
+              <span className="truncate pr-4">{opt.label}</span>
+              {value === opt.value && <Check size={12} className="shrink-0" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
@@ -55,8 +106,9 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   
   const [filterCategory, setFilterCategory] = useState<string>('All');
+  const [filterDate, setFilterDate] = useState<string>('All');
   const [filterUser, setFilterUser] = useState<string>('All');
-  const [sortOrder, setSortOrder] = useState<SortType>('created-desc');
+  const [sortOrder, setSortOrder] = useState<SortType>('date-desc');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   // Helper to translate categories
@@ -193,16 +245,28 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
     let list = [...trip.expenses, ...flightExpenses];
     if (filterCategory !== 'All') list = list.filter(e => e.category === filterCategory);
     if (filterUser !== 'All') list = list.filter(e => e.user_id === filterUser);
+    if (filterDate !== 'All') list = list.filter(e => e.date === filterDate);
     list.sort((a, b) => {
       switch (sortOrder) {
         case 'created-asc': return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime();
         case 'amount-desc': return (b.amount * b.exchangeRate) - (a.amount * a.exchangeRate);
         case 'amount-asc': return (a.amount * a.exchangeRate) - (b.amount * b.exchangeRate);
+        case 'date-desc': {
+          const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+          if (dateDiff === 0) return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+          return dateDiff;
+        }
+        case 'date-asc': {
+          const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+          if (dateDiff === 0) return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime();
+          return dateDiff;
+        }
+        case 'created-desc':
         default: return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
       }
     });
     return list;
-  }, [trip.expenses, flightExpenses, filterCategory, filterUser, sortOrder]);
+  }, [trip.expenses, flightExpenses, filterCategory, filterUser, filterDate, sortOrder]);
 
   const chartData = useMemo(() => {
     const dataMap: Record<string, number> = {};
@@ -220,7 +284,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
     }));
   }, [trip.expenses, flightsTotal, getCatName]);
 
-  const inputClass = (isError: boolean) => `bg-white dark:bg-slate-800 rounded-2xl border transition-all ${isError ? 'border-red-500 ring-4 ring-red-500/10 animate-pulse-soft' : 'border-slate-100 dark:border-slate-700'}`;
+  const inputClass = (isError: boolean) => `bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 rounded-2xl border-2 transition-all outline-none ${isError ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:border-primary focus:ring-2 focus:ring-primary/20'}`;
 
   // Filter out 'Flight' from manual entry options
   const manualCategories = Object.keys(CATEGORY_UI).filter(c => c !== 'Flight');
@@ -292,18 +356,39 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
            </button>
            {isFormOpen && (
              <div className="p-8 space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                   <div className="relative">
-                     <span className="absolute left-3 top-3 text-[10px] font-black text-slate-400">{currency}</span>
-                     <input type="number" value={amount} onChange={e => {setAmount(e.target.value); setErrors({...errors, amount: false})}} className={`w-full pl-12 pr-4 py-3 outline-none font-black text-sm ${inputClass(errors.amount)}`} placeholder="0" />
-                   </div>
-                   <select value={currency} onChange={e => setCurrency(e.target.value as Currency)} className={`p-3 font-black text-xs ${inputClass(false)}`}>{Object.values(Currency).map(c => <option key={c} value={c}>{c}</option>)}</select>
-                   <select value={category} onChange={e => setCategory(e.target.value as any)} className={`p-3 font-black text-xs ${inputClass(false)}`}>{manualCategories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}</select>
-                   <select value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className={`p-3 font-black text-xs ${inputClass(false)}`}>{dateOptions.map(d => <option key={d} value={d}>{d}</option>)}</select>
-                </div>
-                <div className="relative">
-                  <input value={note} onChange={e => {setNote(e.target.value); setErrors({...errors, note: false})}} className={`w-full p-3 font-bold text-sm outline-none ${inputClass(errors.note)}`} placeholder={t('descRequired') + "..."} />
-                </div>
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="relative md:col-span-1">
+                      <span className="absolute left-4 inset-y-0 flex items-center text-[11px] font-black text-slate-400 z-10">{currency}</span>
+                      <input type="number" value={amount} onChange={e => {setAmount(e.target.value); setErrors({...errors, amount: false})}} className={`w-full pl-14 pr-4 py-3 font-black text-sm shadow-sm ${inputClass(errors.amount)}`} placeholder="0" />
+                    </div>
+                    <CustomFilterSelect 
+                      variant="form"
+                      icon={DollarSign}
+                      value={currency} 
+                      onChange={(val: any) => setCurrency(val as Currency)} 
+                      options={Object.values(Currency).map(c => ({ value: c, label: c }))} 
+                      wrapperClass="md:col-span-1"
+                    />
+                    <CustomFilterSelect 
+                      variant="form"
+                      icon={Tag}
+                      value={category} 
+                      onChange={(val: any) => setCategory(val)} 
+                      options={manualCategories.map(c => ({ value: c, label: getCatName(c) }))} 
+                      wrapperClass="md:col-span-1"
+                    />
+                    <CustomFilterSelect 
+                      variant="form"
+                      icon={Calendar}
+                      value={selectedDate} 
+                      onChange={(val: any) => setSelectedDate(val)} 
+                      options={dateOptions.map(d => ({ value: d, label: d }))} 
+                      wrapperClass="md:col-span-1"
+                    />
+                 </div>
+                 <div className="relative">
+                   <input value={note} onChange={e => {setNote(e.target.value); setErrors({...errors, note: false})}} className={`w-full px-5 py-4 font-bold text-sm shadow-sm ${inputClass(errors.note)}`} placeholder={t('descRequired') + "..."} />
+                 </div>
                 <div className="flex gap-3">
                    <button onClick={saveExpense} className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-xl font-black">{t('save')}</button>
                    <button onClick={resetForm} className="px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-xl font-black">{t('cancel')}</button>
@@ -312,19 +397,47 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
            )}
         </div>
 
-        <div className="px-6 py-4 flex flex-col sm:flex-row gap-4 border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
-           <div className="flex-1 flex gap-2 overflow-x-auto custom-thin-scrollbar pb-2">
-              <button onClick={() => setFilterCategory('All')} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shrink-0 ${filterCategory === 'All' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>{t('filterAll')}</button>
-              {Object.keys(CATEGORY_UI).map(cat => (
-                <button key={cat} onClick={() => setFilterCategory(cat)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shrink-0 ${filterCategory === cat ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}>{getCatName(cat)}</button>
-              ))}
-           </div>
-           <div className="flex items-center gap-2">
-              <UserIcon size={14} className="text-slate-400" />
-              <select value={filterUser} onChange={e => setFilterUser(e.target.value)} className="bg-slate-100 dark:bg-slate-700 p-2 rounded-xl text-[10px] font-black uppercase tracking-widest outline-none border-none">
-                 <option value="All">{t('filterUser')}: {t('filterAll')}</option>
-                 {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+        <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-20 w-full select-none">
+           <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <CustomFilterSelect 
+                icon={Tag} 
+                value={filterCategory} 
+                onChange={setFilterCategory} 
+                options={[
+                  { value: 'All', label: t('filterAll') },
+                  ...Object.keys(CATEGORY_UI).map(cat => ({ value: cat, label: getCatName(cat) }))
+                ]} 
+              />
+              <CustomFilterSelect 
+                icon={Calendar} 
+                value={filterDate} 
+                onChange={setFilterDate} 
+                options={[
+                  { value: 'All', label: t('filterAllDates') },
+                  ...dateOptions.map(d => ({ value: d, label: d }))
+                ]} 
+              />
+              <CustomFilterSelect 
+                icon={UserIcon} 
+                value={filterUser} 
+                onChange={setFilterUser} 
+                options={[
+                  { value: 'All', label: `${t('filterUser')}: ${t('filterAll')}` },
+                  ...members.map(m => ({ value: m.id, label: m.name }))
+                ]} 
+              />
+              <CustomFilterSelect 
+                icon={ArrowUpDown} 
+                value={sortOrder} 
+                onChange={setSortOrder} 
+                options={[
+                  { value: 'date-desc', label: t('sortDateDesc') },
+                  { value: 'date-asc', label: t('sortDateAsc') },
+                  { value: 'created-desc', label: t('sortCreatedDesc') },
+                  { value: 'amount-desc', label: t('sortAmountDesc') },
+                  { value: 'amount-asc', label: t('sortAmountAsc') }
+                ]} 
+              />
            </div>
         </div>
 
