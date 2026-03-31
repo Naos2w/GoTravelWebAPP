@@ -101,6 +101,38 @@
       .animate-pulse-soft {
         animation: pulse-soft 2s infinite ease-in-out;
       }
+      
+      /* Leaflet Custom Styles */
+      .custom-leaflet-marker {
+        background: transparent;
+        border: none;
+      }
+      .leaflet-popup-content-wrapper {
+        border-radius: 20px !important;
+        padding: 4px !important;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
+        background: rgba(255,255,255,0.95) !important;
+        backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(0,0,0,0.05);
+      }
+      .dark .leaflet-popup-content-wrapper {
+        background: rgba(30,41,59,0.95) !important;
+        border: 1px solid rgba(255,255,255,0.1);
+      }
+      .dark .leaflet-popup-tip {
+        background: rgba(30,41,59,0.95) !important;
+      }
+      .leaflet-popup-content {
+        margin: 8px !important;
+      }
+      @keyframes dash {
+        to {
+          stroke-dashoffset: -20;
+        }
+      }
+      .animate-dash {
+        animation: dash 1s linear infinite;
+      }
     </style>
     <script type="importmap">
       {

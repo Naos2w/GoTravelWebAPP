@@ -4,11 +4,12 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, Edit2
+  Loader2, Check, X, Lock, ChevronDown, Edit2, List
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase, deleteItineraryItem } from '../services/storageService';
+import { MapView } from './MapView';
 
 interface Props {
   trip: Trip;
@@ -69,6 +70,11 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [isSaving, setIsSaving] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+  const [dragDirection, setDragDirection] = useState<'above' | 'below'>('above');
   
   // Inline edit state for transport notes
   const [editingTransportId, setEditingTransportId] = useState<string | null>(null);
@@ -108,12 +114,23 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setHighlightedId(scrollAnchorRef.current);
         scrollAnchorRef.current = null;
-        
-        const timer = setTimeout(() => setHighlightedId(null), 2000);
-        return () => clearTimeout(timer);
       }
     }
   }, [trip, selectedDayIndex]);
+
+  // Synchronize map & list viewing interactions
+  useEffect(() => {
+    if (highlightedId && viewMode === 'list' && window.innerWidth >= 1024) {
+      // Small timeout to ensure DOM layout is updated
+      const timer = setTimeout(() => {
+         const el = document.getElementById(`item-${highlightedId}`);
+         if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+         }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedId, viewMode]);
 
   // "Smart Grouping": Reorder items to keep Flight sequences (Dep -> Trans -> Arr) visually contiguous.
   // This prevents other users' interleaved items from breaking the visual flow of a flight.
@@ -269,6 +286,120 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     }
   };
 
+  const handleAddSearchResult = async (placeName: string, lat: number, lng: number) => {
+    if (isGuest || !currentUser) return;
+    
+    let defaultTime = '09:00';
+    const anchors = displayItems.filter(i => i.type !== 'Transport');
+    if (anchors.length > 0) {
+        const lastAnchor = anchors[anchors.length - 1];
+        const [h, m] = lastAnchor.time.split(':').map(Number);
+        const nextH = h + 2; 
+        defaultTime = `${(nextH > 23 ? 23 : nextH).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    const newItem: ItineraryItem = {
+      id: crypto.randomUUID(),
+      user_id: currentUser.id,
+      time: defaultTime,
+      placeName,
+      lat,
+      lng,
+      type: 'Place',
+      note: '',
+      date: currentDay.date
+    };
+    
+    let newItems = [...displayItems, newItem];
+    const updatedItems = maintainListIntegrity(newItems);
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+    
+    scrollAnchorRef.current = newItem.id;
+    onUpdate({ ...trip, itinerary: newDays }, "ADD_ITINERARY_ITEM", newItem);
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedItemId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (draggedItemId === id || isGuest) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midline = rect.top + rect.height / 2;
+    setDragDirection(e.clientY < midline ? 'above' : 'below');
+    if (dragOverItemId !== id) setDragOverItemId(id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+       setDragOverItemId(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverItemId(null);
+    if (isGuest || !draggedItemId || draggedItemId === targetId) {
+       setDraggedItemId(null);
+       return;
+    }
+
+    const currentItems = [...displayItems];
+    const draggedIndex = currentItems.findIndex(i => i.id === draggedItemId);
+    const targetIndex = currentItems.findIndex(i => i.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedItemId(null);
+      return;
+    }
+
+    const draggedItem = currentItems[draggedIndex];
+    currentItems.splice(draggedIndex, 1);
+    currentItems.splice(targetIndex, 0, draggedItem);
+
+    // Adjust time to maintain DB logical order
+    const anchors = currentItems.filter(i => i.type !== 'Transport');
+    const newIndex = anchors.findIndex(i => i.id === draggedItemId);
+
+    if (newIndex > -1) {
+      const prevAnchor = newIndex > 0 ? anchors[newIndex - 1] : null;
+      const nextAnchor = newIndex < anchors.length - 1 ? anchors[newIndex + 1] : null;
+
+      if (prevAnchor && nextAnchor) {
+        const [h1, m1] = prevAnchor.time.split(':').map(Number);
+        const [h2, m2] = nextAnchor.time.split(':').map(Number);
+        const min1 = h1 * 60 + m1;
+        let min2 = h2 * 60 + m2;
+        if (min2 <= min1) min2 += 24 * 60;
+        let mid = Math.floor((min1 + min2) / 2);
+        if (mid === min1) mid += 1;
+        mid = mid % (24 * 60);
+        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
+      } else if (prevAnchor) {
+        const [h1, m1] = prevAnchor.time.split(':').map(Number);
+        let mid = h1 * 60 + m1 + 60;
+        if (mid >= 24 * 60) mid = 24 * 60 - 1;
+        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
+      } else if (nextAnchor) {
+        const [h2, m2] = nextAnchor.time.split(':').map(Number);
+        let mid = h2 * 60 + m2 - 60;
+        if (mid < 0) mid = 0;
+        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
+      }
+    }
+
+    const updatedItems = maintainListIntegrity(currentItems);
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", draggedItem);
+    setDraggedItemId(null);
+  };
+
   const saveTransportNote = (id: string) => {
     const newItems = displayItems.map(it => it.id === id ? { ...it, note: tempTransportNote } : it);
     const newDays = [...days];
@@ -277,30 +408,51 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     setEditingTransportId(null);
   };
 
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!editingItem || !editingItem.placeName.trim()) {
        setNameError(true);
        return;
     }
     
+    setIsSaving(true);
+    let finalItem = { ...editingItem };
+    
+    if (finalItem.type !== 'Transport') {
+        try {
+            const query = encodeURIComponent(finalItem.placeName);
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                headers: {
+                    'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)'
+                }
+            });
+            const data = await res.json();
+            if (data && data.length > 0) {
+                finalItem.lat = parseFloat(data[0].lat);
+                finalItem.lng = parseFloat(data[0].lon);
+            }
+        } catch (e) {
+            console.error('Failed to geocode:', e);
+        }
+    }
+    
     let newItems = [...displayItems];
-    const index = newItems.findIndex(i => i.id === editingItem.id);
+    const index = newItems.findIndex(i => i.id === finalItem.id);
     
     if (index > -1) {
       // Update existing item
-      newItems[index] = editingItem;
+      newItems[index] = finalItem;
       
       // Update surrounding transports immediately
       // Check previous transport
       if (index > 0 && newItems[index-1].type === 'Transport' && index > 1) {
-          newItems[index-1] = recalculateTransport(newItems[index-2], newItems[index-1], editingItem);
+          newItems[index-1] = recalculateTransport(newItems[index-2], newItems[index-1], finalItem);
       }
       // Check next transport
       if (index < newItems.length - 1 && newItems[index+1].type === 'Transport' && index < newItems.length - 2) {
-          newItems[index+1] = recalculateTransport(editingItem, newItems[index+1], newItems[index+2]);
+          newItems[index+1] = recalculateTransport(finalItem, newItems[index+1], newItems[index+2]);
       }
     } else {
-      newItems.push(editingItem);
+      newItems.push(finalItem);
     }
     
     // Sort and cleanup
@@ -309,11 +461,12 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
     
-    scrollAnchorRef.current = editingItem.id;
+    scrollAnchorRef.current = finalItem.id;
     
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", editingItem);
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", finalItem);
     setIsFormOpen(false);
     setEditingItem(null);
+    setIsSaving(false);
   };
 
   const handleDeleteItem = async (itemId: string) => {
@@ -413,42 +566,87 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         })}
       </div>
 
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden">
-        <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white px-2">Day {selectedDayIndex + 1}</h2>
-          
-          {!isGuest ? (
-            <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
-              <button onClick={() => handleOpenAddForm('Place')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all">
-                <MapPin size={12}/> <span className="hidden sm:inline">{t('addPlace')}</span>
-              </button>
-              <button onClick={() => handleOpenAddForm('Food')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-0.5">
-                <Coffee size={12}/> <span className="hidden sm:inline">{t('addFood')}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1"><Lock size={10} />{t('readOnly')}</div>
-          )}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 overflow-hidden">
+        
+        {/* Desktop Split View: Map (Left) */}
+        <div className={`flex-1 rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 ${viewMode === 'list' ? 'hidden lg:block' : 'block'}`}>
+          <MapView 
+            items={displayItems} 
+            onAddSearchResult={handleAddSearchResult} 
+            activeItemId={highlightedId}
+            onMarkerClick={(id) => {
+               setHighlightedId(id);
+               // On mobile, if we are in Map view, switch to list to show details, or stay on map?
+               // Desktop maintains Split view, so no mode change is needed
+            }}
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
-          {displayItems.map((item, idx) => {
-            const isTransport = item.type === 'Transport';
-            const isFlight = item.transportType === 'Flight'; // Used for locking interactions
-            const transportOpt = TRANSPORT_OPTIONS.find(o => o.type === item.transportType);
-            const nextItem = currentDay.items[idx + 1];
+        {/* Desktop Split View: List (Right) */}
+        <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden ${viewMode === 'map' ? 'hidden lg:flex' : 'flex'}`}>
+          <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white px-2">Day {selectedDayIndex + 1}</h2>
             
-            // Revised Condition: Allow inserting transport if next item is NOT transport. 
-            // Removed check for current/next item being Flight type to allow transport after Airport.
-            // Also explicitly disable inserting transport after a Flight transport item itself
-            const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
-            
-            const isHighlighted = highlightedId === item.id;
+            {!isGuest ? (
+              <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
+                {/* View toggles only visible on mobile/tablet */}
+                <button onClick={() => setViewMode('list')} className={`lg:hidden px-2 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                  <List size={12}/> <span className="hidden sm:inline">List</span>
+                </button>
+                <button onClick={() => setViewMode('map')} className={`lg:hidden px-2 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                  <Map size={12}/> <span className="hidden sm:inline">Map</span>
+                </button>
+                <div className="w-px bg-slate-200 dark:bg-slate-700 mx-1 my-1"></div>
+                <button onClick={() => handleOpenAddForm('Place')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all">
+                  <MapPin size={12}/> <span className="hidden sm:inline">{t('addPlace')}</span>
+                </button>
+                <button onClick={() => handleOpenAddForm('Food')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-0.5">
+                  <Coffee size={12}/> <span className="hidden sm:inline">{t('addFood')}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1"><Lock size={10} />{t('readOnly')}</div>
+            )}
+          </div>
 
-            return (
-              <React.Fragment key={item.id}>
-                <div id={`item-${item.id}`} className={`relative pl-8 sm:pl-12 scroll-mt-20 ${isTransport ? 'pb-2 sm:pb-3' : 'pb-6 sm:pb-8'}`}>
-                  {!isTransport && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
+            {displayItems.map((item, idx) => {
+              const isTransport = item.type === 'Transport';
+              const isFlight = item.transportType === 'Flight'; // Used for locking interactions
+              const transportOpt = TRANSPORT_OPTIONS.find(o => o.type === item.transportType);
+              const nextItem = currentDay.items[idx + 1];
+              
+              // Revised Condition: Allow inserting transport if next item is NOT transport. 
+              // Removed check for current/next item being Flight type to allow transport after Airport.
+              // Also explicitly disable inserting transport after a Flight transport item itself
+              const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
+              
+              const isHighlighted = highlightedId === item.id;
+
+              return (
+                <React.Fragment key={item.id}>
+                  <div 
+                    id={`item-${item.id}`} 
+                    className={`relative pl-8 sm:pl-12 scroll-mt-20 ${isTransport ? 'pb-2 sm:pb-3' : 'pb-6 sm:pb-8'} 
+                                ${draggedItemId === item.id ? 'opacity-40 scale-[0.98] shadow-none z-0' : 'z-10'}
+                                transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
+                                ${dragOverItemId === item.id && dragDirection === 'above' ? 'pt-16' : ''}
+                                ${dragOverItemId === item.id && dragDirection === 'below' ? 'pb-16' : ''}`}
+                    draggable={!isGuest && !isTransport}
+                    onDragStart={(e) => handleDragStart(e, item.id)}
+                    onDragOver={(e) => handleDragOver(e, item.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, item.id)}
+                    onDragEnd={() => { setDraggedItemId(null); setDragOverItemId(null); }}
+                  >
+                    {/* Glowing Drop Indicator Lines */}
+                    {dragOverItemId === item.id && dragDirection === 'above' && (
+                        <div className="absolute top-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
+                    )}
+                    {dragOverItemId === item.id && dragDirection === 'below' && (
+                        <div className="absolute bottom-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
+                    )}
+                    {!isTransport && (
                     <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-slate-900 z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-slate-700'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${isFlight ? 'bg-blue-500' : item.type === 'Place' ? 'bg-primary' : 'bg-orange-500'}`} />
                     </div>
@@ -512,9 +710,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
                         <div 
                            onClick={() => {
+                             setHighlightedId(item.id);
                              if (window.innerWidth < 640 && !isFlight && !isGuest) handleEditItem(item);
                            }}
-                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-default rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50 sm:hover:bg-transparent"
+                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50"
                         >
                            <div className="flex items-center gap-1.5 w-full justify-start">
                               {isFlight && <Plane size={11} className="text-blue-500 shrink-0" />}
@@ -590,7 +789,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 )}
               </React.Fragment>
             );
-          })}
+            })}
+          </div>
         </div>
       </div>
 
@@ -671,8 +871,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
                   <button 
                     onClick={handleSaveItem}
-                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+                    disabled={isSaving}
+                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
+                    {isSaving && <Loader2 size={16} className="animate-spin" />}
                     {t('save')}
                   </button>
                   <button 

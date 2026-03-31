@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
       "process.env.SUPABASE_ANON_KEY": JSON.stringify(env.SUPABASE_ANON_KEY),
       "process.env.TDX_CLIENT_ID": JSON.stringify(env.TDX_CLIENT_ID),
       "process.env.TDX_CLIENT_SECRET": JSON.stringify(env.TDX_CLIENT_SECRET),
+      "process.env.GOOGLE_MAPS_API_KEY": JSON.stringify(env.GOOGLE_MAPS_API_KEY),
     },
     resolve: {
       alias: {
