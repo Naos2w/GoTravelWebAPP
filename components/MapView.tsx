@@ -48,17 +48,49 @@ const createCustomIcon = (index: number, type: string) => {
 
 const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number], bounds?: L.LatLngBounds, activeItem?: ItineraryItem }) => {
   const map = useMap();
+  
+  // Create stable primitive dependencies to prevent infinite render loops
+  // center is a new array every render, bounds is a new L.LatLngBounds every render
+  const centerStr = center ? `${center[0]},${center[1]}` : null;
+  const boundsStr = bounds ? bounds.toBBoxString() : null;
+  const activeItemId = activeItem?.id;
+
   useEffect(() => {
     if (activeItem && activeItem.lat != null && activeItem.lng != null) {
-      map.flyTo([activeItem.lat, activeItem.lng], 16, { animate: true, duration: 1.5 });
+      // Must cast to Number because Google Places/Supabase string representations crash Leaflet's flyTo math
+      map.flyTo([Number(activeItem.lat), Number(activeItem.lng)], 16, { animate: true, duration: 1.5 });
     } else if (bounds && bounds.isValid()) {
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
     } else if (center) {
       map.setView(center, map.getZoom(), { animate: true });
     }
-  }, [center, bounds, map, activeItem]);
+  }, [centerStr, boundsStr, activeItemId, map]);
+  
   return null;
 }
+
+const MapResizer = () => {
+  const map = useMap();
+  useEffect(() => {
+    // Initial stabilization
+    const timer = setTimeout(() => {
+       map.invalidateSize();
+    }, 250);
+    
+    // Observer for Split-View changes
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    
+    resizeObserver.observe(map.getContainer());
+    
+    return () => {
+      clearTimeout(timer);
+      resizeObserver.disconnect();
+    };
+  }, [map]);
+  return null;
+};
 
 export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick }) => {
   const { language } = useTranslation();
@@ -219,7 +251,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   let bounds: L.LatLngBounds | undefined = undefined;
 
   if (validItems.length > 0) {
-    center = [validItems[0].lat!, validItems[0].lng!];
+    center = [Number(validItems[0].lat!), Number(validItems[0].lng!)];
     bounds = L.latLngBounds(pathPositions);
   }
 
@@ -311,6 +343,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           className="dark:invert dark:contrast-100 dark:hue-rotate-180 dark:brightness-90 transition-all duration-300"
         />
+        <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
         {/* Draw the connected route */}
@@ -339,8 +372,12 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const leg = routeInfo.legs[idx];
            if (!leg) return null;
            
-           const midLat = (item.lat! + nextItem.lat!) / 2;
-           const midLng = (item.lng! + nextItem.lng!) / 2;
+           const lat1 = Number(item.lat!);
+           const lng1 = Number(item.lng!);
+           const lat2 = Number(nextItem.lat!);
+           const lng2 = Number(nextItem.lng!);
+           const midLat = (lat1 + lat2) / 2;
+           const midLng = (lng1 + lng2) / 2;
            const mins = Math.max(1, Math.round(leg.duration / 60)); // Minimum 1 min
            
            return (
@@ -367,7 +404,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         {validItems.map((item, idx) => (
           <Marker 
             key={item.id} 
-            position={[item.lat!, item.lng!]}
+            position={[Number(item.lat!), Number(item.lng!)]}
             icon={createCustomIcon(idx, item.type)}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(item.id)

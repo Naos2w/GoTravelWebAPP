@@ -276,14 +276,21 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const handleEditItem = (item: ItineraryItem) => {
     if (isGuest || item.transportType === 'Flight') return;
-    // Allow editing transport items too via the modal if needed, but inline is preferred for notes.
-    // For non-transport items, open modal.
     if (item.type !== 'Transport') {
         setIsAddingNew(false);
         setEditingItem({ ...item });
         setIsFormOpen(true);
         setNameError(false);
     }
+  };
+
+  const fetchRouteMins = async (lat1: string|number, lng1: string|number, lat2: string|number, lng2: string|number): Promise<number> => {
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
+      const data = await res.json();
+      if (data?.routes?.[0]) return Math.max(1, Math.round(data.routes[0].duration / 60));
+    } catch(e) {}
+    return 30; // fallback default
   };
 
   const handleAddSearchResult = async (placeName: string, lat: number, lng: number) => {
@@ -293,9 +300,19 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     const anchors = displayItems.filter(i => i.type !== 'Transport');
     if (anchors.length > 0) {
         const lastAnchor = anchors[anchors.length - 1];
+        let travelMins = 30;
+        
+        if (lastAnchor.lat != null && lastAnchor.lng != null) {
+           travelMins = await fetchRouteMins(lastAnchor.lat, lastAnchor.lng, lat, lng);
+        }
+        
         const [h, m] = lastAnchor.time.split(':').map(Number);
-        const nextH = h + 2; 
-        defaultTime = `${(nextH > 23 ? 23 : nextH).toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        let totalMins = (h * 60 + m) + travelMins; // Only travel time, no mandatory stay duration
+        totalMins = totalMins % (24 * 60);
+
+        const nextH = Math.floor(totalMins / 60);
+        const nextM = totalMins % 60;
+        defaultTime = `${nextH.toString().padStart(2, '0')}:${nextM.toString().padStart(2, '0')}`;
     }
 
     const newItem: ItineraryItem = {
@@ -340,7 +357,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     }
   };
 
-  const handleDrop = (e: React.DragEvent, targetId: string) => {
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     setDragOverItemId(null);
     if (isGuest || !draggedItemId || draggedItemId === targetId) {
@@ -361,34 +378,60 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     currentItems.splice(draggedIndex, 1);
     currentItems.splice(targetIndex, 0, draggedItem);
 
-    // Adjust time to maintain DB logical order
+    // Adjust time to maintain DB logical order leveraging OSRM!
     const anchors = currentItems.filter(i => i.type !== 'Transport');
     const newIndex = anchors.findIndex(i => i.id === draggedItemId);
 
     if (newIndex > -1) {
       const prevAnchor = newIndex > 0 ? anchors[newIndex - 1] : null;
-      const nextAnchor = newIndex < anchors.length - 1 ? anchors[newIndex + 1] : null;
 
-      if (prevAnchor && nextAnchor) {
-        const [h1, m1] = prevAnchor.time.split(':').map(Number);
-        const [h2, m2] = nextAnchor.time.split(':').map(Number);
-        const min1 = h1 * 60 + m1;
-        let min2 = h2 * 60 + m2;
-        if (min2 <= min1) min2 += 24 * 60;
-        let mid = Math.floor((min1 + min2) / 2);
-        if (mid === min1) mid += 1;
-        mid = mid % (24 * 60);
-        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
-      } else if (prevAnchor) {
-        const [h1, m1] = prevAnchor.time.split(':').map(Number);
-        let mid = h1 * 60 + m1 + 60;
-        if (mid >= 24 * 60) mid = 24 * 60 - 1;
-        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
-      } else if (nextAnchor) {
-        const [h2, m2] = nextAnchor.time.split(':').map(Number);
-        let mid = h2 * 60 + m2 - 60;
-        if (mid < 0) mid = 0;
-        draggedItem.time = `${Math.floor(mid / 60).toString().padStart(2, '0')}:${(mid % 60).toString().padStart(2, '0')}`;
+      if (prevAnchor) {
+         let currentCursorMins = 0;
+         for (let i = newIndex; i < anchors.length; i++) {
+            const anchor = anchors[i];
+            const prev = i === newIndex ? prevAnchor : anchors[i - 1];
+            
+            let travelMins = 30;
+            if (prev.lat != null && prev.lng != null && anchor.lat != null && anchor.lng != null) {
+                travelMins = await fetchRouteMins(prev.lat, prev.lng, anchor.lat, anchor.lng);
+            }
+            
+            if (i === newIndex) {
+               const [ph, pm] = prev.time.split(':').map(Number);
+               let pMins = ph * 60 + pm;
+               // dragged item's time = prev time + travel time
+               currentCursorMins = pMins + travelMins;
+               const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
+               const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
+               anchor.time = `${nextHStr}:${nextMStr}`;
+            } else {
+               const [ah, am] = anchor.time.split(':').map(Number);
+               let aMins = ah * 60 + am;
+               // Cascade shift if the newly pushed item overlaps with the next anchor logically.
+               if (aMins < currentCursorMins + travelMins) {
+                  currentCursorMins = currentCursorMins + travelMins;
+                  const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
+                  const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
+                  anchor.time = `${nextHStr}:${nextMStr}`;
+               } else {
+                  break; // cascade ends, no collisions ahead.
+               }
+            }
+         }
+      } else {
+         // Inserted as First Item. Inherit next item's start offset backwards.
+         const nextAnchor = anchors[newIndex + 1];
+         if (nextAnchor) {
+            let travelMins = 30;
+            if (draggedItem.lat != null && draggedItem.lng != null && nextAnchor.lat != null && nextAnchor.lng != null) {
+               travelMins = await fetchRouteMins(draggedItem.lat, draggedItem.lng, nextAnchor.lat, nextAnchor.lng);
+            }
+            const [nh, nm] = nextAnchor.time.split(':').map(Number);
+            let nMins = nh * 60 + nm;
+            let startMins = nMins - travelMins; // Only reverse travel time
+            if (startMins < 0) startMins += 1440;
+            draggedItem.time = `${Math.floor(startMins / 60).toString().padStart(2, '0')}:${(startMins % 60).toString().padStart(2, '0')}`;
+         }
       }
     }
 
