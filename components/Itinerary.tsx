@@ -35,22 +35,33 @@ const TimePicker: React.FC<{
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
+  useEffect(() => {
+    if (ref.current) {
+      setTimeout(() => {
+        const activeHour = ref.current?.querySelector('.active-hour');
+        const activeMinute = ref.current?.querySelector('.active-minute');
+        if (activeHour) activeHour.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (activeMinute) activeMinute.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 50);
+    }
+  }, []); // Run on mount
+
   return (
     <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">H</div>
-        <div className="h-40 overflow-y-auto no-scrollbar space-y-1">
+        <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {hours.map(h => (
-            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
+            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
           ))}
         </div>
       </div>
       <div className="w-px bg-slate-100 dark:bg-slate-700 my-1"></div>
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">M</div>
-        <div className="h-40 overflow-y-auto no-scrollbar space-y-1">
+        <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {minutes.map(m => (
-            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
+            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
           ))}
         </div>
       </div>
@@ -284,11 +295,14 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     }
   };
 
+  // Round minutes up to nearest 5 to align with the TimePicker's 5-minute grid
+  const roundTo5 = (mins: number) => Math.ceil(mins / 5) * 5;
+
   const fetchRouteMins = async (lat1: string|number, lng1: string|number, lat2: string|number, lng2: string|number): Promise<number> => {
     try {
       const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
       const data = await res.json();
-      if (data?.routes?.[0]) return Math.max(1, Math.round(data.routes[0].duration / 60));
+      if (data?.routes?.[0]) return roundTo5(Math.max(5, Math.round(data.routes[0].duration / 60)));
     } catch(e) {}
     return 30; // fallback default
   };
@@ -307,7 +321,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         }
         
         const [h, m] = lastAnchor.time.split(':').map(Number);
-        let totalMins = (h * 60 + m) + travelMins; // Only travel time, no mandatory stay duration
+        let totalMins = roundTo5((h * 60 + m) + travelMins);
         totalMins = totalMins % (24 * 60);
 
         const nextH = Math.floor(totalMins / 60);
@@ -315,25 +329,21 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         defaultTime = `${nextH.toString().padStart(2, '0')}:${nextM.toString().padStart(2, '0')}`;
     }
 
-    const newItem: ItineraryItem = {
+    // Open the form so user can choose Place or Food type before confirming
+    setIsAddingNew(true);
+    setEditingItem({
       id: crypto.randomUUID(),
       user_id: currentUser.id,
       time: defaultTime,
       placeName,
       lat,
       lng,
-      type: 'Place',
+      type: 'Place', // default; user can switch to Food
       note: '',
       date: currentDay.date
-    };
-    
-    let newItems = [...displayItems, newItem];
-    const updatedItems = maintainListIntegrity(newItems);
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
-    
-    scrollAnchorRef.current = newItem.id;
-    onUpdate({ ...trip, itinerary: newDays }, "ADD_ITINERARY_ITEM", newItem);
+    });
+    setIsFormOpen(true);
+    setNameError(false);
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -399,8 +409,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
             if (i === newIndex) {
                const [ph, pm] = prev.time.split(':').map(Number);
                let pMins = ph * 60 + pm;
-               // dragged item's time = prev time + travel time
-               currentCursorMins = pMins + travelMins;
+               // dragged item's time = prev time + travel time (rounded to 5-min grid)
+               currentCursorMins = roundTo5(pMins + travelMins);
                const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
                const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
                anchor.time = `${nextHStr}:${nextMStr}`;
@@ -409,7 +419,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                let aMins = ah * 60 + am;
                // Cascade shift if the newly pushed item overlaps with the next anchor logically.
                if (aMins < currentCursorMins + travelMins) {
-                  currentCursorMins = currentCursorMins + travelMins;
+                  currentCursorMins = roundTo5(currentCursorMins + travelMins);
                   const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
                   const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
                   anchor.time = `${nextHStr}:${nextMStr}`;
@@ -428,7 +438,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
             }
             const [nh, nm] = nextAnchor.time.split(':').map(Number);
             let nMins = nh * 60 + nm;
-            let startMins = nMins - travelMins; // Only reverse travel time
+            // Round backwards to nearest 5-min boundary
+            let startMins = Math.floor((nMins - travelMins) / 5) * 5;
             if (startMins < 0) startMins += 1440;
             draggedItem.time = `${Math.floor(startMins / 60).toString().padStart(2, '0')}:${(startMins % 60).toString().padStart(2, '0')}`;
          }
@@ -461,21 +472,30 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     let finalItem = { ...editingItem };
     
     if (finalItem.type !== 'Transport') {
-        try {
-            const query = encodeURIComponent(finalItem.placeName);
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
-                headers: {
-                    'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)'
+        // Find the original item to check if the name has changed
+        const originalItem = displayItems.find(i => i.id === finalItem.id);
+        const nameChanged = !originalItem || originalItem.placeName !== finalItem.placeName;
+        const alreadyHasCoords = finalItem.lat != null && finalItem.lng != null;
+
+        if (nameChanged && !alreadyHasCoords) {
+            // Only re-geocode if name changed AND no precise coords exist yet
+            try {
+                const query = encodeURIComponent(finalItem.placeName);
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                    headers: {
+                        'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)'
+                    }
+                });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    finalItem.lat = parseFloat(data[0].lat);
+                    finalItem.lng = parseFloat(data[0].lon);
                 }
-            });
-            const data = await res.json();
-            if (data && data.length > 0) {
-                finalItem.lat = parseFloat(data[0].lat);
-                finalItem.lng = parseFloat(data[0].lon);
+            } catch (e) {
+                console.error('Failed to geocode:', e);
             }
-        } catch (e) {
-            console.error('Failed to geocode:', e);
         }
+        // Precise coords (e.g. from Google Places) are always preserved as-is
     }
     
     let newItems = [...displayItems];
@@ -638,13 +658,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 </button>
                 <button onClick={() => setViewMode('map')} className={`lg:hidden px-2 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                   <Map size={12}/> <span className="hidden sm:inline">Map</span>
-                </button>
-                <div className="w-px bg-slate-200 dark:bg-slate-700 mx-1 my-1"></div>
-                <button onClick={() => handleOpenAddForm('Place')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all">
-                  <MapPin size={12}/> <span className="hidden sm:inline">{t('addPlace')}</span>
-                </button>
-                <button onClick={() => handleOpenAddForm('Food')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-0.5">
-                  <Coffee size={12}/> <span className="hidden sm:inline">{t('addFood')}</span>
                 </button>
               </div>
             ) : (
@@ -870,16 +883,23 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className={`text-[9px] font-black uppercase tracking-widest ml-1 ${nameError ? "text-red-500" : "text-slate-400"}`}>{t('placeName')} {nameError && `(${t('required')})`}</label>
-                    <input 
-                      autoFocus
-                      type="text" 
-                      value={editingItem.placeName} 
-                      onChange={e => {setEditingItem({ ...editingItem, placeName: e.target.value }); setNameError(false);}}
-                      placeholder="..."
-                      className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
-                    />
+                <div className="sm:col-span-2 space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('placeName')}</label>
+                    {!isAddingNew ? (
+                      // Read-only when editing existing item — name cannot be changed
+                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-400 border-2 border-transparent select-none cursor-default">
+                        {editingItem.placeName}
+                      </div>
+                    ) : (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editingItem.placeName}
+                        onChange={e => {setEditingItem({ ...editingItem, placeName: e.target.value }); setNameError(false);}}
+                        placeholder="..."
+                        className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2 relative">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('time')}</label>
