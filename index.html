@@ -16,90 +16,222 @@
               primary: "#007AFF",
               secondary: "#5856D6",
               background: {
-                light: "#FBFBFD",
+                light: "#F2F2F7",
                 dark: "#1C1C1E",
               },
               surface: {
                 light: "#FFFFFF",
                 dark: "#2C2C2E",
               },
+              fill: {
+                primary: "#007AFF",
+                secondary: "#34C759",
+                tertiary: "#FF9500",
+                quaternary: "#FF3B30",
+              },
             },
             fontFamily: {
               sans: [
                 "-apple-system",
                 "BlinkMacSystemFont",
-                "Segoe UI",
-                "Roboto",
-                "Helvetica",
+                "SF Pro Display",
+                "SF Pro Text",
+                "Helvetica Neue",
                 "Arial",
                 "sans-serif",
               ],
             },
             boxShadow: {
-              ios: "0 4px 12px rgba(0,0,0,0.05)",
-              "ios-lg": "0 10px 30px rgba(0,0,0,0.08)",
+              ios: "0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)",
+              "ios-md": "0 4px 14px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
+              "ios-lg": "0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04)",
+              "ios-xl": "0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05)",
+            },
+            borderRadius: {
+              "ios": "14px",
+              "ios-lg": "22px",
+              "ios-xl": "32px",
+              "ios-2xl": "44px",
+            },
+            transitionTimingFunction: {
+              'spring': 'cubic-bezier(0.22, 1, 0.36, 1)',
             },
           },
         },
       };
     </script>
     <style>
+      /* === Apple Human Interface Guideline Design System === */
+      :root {
+        --radius-xs: 10px;
+        --radius-sm: 14px;
+        --radius-md: 20px;
+        --radius-lg: 28px;
+        --radius-xl: 40px;
+        --radius-2xl: 56px;
+
+        --shadow-xs: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+        --shadow-sm: 0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+        --shadow-md: 0 4px 14px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04);
+        --shadow-lg: 0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04);
+        --shadow-xl: 0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05);
+
+        --glass-light: rgba(255, 255, 255, 0.82);
+        --glass-dark: rgba(28, 28, 30, 0.82);
+        --glass-border-light: rgba(255, 255, 255, 0.6);
+        --glass-border-dark: rgba(255, 255, 255, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      
+      html { scroll-behavior: smooth; }
+
       body {
-        background-color: #fbfbfd;
+        background-color: #f2f2f7;
         color: #1d1d1f;
         -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
         transition: background-color 0.4s ease, color 0.4s ease;
       }
       .dark body {
         background-color: #1c1c1e;
         color: #f5f5f7;
       }
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      .custom-scrollbar::-webkit-scrollbar {
-        width: 4px;
-        height: 4px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-      }
+
+      /* === Scrollbars === */
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      .custom-scrollbar::-webkit-scrollbar { width: 3px; height: 3px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(0, 0, 0, 0.08);
-        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.10);
+        border-radius: 99px;
       }
       .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.08);
       }
-      /* Custom Thin Scrollbar for Mobile Horizontal Text */
-      .custom-thin-scrollbar::-webkit-scrollbar {
-        height: 2.5px;
-      }
-      .custom-thin-scrollbar::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.02);
-      }
+      .custom-thin-scrollbar::-webkit-scrollbar { height: 2px; }
+      .custom-thin-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
       .custom-thin-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(0, 122, 255, 0.15);
-        border-radius: 10px;
+        background: rgba(0, 122, 255, 0.2);
+        border-radius: 99px;
       }
-      .dark .custom-thin-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
-      }
+
+      /* === Keyframes === */
       @keyframes pulse-soft {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
       }
-      .animate-pulse-soft {
-        animation: pulse-soft 2s infinite ease-in-out;
+      .animate-pulse-soft { animation: pulse-soft 2s infinite ease-in-out; }
+
+      @keyframes slide-up {
+        from { opacity: 0; transform: translateY(16px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .animate-slide-up { animation: slide-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+      @keyframes scale-in {
+        from { opacity: 0; transform: scale(0.94); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      .animate-scale-in { animation: scale-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+      @keyframes dash {
+        to { stroke-dashoffset: -20; }
+      }
+      .animate-dash { animation: dash 1s linear infinite; }
+
+      /* === Apple Frosted Glass === */
+      .glass {
+        background: var(--glass-light);
+        backdrop-filter: saturate(180%) blur(20px);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        border: 1px solid var(--glass-border-light);
+      }
+      .dark .glass {
+        background: var(--glass-dark);
+        border-color: var(--glass-border-dark);
+      }
+
+      /* === Apple Segmented Control === */
+      .apple-segment {
+        background: rgba(116,116,128,0.12);
+        border-radius: var(--radius-sm);
+        padding: 2px;
+      }
+      .dark .apple-segment {
+        background: rgba(116,116,128,0.20);
+      }
+      .apple-segment-item {
+        border-radius: calc(var(--radius-sm) - 2px);
+        padding: 5px 14px;
+        font-size: 11px;
+        font-weight: 800;
+        transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .apple-segment-item.active {
+        background: #ffffff;
+        box-shadow: var(--shadow-sm);
+        color: #1d1d1f;
+      }
+      .dark .apple-segment-item.active {
+        background: #3a3a3c;
+        color: #f5f5f7;
+      }
+
+      /* === Leaflet Overrides === */
+      .custom-leaflet-marker { background: transparent; border: none; }
+      .leaflet-popup-content-wrapper {
+        border-radius: var(--radius-lg) !important;
+        padding: 4px !important;
+        box-shadow: var(--shadow-xl) !important;
+        background: rgba(255,255,255,0.96) !important;
+        backdrop-filter: blur(20px) !important;
+        border: 1px solid rgba(0,0,0,0.06) !important;
+      }
+      .dark .leaflet-popup-content-wrapper {
+        background: rgba(44,44,46,0.96) !important;
+        border-color: rgba(255,255,255,0.08) !important;
+      }
+      .dark .leaflet-popup-tip {
+        background: rgba(44,44,46,0.96) !important;
+      }
+      .leaflet-popup-content { margin: 8px !important; }
+
+      /* Google Maps navigation button inside Leaflet popup */
+      .leaflet-popup-content .gmap-nav-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        margin-top: 8px;
+        padding: 6px 0;
+        background-color: #4285F4 !important;
+        color: #ffffff !important;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 900;
+        text-decoration: none !important;
+        transition: opacity 0.15s;
+      }
+      .leaflet-popup-content .gmap-nav-btn:hover {
+        background-color: #3367D6 !important;
+        color: #ffffff !important;
+      }
+      /* Dark mode: deeper tone */
+      .dark .leaflet-popup-content .gmap-nav-btn {
+        background-color: #1a56db !important;
+        color: #e8eeff !important;
+      }
+      .dark .leaflet-popup-content .gmap-nav-btn:hover {
+        background-color: #1245b8 !important;
+      }
+      /* Hide nav button on desktop (md = 768px) */
+      @media (min-width: 768px) {
+        .leaflet-popup-content .gmap-nav-btn { display: none !important; }
       }
     </style>
     <script type="importmap">

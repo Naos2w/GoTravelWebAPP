@@ -4,11 +4,12 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, Edit2
+  Loader2, Check, X, Lock, ChevronDown, ChevronLeft, Edit2, List
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase, deleteItineraryItem } from '../services/storageService';
+import { MapView } from './MapView';
 
 interface Props {
   trip: Trip;
@@ -34,22 +35,33 @@ const TimePicker: React.FC<{
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
+  useEffect(() => {
+    if (ref.current) {
+      setTimeout(() => {
+        const activeHour = ref.current?.querySelector('.active-hour');
+        const activeMinute = ref.current?.querySelector('.active-minute');
+        if (activeHour) activeHour.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (activeMinute) activeMinute.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 50);
+    }
+  }, []); // Run on mount
+
   return (
     <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">H</div>
-        <div className="h-40 overflow-y-auto no-scrollbar space-y-1">
+        <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {hours.map(h => (
-            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
+            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
           ))}
         </div>
       </div>
       <div className="w-px bg-slate-100 dark:bg-slate-700 my-1"></div>
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">M</div>
-        <div className="h-40 overflow-y-auto no-scrollbar space-y-1">
+        <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {minutes.map(m => (
-            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
+            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
           ))}
         </div>
       </div>
@@ -58,7 +70,8 @@ const TimePicker: React.FC<{
 };
 
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isEn = language?.startsWith('en');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
@@ -69,6 +82,11 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [isSaving, setIsSaving] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+  const [dragDirection, setDragDirection] = useState<'above' | 'below'>('above');
   
   // Inline edit state for transport notes
   const [editingTransportId, setEditingTransportId] = useState<string | null>(null);
@@ -108,12 +126,23 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         setHighlightedId(scrollAnchorRef.current);
         scrollAnchorRef.current = null;
-        
-        const timer = setTimeout(() => setHighlightedId(null), 2000);
-        return () => clearTimeout(timer);
       }
     }
   }, [trip, selectedDayIndex]);
+
+  // Synchronize map & list viewing interactions
+  useEffect(() => {
+    if (highlightedId && viewMode === 'list' && window.innerWidth >= 1024) {
+      // Small timeout to ensure DOM layout is updated
+      const timer = setTimeout(() => {
+         const el = document.getElementById(`item-${highlightedId}`);
+         if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+         }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedId, viewMode]);
 
   // "Smart Grouping": Reorder items to keep Flight sequences (Dep -> Trans -> Arr) visually contiguous.
   // This prevents other users' interleaved items from breaking the visual flow of a flight.
@@ -259,14 +288,171 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const handleEditItem = (item: ItineraryItem) => {
     if (isGuest || item.transportType === 'Flight') return;
-    // Allow editing transport items too via the modal if needed, but inline is preferred for notes.
-    // For non-transport items, open modal.
     if (item.type !== 'Transport') {
         setIsAddingNew(false);
         setEditingItem({ ...item });
         setIsFormOpen(true);
         setNameError(false);
     }
+  };
+
+  // Round minutes up to nearest 5 to align with the TimePicker's 5-minute grid
+  const roundTo5 = (mins: number) => Math.ceil(mins / 5) * 5;
+
+  const fetchRouteMins = async (lat1: string|number, lng1: string|number, lat2: string|number, lng2: string|number): Promise<number> => {
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
+      const data = await res.json();
+      if (data?.routes?.[0]) return roundTo5(Math.max(5, Math.round(data.routes[0].duration / 60)));
+    } catch(e) {}
+    return 30; // fallback default
+  };
+
+  const handleAddSearchResult = async (placeName: string, lat: number, lng: number) => {
+    if (isGuest || !currentUser) return;
+    
+    let defaultTime = '09:00';
+    const anchors = displayItems.filter(i => i.type !== 'Transport');
+    if (anchors.length > 0) {
+        const lastAnchor = anchors[anchors.length - 1];
+        let travelMins = 30;
+        
+        if (lastAnchor.lat != null && lastAnchor.lng != null) {
+           travelMins = await fetchRouteMins(lastAnchor.lat, lastAnchor.lng, lat, lng);
+        }
+        
+        const [h, m] = lastAnchor.time.split(':').map(Number);
+        let totalMins = roundTo5((h * 60 + m) + travelMins);
+        totalMins = totalMins % (24 * 60);
+
+        const nextH = Math.floor(totalMins / 60);
+        const nextM = totalMins % 60;
+        defaultTime = `${nextH.toString().padStart(2, '0')}:${nextM.toString().padStart(2, '0')}`;
+    }
+
+    // Open the form so user can choose Place or Food type before confirming
+    setIsAddingNew(true);
+    setEditingItem({
+      id: crypto.randomUUID(),
+      user_id: currentUser.id,
+      time: defaultTime,
+      placeName,
+      lat,
+      lng,
+      type: 'Place', // default; user can switch to Food
+      note: '',
+      date: currentDay.date
+    });
+    setIsFormOpen(true);
+    setNameError(false);
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedItemId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    if (draggedItemId === id || isGuest) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midline = rect.top + rect.height / 2;
+    setDragDirection(e.clientY < midline ? 'above' : 'below');
+    if (dragOverItemId !== id) setDragOverItemId(id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+       setDragOverItemId(null);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverItemId(null);
+    if (isGuest || !draggedItemId || draggedItemId === targetId) {
+       setDraggedItemId(null);
+       return;
+    }
+
+    const currentItems = [...displayItems];
+    const draggedIndex = currentItems.findIndex(i => i.id === draggedItemId);
+    const targetIndex = currentItems.findIndex(i => i.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedItemId(null);
+      return;
+    }
+
+    const draggedItem = currentItems[draggedIndex];
+    currentItems.splice(draggedIndex, 1);
+    currentItems.splice(targetIndex, 0, draggedItem);
+
+    // Adjust time to maintain DB logical order leveraging OSRM!
+    const anchors = currentItems.filter(i => i.type !== 'Transport');
+    const newIndex = anchors.findIndex(i => i.id === draggedItemId);
+
+    if (newIndex > -1) {
+      const prevAnchor = newIndex > 0 ? anchors[newIndex - 1] : null;
+
+      if (prevAnchor) {
+         let currentCursorMins = 0;
+         for (let i = newIndex; i < anchors.length; i++) {
+            const anchor = anchors[i];
+            const prev = i === newIndex ? prevAnchor : anchors[i - 1];
+            
+            let travelMins = 30;
+            if (prev.lat != null && prev.lng != null && anchor.lat != null && anchor.lng != null) {
+                travelMins = await fetchRouteMins(prev.lat, prev.lng, anchor.lat, anchor.lng);
+            }
+            
+            if (i === newIndex) {
+               const [ph, pm] = prev.time.split(':').map(Number);
+               let pMins = ph * 60 + pm;
+               // dragged item's time = prev time + travel time (rounded to 5-min grid)
+               currentCursorMins = roundTo5(pMins + travelMins);
+               const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
+               const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
+               anchor.time = `${nextHStr}:${nextMStr}`;
+            } else {
+               const [ah, am] = anchor.time.split(':').map(Number);
+               let aMins = ah * 60 + am;
+               // Cascade shift if the newly pushed item overlaps with the next anchor logically.
+               if (aMins < currentCursorMins + travelMins) {
+                  currentCursorMins = roundTo5(currentCursorMins + travelMins);
+                  const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
+                  const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
+                  anchor.time = `${nextHStr}:${nextMStr}`;
+               } else {
+                  break; // cascade ends, no collisions ahead.
+               }
+            }
+         }
+      } else {
+         // Inserted as First Item. Inherit next item's start offset backwards.
+         const nextAnchor = anchors[newIndex + 1];
+         if (nextAnchor) {
+            let travelMins = 30;
+            if (draggedItem.lat != null && draggedItem.lng != null && nextAnchor.lat != null && nextAnchor.lng != null) {
+               travelMins = await fetchRouteMins(draggedItem.lat, draggedItem.lng, nextAnchor.lat, nextAnchor.lng);
+            }
+            const [nh, nm] = nextAnchor.time.split(':').map(Number);
+            let nMins = nh * 60 + nm;
+            // Round backwards to nearest 5-min boundary
+            let startMins = Math.floor((nMins - travelMins) / 5) * 5;
+            if (startMins < 0) startMins += 1440;
+            draggedItem.time = `${Math.floor(startMins / 60).toString().padStart(2, '0')}:${(startMins % 60).toString().padStart(2, '0')}`;
+         }
+      }
+    }
+
+    const updatedItems = maintainListIntegrity(currentItems);
+    const newDays = [...days];
+    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", draggedItem);
+    setDraggedItemId(null);
   };
 
   const saveTransportNote = (id: string) => {
@@ -277,30 +463,60 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     setEditingTransportId(null);
   };
 
-  const handleSaveItem = () => {
+  const handleSaveItem = async () => {
     if (!editingItem || !editingItem.placeName.trim()) {
        setNameError(true);
        return;
     }
     
+    setIsSaving(true);
+    let finalItem = { ...editingItem };
+    
+    if (finalItem.type !== 'Transport') {
+        // Find the original item to check if the name has changed
+        const originalItem = displayItems.find(i => i.id === finalItem.id);
+        const nameChanged = !originalItem || originalItem.placeName !== finalItem.placeName;
+        const alreadyHasCoords = finalItem.lat != null && finalItem.lng != null;
+
+        if (nameChanged && !alreadyHasCoords) {
+            // Only re-geocode if name changed AND no precise coords exist yet
+            try {
+                const query = encodeURIComponent(finalItem.placeName);
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                    headers: {
+                        'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)'
+                    }
+                });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    finalItem.lat = parseFloat(data[0].lat);
+                    finalItem.lng = parseFloat(data[0].lon);
+                }
+            } catch (e) {
+                console.error('Failed to geocode:', e);
+            }
+        }
+        // Precise coords (e.g. from Google Places) are always preserved as-is
+    }
+    
     let newItems = [...displayItems];
-    const index = newItems.findIndex(i => i.id === editingItem.id);
+    const index = newItems.findIndex(i => i.id === finalItem.id);
     
     if (index > -1) {
       // Update existing item
-      newItems[index] = editingItem;
+      newItems[index] = finalItem;
       
       // Update surrounding transports immediately
       // Check previous transport
       if (index > 0 && newItems[index-1].type === 'Transport' && index > 1) {
-          newItems[index-1] = recalculateTransport(newItems[index-2], newItems[index-1], editingItem);
+          newItems[index-1] = recalculateTransport(newItems[index-2], newItems[index-1], finalItem);
       }
       // Check next transport
       if (index < newItems.length - 1 && newItems[index+1].type === 'Transport' && index < newItems.length - 2) {
-          newItems[index+1] = recalculateTransport(editingItem, newItems[index+1], newItems[index+2]);
+          newItems[index+1] = recalculateTransport(finalItem, newItems[index+1], newItems[index+2]);
       }
     } else {
-      newItems.push(editingItem);
+      newItems.push(finalItem);
     }
     
     // Sort and cleanup
@@ -309,11 +525,12 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
     
-    scrollAnchorRef.current = editingItem.id;
+    scrollAnchorRef.current = finalItem.id;
     
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", editingItem);
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", finalItem);
     setIsFormOpen(false);
     setEditingItem(null);
+    setIsSaving(false);
   };
 
   const handleDeleteItem = async (itemId: string) => {
@@ -398,8 +615,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] sm:h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
-      {/* Day Selector */}
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
+      {/* Day Selector — horizontal strip on mobile, vertical column on desktop */}
       <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
@@ -413,42 +630,141 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         })}
       </div>
 
-      <div className="flex-1 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden">
-        <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white px-2">Day {selectedDayIndex + 1}</h2>
-          
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+
+        {/* ── Header bar: always visible, contains Day title + toggle ── */}
+        <div className="shrink-0 flex justify-between items-center px-1">
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Day {selectedDayIndex + 1}</h2>
           {!isGuest ? (
-            <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
-              <button onClick={() => handleOpenAddForm('Place')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-primary font-black text-[11px] flex items-center gap-1.5 transition-all">
-                <MapPin size={12}/> <span className="hidden sm:inline">{t('addPlace')}</span>
+            <div className="flex bg-slate-100/60 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 gap-0.5 lg:hidden">
+              <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+                <List size={13}/> {isEn ? 'List' : '列表'}
               </button>
-              <button onClick={() => handleOpenAddForm('Food')} className="px-3 sm:px-3.5 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded-lg text-orange-500 font-black text-[11px] flex items-center gap-1.5 transition-all ml-0.5">
-                <Coffee size={12}/> <span className="hidden sm:inline">{t('addFood')}</span>
+              <button onClick={() => setViewMode('map')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+                <Map size={13}/> {isEn ? 'Map' : '地圖'}
               </button>
             </div>
           ) : (
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1"><Lock size={10} />{t('readOnly')}</div>
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1 lg:hidden"><Lock size={10} />{t('readOnly')}</div>
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
-          {displayItems.map((item, idx) => {
-            const isTransport = item.type === 'Transport';
-            const isFlight = item.transportType === 'Flight'; // Used for locking interactions
-            const transportOpt = TRANSPORT_OPTIONS.find(o => o.type === item.transportType);
-            const nextItem = currentDay.items[idx + 1];
-            
-            // Revised Condition: Allow inserting transport if next item is NOT transport. 
-            // Removed check for current/next item being Flight type to allow transport after Airport.
-            // Also explicitly disable inserting transport after a Flight transport item itself
-            const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
-            
-            const isHighlighted = highlightedId === item.id;
+        {/* ── Content: map + panel ── */}
+        <div className="flex-1 flex gap-3 overflow-hidden">
+
+          {/* Map — always visible in map mode; hidden on mobile in list mode */}
+          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300
+            ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
+            <MapView
+              items={displayItems}
+              onAddSearchResult={handleAddSearchResult}
+              activeItemId={highlightedId}
+              onMarkerClick={(id) => { setHighlightedId(id); }}
+            />
+          </div>
+
+          {/* ── Mobile map mode: compact right timeline strip ── */}
+          {viewMode === 'map' && (() => {
+            // Use exact same filter as MapView so numbers match map markers 1:1
+            const validItems = displayItems.filter(i =>
+              i.lat != null && i.lng != null &&
+              !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
+              i.type !== 'Transport'
+            );
 
             return (
-              <React.Fragment key={item.id}>
-                <div id={`item-${item.id}`} className={`relative pl-8 sm:pl-12 scroll-mt-20 ${isTransport ? 'pb-2 sm:pb-3' : 'pb-6 sm:pb-8'}`}>
-                  {!isTransport && (
+              <div className="lg:hidden w-[72px] shrink-0 flex flex-col gap-1.5 overflow-y-auto no-scrollbar py-1">
+                {validItems.map((item, mapIdx) => {
+                  const isHighlighted = highlightedId === item.id;
+                  // Check if there's a transport between this stop and the next in the original list
+                  const originalIdx = displayItems.findIndex(i => i.id === item.id);
+                  const nextOriginal = displayItems[originalIdx + 1];
+                  const hasTransport = nextOriginal?.type === 'Transport';
+                  const transportOpt = hasTransport
+                    ? TRANSPORT_OPTIONS.find(o => o.type === nextOriginal.transportType)
+                    : null;
+
+                  return (
+                    <React.Fragment key={item.id}>
+                      <button
+                        onClick={() => setHighlightedId(item.id)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-2xl border transition-all active:scale-95 ${
+                          isHighlighted
+                            ? 'bg-primary border-primary shadow-lg shadow-primary/20'
+                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 shadow-ios'
+                        }`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                          isHighlighted ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}>
+                          {mapIdx + 1}
+                        </div>
+                        <div className={`text-[9px] font-mono font-black leading-tight text-center ${
+                          isHighlighted ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                        }`}>
+                          {item.time.replace(':', '\n')}
+                        </div>
+                      </button>
+
+                      {/* Show transport connector between this stop and the next */}
+                      {hasTransport && mapIdx < validItems.length - 1 && (
+                        <div className="flex flex-col items-center gap-0.5 opacity-40 py-0.5">
+                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                          {transportOpt && <transportOpt.icon size={10} className={transportOpt.color} />}
+                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* ── Full list panel (list mode on mobile, always on desktop) ── */}
+          <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden
+            ${viewMode === 'map' ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'}`}>
+
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
+
+            {displayItems.map((item, idx) => {
+              const isTransport = item.type === 'Transport';
+              const isFlight = item.transportType === 'Flight'; // Used for locking interactions
+              const transportOpt = TRANSPORT_OPTIONS.find(o => o.type === item.transportType);
+              const nextItem = currentDay.items[idx + 1];
+              
+              // Revised Condition: Allow inserting transport if next item is NOT transport. 
+              // Removed check for current/next item being Flight type to allow transport after Airport.
+              // Also explicitly disable inserting transport after a Flight transport item itself
+              const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
+              
+              const isHighlighted = highlightedId === item.id;
+
+              return (
+                <React.Fragment key={item.id}>
+                  <div 
+                    id={`item-${item.id}`} 
+                    className={`relative pl-8 sm:pl-12 scroll-mt-20 ${isTransport ? 'pb-2 sm:pb-3' : 'pb-6 sm:pb-8'} 
+                                ${draggedItemId === item.id ? 'opacity-40 scale-[0.98] shadow-none z-0' : 'z-10'}
+                                transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
+                                ${dragOverItemId === item.id && dragDirection === 'above' ? 'pt-16' : ''}
+                                ${dragOverItemId === item.id && dragDirection === 'below' ? 'pb-16' : ''}`}
+                    draggable={!isGuest && !isTransport}
+                    onDragStart={(e) => handleDragStart(e, item.id)}
+                    onDragOver={(e) => handleDragOver(e, item.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, item.id)}
+                    onDragEnd={() => { setDraggedItemId(null); setDragOverItemId(null); }}
+                  >
+                    {/* Glowing Drop Indicator Lines */}
+                    {dragOverItemId === item.id && dragDirection === 'above' && (
+                        <div className="absolute top-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
+                    )}
+                    {dragOverItemId === item.id && dragDirection === 'below' && (
+                        <div className="absolute bottom-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
+                    )}
+                    {!isTransport && (
                     <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-slate-900 z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-slate-700'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${isFlight ? 'bg-blue-500' : item.type === 'Place' ? 'bg-primary' : 'bg-orange-500'}`} />
                     </div>
@@ -512,9 +828,9 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
                         <div 
                            onClick={() => {
-                             if (window.innerWidth < 640 && !isFlight && !isGuest) handleEditItem(item);
+                             setHighlightedId(item.id);
                            }}
-                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-default rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50 sm:hover:bg-transparent"
+                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50"
                         >
                            <div className="flex items-center gap-1.5 w-full justify-start">
                               {isFlight && <Plane size={11} className="text-blue-500 shrink-0" />}
@@ -590,9 +906,13 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 )}
               </React.Fragment>
             );
-          })}
-        </div>
-      </div>
+            })}
+          </div>    {/* end: flex-1 overflow-y-auto (items list) */}
+          </div>    {/* end: full list panel */}
+
+        </div>    {/* end: flex-1 flex gap-3 (inner content row: map + strip + list) */}
+      </div>      {/* end: flex-1 flex flex-col gap-3 (main content area) */}
+
 
       {isFormOpen && editingItem && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
@@ -627,16 +947,23 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className={`text-[9px] font-black uppercase tracking-widest ml-1 ${nameError ? "text-red-500" : "text-slate-400"}`}>{t('placeName')} {nameError && `(${t('required')})`}</label>
-                    <input 
-                      autoFocus
-                      type="text" 
-                      value={editingItem.placeName} 
-                      onChange={e => {setEditingItem({ ...editingItem, placeName: e.target.value }); setNameError(false);}}
-                      placeholder="..."
-                      className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
-                    />
+                <div className="sm:col-span-2 space-y-2">
+                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('placeName')}</label>
+                    {!isAddingNew ? (
+                      // Read-only when editing existing item — name cannot be changed
+                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-400 border-2 border-transparent select-none cursor-default">
+                        {editingItem.placeName}
+                      </div>
+                    ) : (
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editingItem.placeName}
+                        onChange={e => {setEditingItem({ ...editingItem, placeName: e.target.value }); setNameError(false);}}
+                        placeholder="..."
+                        className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
+                      />
+                    )}
                   </div>
                   <div className="space-y-2 relative">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('time')}</label>
@@ -671,8 +998,10 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
                   <button 
                     onClick={handleSaveItem}
-                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+                    disabled={isSaving}
+                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
+                    {isSaving && <Loader2 size={16} className="animate-spin" />}
                     {t('save')}
                   </button>
                   <button 

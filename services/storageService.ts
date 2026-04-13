@@ -54,6 +54,8 @@ const transformTripRow = (row: any): Trip => {
         user_id: it.user_id,
         time: it.time,
         placeName: it.place_name,
+        lat: it.lat,
+        lng: it.lng,
         note: it.note,
         type: it.type,
         transportType: it.transport_type,
@@ -388,6 +390,8 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
           time: item.time,
           type: item.type,
           place_name: item.placeName,
+          lat: item.lat,
+          lng: item.lng,
           note: item.note,
           transport_type: item.transportType,
         });
@@ -573,6 +577,8 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
           time: item.time,
           type: item.type,
           place_name: item.placeName,
+          lat: item.lat,
+          lng: item.lng,
           note: item.note,
           transport_type: item.transportType,
         });

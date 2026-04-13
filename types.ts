@@ -89,6 +89,8 @@ export interface ItineraryItem {
   time: string;
   placeName: string;
   placeId?: string;
+  lat?: number;
+  lng?: number;
   note?: string;
   type: "Place" | "Transport" | "Food";
   transportType?: TransportType;
