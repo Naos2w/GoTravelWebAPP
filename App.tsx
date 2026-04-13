@@ -1314,18 +1314,18 @@ const App: React.FC = () => {
   }, [currentTrip]);
 
   const GlobalNav = () => (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1">
       <button
         onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-        className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
       >
-        {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
+        {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
       </button>
       <button
         onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
-        className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
       >
-        <Languages size={20} />
+        <Languages size={18} />
       </button>
     </div>
   );
@@ -1333,27 +1333,27 @@ const App: React.FC = () => {
   const UserHeaderProfile = () => {
     if (!user) return null;
     return (
-      <div className="flex items-center gap-3 pl-3 border-l border-slate-100 dark:border-slate-800">
+      <div className="flex items-center gap-2.5 pl-3 border-l border-black/[0.06] dark:border-white/10">
+        <img
+          src={user.picture}
+          referrerPolicy="no-referrer"
+          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 object-cover ring-2 ring-white dark:ring-slate-700 shadow-sm"
+        />
         <div className="text-right hidden sm:block">
-          <div className="text-xs font-black truncate max-w-[100px]">
-            {user.name}
+          <div className="text-xs font-bold truncate max-w-[100px] text-slate-900 dark:text-slate-100">
+            {user.name.split(' ')[0]}
           </div>
           {view === "detail" && currentTrip && (
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+            <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
               {isCreator ? t("permissionEditor") : t("permissionGuest")}
             </div>
           )}
         </div>
-        <img
-          src={user.picture}
-          referrerPolicy="no-referrer"
-          className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 object-cover border-2 border-white dark:border-slate-700 shadow-sm"
-        />
         <button
           onClick={() => supabase.auth.signOut()}
-          className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
         >
-          <LogOut size={20} />
+          <LogOut size={16} />
         </button>
       </div>
     );
@@ -1580,35 +1580,35 @@ const App: React.FC = () => {
 
         {view === "detail" && currentTrip && (
           <div className="min-h-screen flex flex-col pb-24 md:pb-0">
-            <nav className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800 sticky top-0 z-40 h-20 flex items-center px-4 sm:px-8">
+            <nav className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/[0.06] dark:border-white/[0.06] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
-                <div className="flex items-center gap-4 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => {
                       setView("list");
                       setCurrentTripId(null);
                     }}
-                    className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-primary hover:bg-primary/10 transition-all -ml-1"
                   >
-                    <ChevronLeft size={22} />
+                    <ChevronLeft size={20} strokeWidth={2.5} />
                   </button>
                   <div className="truncate">
-                    <div className="text-xl font-black truncate">
+                    <div className="text-sm font-bold truncate text-slate-900 dark:text-slate-100">
                       {currentTrip.name}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold text-slate-400">
                         {currentTrip.destination}
                       </span>
-                      <span className="hidden sm:inline-block w-1 h-1 bg-slate-200 rounded-full" />
-                      <span className="hidden sm:flex text-[9px] font-black text-slate-400 items-center gap-1 uppercase tracking-widest">
-                        <Users size={10} /> {collaboratorCount} Members
+                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 rounded-full" />
+                      <span className="hidden sm:flex text-[10px] font-semibold text-slate-400 items-center gap-0.5">
+                        <Users size={9} /> {collaboratorCount}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="hidden md:flex bg-slate-100/60 dark:bg-slate-800/60 p-1.5 rounded-2xl">
+                  <div className="hidden md:flex bg-black/[0.06] dark:bg-white/[0.08] p-1 rounded-2xl gap-0.5">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
                       const isDisabled = isPricePending && tab.id !== "flights";
@@ -1619,19 +1619,19 @@ const App: React.FC = () => {
                             !isDisabled && setActiveTab(tab.id as any)
                           }
                           disabled={isDisabled}
-                          className={`relative px-5 py-2 rounded-xl text-xs font-black flex items-center gap-2 transition-all ${
+                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 ${
                             isActive
-                              ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-ios"
-                              : "text-slate-500 hover:bg-slate-100"
+                              ? "bg-white dark:bg-[#3a3a3c] text-slate-900 dark:text-white shadow-sm"
+                              : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                           } ${
                             isDisabled ? "opacity-40 cursor-not-allowed" : ""
                           }`}
                         >
-                          {isDisabled && <Lock size={12} />}
-                          <tab.icon size={16} strokeWidth={isActive ? 3 : 2} />
+                          {isDisabled && <Lock size={11} />}
+                          <tab.icon size={14} strokeWidth={isActive ? 2.5 : 1.8} />
                           <span className="hidden lg:inline">{tab.label}</span>
                           {tab.alert && (
-                            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
                           )}
                         </button>
                       );
@@ -1641,14 +1641,14 @@ const App: React.FC = () => {
                     onClick={() =>
                       !isGuest ? setIsShareModalOpen(true) : null
                     }
-                    className={`p-2.5 rounded-xl transition-all ${
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
                       isGuest
-                        ? "opacity-30 cursor-not-allowed"
-                        : "text-slate-400 hover:text-primary"
+                        ? "opacity-30 cursor-not-allowed text-slate-400"
+                        : "text-slate-400 hover:text-primary hover:bg-primary/10"
                     }`}
                     disabled={isGuest}
                   >
-                    <Share2 size={22} />
+                    <Share2 size={18} />
                   </button>
                   <GlobalNav />
                   <UserHeaderProfile />
@@ -1956,8 +1956,8 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 z-50 pb-safe">
-              <div className="flex justify-around items-center p-2">
+            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl border-t border-black/[0.06] dark:border-white/[0.06] z-50 pb-safe">
+              <div className="flex justify-around items-center px-2 py-1">
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isDisabled = isPricePending && tab.id !== "flights";
@@ -1966,19 +1966,22 @@ const App: React.FC = () => {
                       key={tab.id}
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
-                      className={`relative flex flex-col items-center justify-center p-4 rounded-2xl transition-all ${
+                      className={`relative flex flex-col items-center justify-center py-2 px-4 rounded-2xl gap-1 transition-all duration-200 ${
                         isActive
-                          ? "text-primary bg-primary/10"
-                          : "text-slate-400"
+                          ? "text-primary"
+                          : "text-slate-400 dark:text-slate-500"
                       } ${isDisabled ? "opacity-30" : ""}`}
                     >
                       {isDisabled ? (
                         <Lock size={20} />
                       ) : (
-                        <tab.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
+                        <tab.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
+                      )}
+                      {isActive && (
+                        <span className="text-[9px] font-bold">{tab.label}</span>
                       )}
                       {tab.alert && (
-                        <span className="absolute top-3 right-3 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
+                        <span className="absolute top-1.5 right-3 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
                       )}
                     </button>
                   );
@@ -1989,12 +1992,12 @@ const App: React.FC = () => {
         )}
 
         {view === "list" && (
-          <div className="p-6 sm:p-12 max-w-7xl mx-auto min-h-screen">
-            <header className="flex justify-between items-center mb-16">
-              <div className="text-2xl font-black text-primary tracking-tighter">
+          <div className="p-6 sm:p-10 max-w-7xl mx-auto min-h-screen">
+            <header className="flex justify-between items-center mb-12">
+              <div className="text-lg font-bold text-primary tracking-tight">
                 {t("appName")}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <GlobalNav />
                 <UserHeaderProfile />
               </div>
@@ -2012,23 +2015,23 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            <div className="flex justify-between items-end mb-12">
+            <div className="flex justify-between items-end mb-10">
               <div>
-                <h2 className="text-5xl font-black tracking-tight mb-2">
+                <h2 className="text-4xl font-bold tracking-tight mb-1 text-slate-900 dark:text-white">
                   {t("yourTrips")}
                 </h2>
-                <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[10px]">
-                  Total {trips.length} Adventures
+                <p className="text-slate-400 font-medium text-sm">
+                  {trips.length} {language === 'zh' ? '個旅程' : 'adventures'}
                 </p>
               </div>
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="bg-primary text-white px-8 py-5 rounded-[24px] flex items-center gap-2 font-black text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all"
+                className="bg-primary text-white px-6 py-3 rounded-[18px] flex items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200"
               >
-                <Plus size={20} /> {t("newTrip")}
+                <Plus size={18} /> {t("newTrip")}
               </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {trips.map((trip) => (
                 <div
                   key={trip.id}
@@ -2036,23 +2039,26 @@ const App: React.FC = () => {
                     setCurrentTripId(trip.id);
                     setView("detail");
                   }}
-                  className="group bg-white dark:bg-slate-800 rounded-[56px] shadow-ios overflow-hidden cursor-pointer transition-all hover:-translate-y-4 hover:shadow-ios-lg"
+                  className="group bg-white dark:bg-[#2c2c2e] rounded-[32px] shadow-ios overflow-hidden cursor-pointer transition-all duration-300 ease-spring hover:-translate-y-2 hover:shadow-ios-lg active:scale-[0.98]"
                 >
                   <div
-                    className={`h-72 relative overflow-hidden bg-gradient-to-br ${getGradient(
+                    className={`h-52 relative overflow-hidden bg-gradient-to-br ${getGradient(
                       trip.destination
-                    )} flex flex-col justify-end p-12 transition-all duration-1000 group-hover:scale-105`}
+                    )} flex flex-col justify-end p-8 transition-transform duration-500 group-hover:scale-105`}
                   >
-                    <h3 className="text-white text-4xl font-black truncate mb-1">
-                      {trip.name}
-                    </h3>
-                    <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.3em]">
-                      {trip.startDate} - {trip.endDate}
-                    </p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                    <div className="relative">
+                      <h3 className="text-white text-2xl font-bold truncate mb-0.5">
+                        {trip.name}
+                      </h3>
+                      <p className="text-white/70 text-[10px] font-semibold uppercase tracking-widest">
+                        {trip.startDate} – {trip.endDate}
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-10 flex justify-between items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-                    <span>{trip.destination}</span>
-                    <span className="text-primary">
+                  <div className="px-7 py-5 flex justify-between items-center">
+                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">{trip.destination}</span>
+                    <span className="text-sm font-bold text-primary">
                       NT$ {calculateTripTotal(trip).toLocaleString()}
                     </span>
                   </div>

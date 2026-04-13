@@ -4,7 +4,7 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, Edit2, List
+  Loader2, Check, X, Lock, ChevronDown, ChevronLeft, Edit2, List
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
@@ -70,7 +70,8 @@ const TimePicker: React.FC<{
 };
 
 export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isEn = language?.startsWith('en');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
@@ -614,8 +615,8 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] sm:h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
-      {/* Day Selector */}
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
+      {/* Day Selector — horizontal strip on mobile, vertical column on desktop */}
       <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
@@ -629,43 +630,104 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         })}
       </div>
 
-      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 overflow-hidden">
-        
-        {/* Desktop Split View: Map (Left) */}
-        <div className={`flex-1 rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 ${viewMode === 'list' ? 'hidden lg:block' : 'block'}`}>
-          <MapView 
-            items={displayItems} 
-            onAddSearchResult={handleAddSearchResult} 
-            activeItemId={highlightedId}
-            onMarkerClick={(id) => {
-               setHighlightedId(id);
-               // On mobile, if we are in Map view, switch to list to show details, or stay on map?
-               // Desktop maintains Split view, so no mode change is needed
-            }}
-          />
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+
+        {/* ── Header bar: always visible, contains Day title + toggle ── */}
+        <div className="shrink-0 flex justify-between items-center px-1">
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Day {selectedDayIndex + 1}</h2>
+          {!isGuest ? (
+            <div className="flex bg-slate-100/60 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 gap-0.5 lg:hidden">
+              <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+                <List size={13}/> {isEn ? 'List' : '列表'}
+              </button>
+              <button onClick={() => setViewMode('map')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+                <Map size={13}/> {isEn ? 'Map' : '地圖'}
+              </button>
+            </div>
+          ) : (
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1 lg:hidden"><Lock size={10} />{t('readOnly')}</div>
+          )}
         </div>
 
-        {/* Desktop Split View: List (Right) */}
-        <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden ${viewMode === 'map' ? 'hidden lg:flex' : 'flex'}`}>
-          <div className="p-3 sm:p-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white px-2">Day {selectedDayIndex + 1}</h2>
-            
-            {!isGuest ? (
-              <div className="flex bg-slate-100/50 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700">
-                {/* View toggles only visible on mobile/tablet */}
-                <button onClick={() => setViewMode('list')} className={`lg:hidden px-2 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                  <List size={12}/> <span className="hidden sm:inline">List</span>
-                </button>
-                <button onClick={() => setViewMode('map')} className={`lg:hidden px-2 py-1.5 rounded-lg text-[11px] font-black flex items-center gap-1 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-                  <Map size={12}/> <span className="hidden sm:inline">Map</span>
-                </button>
-              </div>
-            ) : (
-              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1"><Lock size={10} />{t('readOnly')}</div>
-            )}
+        {/* ── Content: map + panel ── */}
+        <div className="flex-1 flex gap-3 overflow-hidden">
+
+          {/* Map — always visible in map mode; hidden on mobile in list mode */}
+          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300
+            ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
+            <MapView
+              items={displayItems}
+              onAddSearchResult={handleAddSearchResult}
+              activeItemId={highlightedId}
+              onMarkerClick={(id) => { setHighlightedId(id); }}
+            />
           </div>
 
+          {/* ── Mobile map mode: compact right timeline strip ── */}
+          {viewMode === 'map' && (() => {
+            // Use exact same filter as MapView so numbers match map markers 1:1
+            const validItems = displayItems.filter(i =>
+              i.lat != null && i.lng != null &&
+              !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
+              i.type !== 'Transport'
+            );
+
+            return (
+              <div className="lg:hidden w-[72px] shrink-0 flex flex-col gap-1.5 overflow-y-auto no-scrollbar py-1">
+                {validItems.map((item, mapIdx) => {
+                  const isHighlighted = highlightedId === item.id;
+                  // Check if there's a transport between this stop and the next in the original list
+                  const originalIdx = displayItems.findIndex(i => i.id === item.id);
+                  const nextOriginal = displayItems[originalIdx + 1];
+                  const hasTransport = nextOriginal?.type === 'Transport';
+                  const transportOpt = hasTransport
+                    ? TRANSPORT_OPTIONS.find(o => o.type === nextOriginal.transportType)
+                    : null;
+
+                  return (
+                    <React.Fragment key={item.id}>
+                      <button
+                        onClick={() => setHighlightedId(item.id)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-2xl border transition-all active:scale-95 ${
+                          isHighlighted
+                            ? 'bg-primary border-primary shadow-lg shadow-primary/20'
+                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 shadow-ios'
+                        }`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                          isHighlighted ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}>
+                          {mapIdx + 1}
+                        </div>
+                        <div className={`text-[9px] font-mono font-black leading-tight text-center ${
+                          isHighlighted ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                        }`}>
+                          {item.time.replace(':', '\n')}
+                        </div>
+                      </button>
+
+                      {/* Show transport connector between this stop and the next */}
+                      {hasTransport && mapIdx < validItems.length - 1 && (
+                        <div className="flex flex-col items-center gap-0.5 opacity-40 py-0.5">
+                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                          {transportOpt && <transportOpt.icon size={10} className={transportOpt.color} />}
+                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* ── Full list panel (list mode on mobile, always on desktop) ── */}
+          <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden
+            ${viewMode === 'map' ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'}`}>
+
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
+
             {displayItems.map((item, idx) => {
               const isTransport = item.type === 'Transport';
               const isFlight = item.transportType === 'Flight'; // Used for locking interactions
@@ -767,7 +829,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
                         <div 
                            onClick={() => {
                              setHighlightedId(item.id);
-                             if (window.innerWidth < 640 && !isFlight && !isGuest) handleEditItem(item);
                            }}
                            className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50"
                         >
@@ -846,9 +907,12 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
               </React.Fragment>
             );
             })}
-          </div>
-        </div>
-      </div>
+          </div>    {/* end: flex-1 overflow-y-auto (items list) */}
+          </div>    {/* end: full list panel */}
+
+        </div>    {/* end: flex-1 flex gap-3 (inner content row: map + strip + list) */}
+      </div>      {/* end: flex-1 flex flex-col gap-3 (main content area) */}
+
 
       {isFormOpen && editingItem && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">

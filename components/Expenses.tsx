@@ -397,8 +397,8 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
            )}
         </div>
 
-        <div className="px-6 py-4 flex flex-wrap items-center gap-3 border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-20 w-full select-none">
-           <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-20 w-full select-none">
+           <div className="px-6 py-4 flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
               <CustomFilterSelect 
                 icon={Tag} 
                 value={filterCategory} 

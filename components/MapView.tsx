@@ -428,6 +428,19 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                     {item.note}
                   </div>
                 )}
+                {/* Google Maps navigation button — mobile only */}
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${Number(item.lat)},${Number(item.lng)}&travelmode=driving`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="gmap-nav-btn"
+                >
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/>
+                  </svg>
+                  {isEn ? 'Navigate' : '導航'}
+                </a>
               </div>
             </Popup>
           </Marker>
