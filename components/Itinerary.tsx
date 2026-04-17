@@ -479,23 +479,53 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
         const alreadyHasCoords = finalItem.lat != null && finalItem.lng != null;
 
         if (nameChanged && !alreadyHasCoords) {
-            // Only re-geocode if name changed AND no precise coords exist yet
-            try {
-                const query = encodeURIComponent(finalItem.placeName);
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
-                    headers: {
-                        'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)'
+            // First try to find if this place name already exists in the itinerary with coordinates
+            const existingItem = displayItems.find(i => 
+                i.id !== finalItem.id && 
+                i.placeName.toLowerCase() === finalItem.placeName.toLowerCase() && 
+                i.lat != null && 
+                i.lng != null
+            );
+
+            if (existingItem) {
+                // Reuse existing coordinates
+                finalItem.lat = existingItem.lat;
+                finalItem.lng = existingItem.lng;
+            } else {
+                try {
+                    const query = encodeURIComponent(finalItem.placeName);
+                    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+                if (apiKey) {
+                    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Goog-Api-Key': apiKey,
+                            'X-Goog-FieldMask': 'places.location'
+                        },
+                        body: JSON.stringify({ textQuery: finalItem.placeName, languageCode: language === 'en' ? 'en' : 'zh-TW' })
+                    });
+                    const data = await response.json();
+                    if (data && data.places && data.places.length > 0) {
+                        finalItem.lat = data.places[0].location.latitude;
+                        finalItem.lng = data.places[0].location.longitude;
                     }
-                });
-                const data = await res.json();
-                if (data && data.length > 0) {
-                    finalItem.lat = parseFloat(data[0].lat);
-                    finalItem.lng = parseFloat(data[0].lon);
+                } else {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                        headers: { 'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)' }
+                    });
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        finalItem.lat = parseFloat(data[0].lat);
+                        finalItem.lng = parseFloat(data[0].lon);
+                    }
                 }
             } catch (e) {
                 console.error('Failed to geocode:', e);
             }
-        }
+        } // Close else
+        } // Close if (nameChanged && !alreadyHasCoords)
         // Precise coords (e.g. from Google Places) are always preserved as-is
     }
     

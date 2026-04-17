@@ -142,6 +142,38 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
          return;
       }
 
+      // 2.5. Provide existing items as search results if the name matches (Exact or Partial) to save API calls
+      const existingMatches = items.filter(i => 
+        i.placeName && 
+        i.placeName.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        i.lat != null && 
+        i.lng != null &&
+        i.type !== 'Transport'
+      );
+
+      if (existingMatches.length > 0) {
+        const uniqueMatches: any[] = [];
+        const seen = new Set();
+        for (const match of existingMatches) {
+          if (!seen.has(match.placeName)) {
+            seen.add(match.placeName);
+            uniqueMatches.push({
+               display_name: match.placeName,
+               address: isEn ? 'From your itinerary' : '來自你的行程',
+               lat: match.lat,
+               lon: match.lng
+            });
+          }
+        }
+        
+        const exactMatch = uniqueMatches.find(m => m.display_name.toLowerCase() === searchQuery.toLowerCase());
+        if (exactMatch) {
+            setSearchResults([exactMatch]);
+            setIsSearching(false);
+            return;
+        }
+      }
+
       // 3. Semantic Search (Google Places API if available, else OpenStreetMap Nominatim)
       const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
