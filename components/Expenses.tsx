@@ -69,9 +69,9 @@ const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass
             : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-black bg-slate-50 dark:bg-slate-900 border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800')}`
         }`}
       >
-        <Icon size={variant === 'filter' ? 12 : 16} className={`${isOpen ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
-        <span className={`${variant === 'filter' ? 'truncate max-w-[65px] sm:max-w-[90px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
-        <ChevronDown size={variant === 'filter' ? 10 : 14} className={`text-slate-400 opacity-50 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <Icon size={variant === 'filter' ? 12 : 16} className={`${isOpen || (variant === 'filter' && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
+        <span className={`${variant === 'filter' ? 'hidden sm:block truncate sm:max-w-[90px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
+        <ChevronDown size={variant === 'filter' ? 10 : 14} className={`${variant === 'filter' ? 'hidden sm:block' : ''} text-slate-400 opacity-50 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -398,7 +398,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
         </div>
 
         <div className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-20 w-full select-none">
-           <div className="px-6 py-4 flex flex-nowrap sm:flex-wrap items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{ WebkitOverflowScrolling: 'touch' }}>
+           <div className="px-6 py-4 flex flex-wrap items-center justify-end gap-2">
               <CustomFilterSelect 
                 icon={Tag} 
                 value={filterCategory} 
