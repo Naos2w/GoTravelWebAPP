@@ -8,8 +8,8 @@ let tokenExpiry: number | null = null;
 const airlineCache = new Map<string, {zh: string, en: string}>();
 
 async function getTdxToken(): Promise<string | null> {
-  const clientId = process.env.TDX_CLIENT_ID;
-  const clientSecret = process.env.TDX_CLIENT_SECRET;
+  const clientId = import.meta.env.VITE_TDX_CLIENT_ID;
+  const clientSecret = import.meta.env.VITE_TDX_CLIENT_SECRET;
   
   if (!clientId || !clientSecret) return null;
 

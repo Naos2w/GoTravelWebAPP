@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
@@ -9,10 +9,14 @@ import {
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase, deleteItineraryItem } from '../services/storageService';
-import { MapView } from './MapView';
 
+// TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
+const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
+
+// TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
+  currentUser: User;
   onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
@@ -69,10 +73,9 @@ const TimePicker: React.FC<{
   );
 };
 
-export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
+export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
   const { t, language } = useTranslation();
   const isEn = language?.startsWith('en');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [insertingAt, setInsertingAt] = useState<number | null>(null);
   const [showTransportPickerId, setShowTransportPickerId] = useState<string | null>(null);
@@ -94,19 +97,6 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
 
   const scrollAnchorRef = useRef<string | null>(null);
   const editRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({data}) => {
-       if (data.user) {
-          setCurrentUser({
-             id: data.user.id,
-             name: data.user.user_metadata.full_name,
-             email: data.user.email!,
-             picture: data.user.user_metadata.avatar_url
-          });
-       }
-    });
-  }, []);
 
   const TRANSPORT_OPTIONS: { type: TransportType; label: string; icon: any; color: string }[] = [
     { type: 'Public', label: t('transportPublic'), icon: TrainFront, color: 'text-indigo-600 dark:text-indigo-400' },
@@ -494,7 +484,7 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
             } else {
                 try {
                     const query = encodeURIComponent(finalItem.placeName);
-                    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+                    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
                 if (apiKey) {
                     const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
@@ -686,12 +676,19 @@ export const Itinerary: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
           {/* Map — always visible in map mode; hidden on mobile in list mode */}
           <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300
             ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
-            <MapView
-              items={displayItems}
-              onAddSearchResult={handleAddSearchResult}
-              activeItemId={highlightedId}
-              onMarkerClick={(id) => { setHighlightedId(id); }}
-            />
+            {/* TODO: [Optimized] Wrap MapView in Suspense for lazy loading */}
+            <Suspense fallback={
+              <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50">
+                <Loader2 className="animate-spin text-primary w-8 h-8" />
+              </div>
+            }>
+              <MapView
+                items={displayItems}
+                onAddSearchResult={handleAddSearchResult}
+                activeItemId={highlightedId}
+                onMarkerClick={(id) => { setHighlightedId(id); }}
+              />
+            </Suspense>
           </div>
 
           {/* ── Mobile map mode: compact right timeline strip ── */}

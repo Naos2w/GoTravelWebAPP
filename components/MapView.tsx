@@ -175,7 +175,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       }
 
       // 3. Semantic Search (Google Places API if available, else OpenStreetMap Nominatim)
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
       if (apiKey) {
         let locationBias = {};
