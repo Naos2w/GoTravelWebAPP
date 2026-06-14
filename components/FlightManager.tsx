@@ -436,19 +436,21 @@ const BaggageEditor: React.FC<BaggageEditorProps> = ({
   );
 };
 
+// TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
+  currentUser: User;
   onUpdate: (trip: Trip) => void;
   isGuest?: boolean;
 }
 
 export const FlightManager: React.FC<Props> = ({
   trip,
+  currentUser,
   onUpdate,
   isGuest = false,
 }) => {
   const { t } = useTranslation();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
   const [tempFlightData, setTempFlightData] = useState<FlightInfo | null>(null);
@@ -458,21 +460,8 @@ export const FlightManager: React.FC<Props> = ({
     inbound: { carryOn?: boolean; checked?: boolean };
   }>({ outbound: {}, inbound: {} });
 
-  const isCreator = !isGuest;
+  const isOwner = trip.user_id === currentUser?.id || !trip.user_id;
   const [isSyncingWithOwner, setIsSyncingWithOwner] = useState(false);
-
-  React.useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setCurrentUser({
-          id: data.user.id,
-          name: data.user.user_metadata.full_name,
-          email: data.user.email!,
-          picture: data.user.user_metadata.avatar_url,
-        });
-      }
-    });
-  }, []);
 
   const ownerFlight = useMemo(() => {
     if (!trip.flights || trip.flights.length === 0) return null;
@@ -785,7 +774,7 @@ export const FlightManager: React.FC<Props> = ({
 
   const hasMyFlight =
     currentUser && trip.flights?.some((f) => f.user_id === currentUser.id);
-  const canSync = !isCreator && ownerFlight && !hasMyFlight;
+  const canSync = !isOwner && ownerFlight && !hasMyFlight;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4 sm:px-0">
