@@ -22,6 +22,7 @@ import {
   ensureChecklistItems,
   createFullTrip,
   deleteExpense,
+  deleteItineraryItem,
   supabase,
 } from "./services/storageService";
 import {
@@ -756,6 +757,18 @@ const App: React.FC = () => {
 
   const updateCurrentTrip = (updatedTrip: Trip, action?: string, payload?: any) => {
     if (!user) return;
+
+    // Snapshot current trips state before we apply the update
+    const previousTrips = [...trips];
+
+    // Handle dummy action for triggering global notifications
+    if (action === "SHOW_ERROR_TOAST") {
+       setNotification({
+         message: typeof payload === "string" ? payload : (translations[language].errorTitle || "Error occurred"),
+         type: "error",
+       });
+       return;
+    }
     
     // Clear any pending save immediately to prevent race conditions
     if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -771,12 +784,30 @@ const App: React.FC = () => {
           .then(() => {
               activeChannelRef.current?.send({ type: 'broadcast', event: 'EXPENSE_DELETED', payload: { id: payload } });
           })
-          .catch(err => console.error("[App] Delete expense failed:", err));
+          .catch(err => {
+              console.error("[App] Delete expense failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to delete expense",
+                type: "error",
+              });
+          });
        return; 
     }
 
-    // Itinerary Delete is handled in component, just skip save
-    if (action === "DELETE_ITINERARY_ITEM") {
+    // Handle Itinerary item deletion centrally to support revert
+    if (action === "DELETE_ITINERARY_ITEM" && payload) {
+       console.log("[App] Handling DELETE_ITINERARY_ITEM for:", payload);
+       const ids = Array.isArray(payload) ? payload : [payload];
+       Promise.all(ids.map(id => deleteItineraryItem(id, updatedTrip.id)))
+          .catch(err => {
+              console.error("[App] Delete itinerary items failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to delete itinerary items",
+                type: "error",
+              });
+          });
        return;
     }
 
@@ -787,13 +818,13 @@ const App: React.FC = () => {
     ];
     const delay = action && immediateActions.includes(action) ? 0 : 2000;
 
-    saveTimeoutRef.current = window.setTimeout(async () => {
+    const performSave = async () => {
       setIsSyncing(true);
       try {
         await saveTrip(updatedTrip, user.id);
       } catch (err) {
         console.error("Save failed:", err);
-        // TODO: [Error Handling] Catch propagated database error and notify user with a toast toast
+        setTrips(previousTrips);
         setNotification({
           message: translations[language].errorTitle || "Sync error: Failed to save changes",
           type: "error",
@@ -802,7 +833,13 @@ const App: React.FC = () => {
         setIsSyncing(false);
         saveTimeoutRef.current = null;
       }
-    }, 600);
+    };
+
+    if (delay === 0) {
+      performSave();
+    } else {
+      saveTimeoutRef.current = window.setTimeout(performSave, 600);
+    }
   };
 
 

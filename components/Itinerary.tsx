@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
-import { supabase, deleteItineraryItem } from '../services/storageService';
+import { supabase } from '../services/storageService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -553,7 +553,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     setIsSaving(false);
   };
 
-  const handleDeleteItem = async (itemId: string) => {
+  const handleDeleteItem = (itemId: string) => {
     if (isGuest) return;
     const index = displayItems.findIndex(i => i.id === itemId);
     let newItems = [...displayItems];
@@ -575,12 +575,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       const newDays = [...days];
       newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
       
-      // Update UI Immediately (Optimistic) w/ Action
+      // Update UI Immediately (Optimistic) w/ Action and let App.tsx delete from DB
       onUpdate({ ...trip, itinerary: newDays }, "DELETE_ITINERARY_ITEM", idsToDelete);
-
-      // Delete from DB in background
-      Promise.all(idsToDelete.map(id => deleteItineraryItem(id, trip.id)))
-        .catch(err => console.error("Failed to delete items in background", err));
     } else {
        // Fallback if index not found (shouldn't happen)
        const updatedItems = maintainListIntegrity(newItems);

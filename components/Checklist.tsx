@@ -101,18 +101,21 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const deleteItem = async (itemId: string) => {
     // No confirmation dialog as requested
     
+    // Backup state for revert on error
+    const backup = [...optimisticChecklist];
+
     // Update local optimistic state first
     const updatedList = optimisticChecklist.filter(i => i.id !== itemId);
     setOptimisticChecklist(updatedList);
 
     // Delete from server directly
-    // We don't call onUpdate here because saveTrip (upsert) doesn't handle deletions.
-    // The real-time subscription in App.tsx will catch the DELETE event and refresh the trip.
     try {
       await deleteChecklistItem(itemId, trip.id);
     } catch (e) {
       console.error("Failed to delete item", e);
-      // Optional: Revert optimistic update on error
+      // Revert optimistic update on error
+      setOptimisticChecklist(backup);
+      onUpdate(trip, "SHOW_ERROR_TOAST", t("errorTitle") || "Failed to delete checklist item");
     }
   };
 
