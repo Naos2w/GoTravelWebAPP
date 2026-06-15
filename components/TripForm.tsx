@@ -190,8 +190,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     newTrip.checklist = getDefaultChecklist();
     newTrip.flights = [{ 
       id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: 'Economy', 
-      outbound: { ...outboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }, 
-      inbound: { ...inboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }, 
+      outbound: [{ ...outboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }], 
+      inbound: [{ ...inboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }], 
       baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } }, budget: 50000
     }];
     onSubmit(newTrip);

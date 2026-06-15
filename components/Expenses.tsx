@@ -218,19 +218,23 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   // Transform flights into read-only expense items for the list display
   // Use distinct 'Flight' category
   const flightExpenses: Expense[] = useMemo(() => {
-    return (trip.flights || []).map(f => ({
-      id: `flight-${f.id}`, // Unique ID to prevent collision
-      user_id: f.user_id,
-      user_name: f.traveler_name,
-      amount: f.price,
-      currency: f.currency,
-      category: 'Flight',
-      date: trip.startDate, // Default to trip start date
-      createdAt: new Date().toISOString(), // Just for sorting
-      note: `${t('flight')}: ${f.outbound.flightNumber}`,
-      exchangeRate: rates[f.currency] || 1,
-      isFlight: true // Helper flag
-    } as any));
+    return (trip.flights || []).map(f => {
+      const outList = f.outbound ? (Array.isArray(f.outbound) ? f.outbound : [f.outbound]) : [];
+      const flightNumbers = outList.map((seg: any) => seg.flightNumber).filter(Boolean).join(" -> ");
+      return {
+        id: `flight-${f.id}`, // Unique ID to prevent collision
+        user_id: f.user_id,
+        user_name: f.traveler_name,
+        amount: f.price,
+        currency: f.currency,
+        category: 'Flight',
+        date: trip.startDate, // Default to trip start date
+        createdAt: new Date().toISOString(), // Just for sorting
+        note: `${t('flight')}: ${flightNumbers || 'N/A'}`,
+        exchangeRate: rates[f.currency] || 1,
+        isFlight: true // Helper flag
+      } as any;
+    });
   }, [trip.flights, trip.startDate, t]);
 
   const processedExpenses = useMemo(() => {

@@ -737,7 +737,8 @@ const App: React.FC = () => {
     if (!currentTrip || !currentTrip.flights) return false;
     return currentTrip.flights.some((f) => {
       const hasPrice = f.price > 0;
-      const bag = f.baggage || f.outbound.baggage;
+      const outboundList = f.outbound ? (Array.isArray(f.outbound) ? f.outbound : [f.outbound]) : [];
+      const bag = f.baggage || outboundList[0]?.baggage;
       const checkBag = (b: any) => {
         if (!b) return true;
         const w = b.weight ? b.weight.replace(/[^0-9.]/g, "") : "";
@@ -1062,7 +1063,10 @@ const App: React.FC = () => {
   const displayDays = Math.ceil(daysDiff);
 
   const allFlights = currentTrip?.flights || [];
-  const arrivalCode = allFlights[0]?.outbound?.arrivalAirport || "";
+  const outboundListForArrival = allFlights[0]?.outbound
+    ? (Array.isArray(allFlights[0].outbound) ? allFlights[0].outbound : [allFlights[0].outbound])
+    : [];
+  const arrivalCode = outboundListForArrival[outboundListForArrival.length - 1]?.arrivalAirport || "";
 
   const packingPercent = useMemo(() => {
     if (!currentTrip || !user) return 0;
@@ -1219,8 +1223,10 @@ const App: React.FC = () => {
                 .map(f => {
                    // Collect outgoing and returning flight numbers
                    const numbers = [];
-                   if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
-                   if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
+                   const outList = f.outbound ? (Array.isArray(f.outbound) ? f.outbound : [f.outbound]) : [];
+                   const inList = f.inbound ? (Array.isArray(f.inbound) ? f.inbound : [f.inbound]) : [];
+                   outList.forEach(seg => { if (seg.flightNumber) numbers.push({ num: seg.flightNumber, isReturn: false }); });
+                   inList.forEach(seg => { if (seg.flightNumber) numbers.push({ num: seg.flightNumber, isReturn: true }); });
                    return numbers;
                 })
                 .flat()
@@ -1520,8 +1526,10 @@ const App: React.FC = () => {
                             .map((f) => {
                                // Collect outgoing and returning flight numbers
                                const numbers = [];
-                               if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
-                               if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
+                               const outList = f.outbound ? (Array.isArray(f.outbound) ? f.outbound : [f.outbound]) : [];
+                               const inList = f.inbound ? (Array.isArray(f.inbound) ? f.inbound : [f.inbound]) : [];
+                               outList.forEach(seg => { if (seg.flightNumber) numbers.push({ num: seg.flightNumber, isReturn: false }); });
+                               inList.forEach(seg => { if (seg.flightNumber) numbers.push({ num: seg.flightNumber, isReturn: true }); });
                                return numbers;
                             })
                             .flat()

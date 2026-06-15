@@ -8,6 +8,7 @@ import {
   DayPlan,
   FlightInfo,
   Collaborator,
+  FlightSegment,
 } from "../types";
 
 const SUPABASE_URL =
@@ -27,6 +28,12 @@ const formatDateStr = (date: Date) => {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+};
+
+export const ensureSegments = (val: any): FlightSegment[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  return [val];
 };
 
 interface DbTripRow {
@@ -150,8 +157,8 @@ const transformTripRow = (row: DbTripRow): Trip => {
       id: f.id,
       user_id: f.user_id,
       traveler_name: f.traveler_name,
-      outbound: f.outbound,
-      inbound: f.inbound,
+      outbound: ensureSegments(f.outbound),
+      inbound: f.inbound ? ensureSegments(f.inbound) : undefined,
       price: f.price,
       currency: f.currency,
       cabinClass: f.cabin_class,

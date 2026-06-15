@@ -61,8 +61,8 @@ export interface FlightInfo {
   id: string; // 機票 ID
   user_id: string; // 持有人 ID
   traveler_name: string; // 旅客姓名 (可與 User.name 不同)
-  outbound: FlightSegment;
-  inbound?: FlightSegment;
+  outbound: FlightSegment[];
+  inbound?: FlightSegment[];
   price: number;
   currency: Currency;
   cabinClass: string;
