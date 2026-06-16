@@ -26,8 +26,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   const [outboundDate, setOutboundDate] = useState('');
   const [inboundDate, setInboundDate] = useState('');
   const [flightOptions, setFlightOptions] = useState<FlightSegment[]>([]);
-  const [outboundFlight, setOutboundFlight] = useState<FlightSegment | null>(null);
-  const [inboundFlight, setInboundFlight] = useState<FlightSegment | null>(null);
+  const [outboundSegments, setOutboundSegments] = useState<FlightSegment[]>([]);
+  const [inboundSegments, setInboundSegments] = useState<FlightSegment[]>([]);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   const labels = {
@@ -44,7 +44,13 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     selectIn: t('selectIn'),
     review: t('review'),
     confirmBtn: t('confirm'),
-    required: t('required')
+    required: t('required'),
+    layoverAt: t('layoverAt'),
+    addLayoverSegment: t('addLayoverSegment'),
+    nextToInbound: t('nextToInbound'),
+    nextToReview: t('nextToReview'),
+    outboundSelected: t('outboundSelected'),
+    inboundSelected: t('inboundSelected'),
   };
 
   const getDefaultChecklist = (): ChecklistItem[] => {
@@ -70,6 +76,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       if (!outboundDate) newErrors.outboundDate = true;
       if (!outboundFlightNumber) newErrors.outboundFlightNumber = true;
     } else {
+      if (!origin) newErrors.origin = true;
+      if (!destination) newErrors.destination = true;
       if (!inboundDate) newErrors.inboundDate = true;
       if (!inboundFlightNumber) newErrors.inboundFlightNumber = true;
     }
@@ -85,8 +93,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
 
     setLoading(true);
     try {
-      const from = type === 'outbound' ? origin : destination;
-      const to = type === 'outbound' ? destination : origin;
+      const from = origin;
+      const to = destination;
       const results = await fetchTdxFlights(from, to, date, fNo);
       setFlightOptions(results);
       setStep(type === 'outbound' ? 'outbound-select' : 'inbound-select');
@@ -115,83 +123,157 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     return `${Math.floor(mid/60).toString().padStart(2, '0')}:${(mid%60).toString().padStart(2, '0')}`;
   };
 
+  const removeOutboundSegment = (idx: number) => {
+    const newSegs = [...outboundSegments];
+    newSegs.splice(idx, 1);
+    setOutboundSegments(newSegs);
+    if (newSegs.length > 0) {
+      const last = newSegs[newSegs.length - 1];
+      setOrigin(last.arrivalAirport);
+      setOutboundDate(last.arrivalTime.split('T')[0]);
+    } else {
+      setOrigin('TPE');
+      setOutboundDate('');
+    }
+  };
+
+  const removeInboundSegment = (idx: number) => {
+    const newSegs = [...inboundSegments];
+    newSegs.splice(idx, 1);
+    setInboundSegments(newSegs);
+    if (newSegs.length > 0) {
+      const last = newSegs[newSegs.length - 1];
+      setOrigin(last.arrivalAirport);
+      setInboundDate(last.arrivalTime.split('T')[0]);
+    } else {
+      if (outboundSegments.length > 0) {
+        const lastOut = outboundSegments[outboundSegments.length - 1];
+        setOrigin(lastOut.arrivalAirport);
+        setInboundDate(lastOut.arrivalTime.split('T')[0]);
+      } else {
+        setOrigin('');
+        setInboundDate('');
+      }
+    }
+  };
+
+  const nextToInbound = () => {
+    if (outboundSegments.length === 0) return;
+    const lastOut = outboundSegments[outboundSegments.length - 1];
+    setOrigin(lastOut.arrivalAirport);
+    setDestination(outboundSegments[0].departureAirport);
+    setInboundDate(lastOut.arrivalTime.split('T')[0]);
+    setInboundFlightNumber('');
+    setStep('inbound-search');
+  };
+
+  const nextToReview = () => {
+    if (inboundSegments.length === 0) return;
+    setStep('review');
+  };
+
   const handleCreateTrip = () => {
-    if (!outboundFlight || !inboundFlight) return;
+    if (outboundSegments.length === 0 || inboundSegments.length === 0) return;
     
-    const startStr = outboundFlight.departureTime.split('T')[0];
-    const endStr = inboundFlight.departureTime.split('T')[0];
+    const firstOutbound = outboundSegments[0];
+    const lastOutbound = outboundSegments[outboundSegments.length - 1];
+    const firstInbound = inboundSegments[0];
+    const lastInbound = inboundSegments[inboundSegments.length - 1];
+
+    const startStr = firstOutbound.departureTime.split('T')[0];
+    const endStr = lastInbound.arrivalTime.split('T')[0];
     const start = new Date(startStr);
-    const diffTime = Math.abs(new Date(endStr).getTime() - start.getTime());
+    const end = new Date(endStr);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
     const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     
     const generatedItinerary: DayPlan[] = [];
     
+    const addSegmentItineraryItems = (seg: FlightSegment, itemsMap: Record<string, ItineraryItem[]>) => {
+      const depDate = seg.departureTime.split('T')[0];
+      const arrDate = seg.arrivalTime.split('T')[0];
+
+      if (!itemsMap[depDate]) itemsMap[depDate] = [];
+      if (!itemsMap[arrDate]) itemsMap[arrDate] = [];
+
+      itemsMap[depDate].push({ 
+        id: crypto.randomUUID(), 
+        time: DateTimeUtils.formatTime24(seg.departureTime), 
+        placeName: `${seg.departureAirport} Airport`, 
+        type: 'Place', transportType: 'Flight', 
+        note: `Flight: ${seg.flightNumber}`, date: depDate 
+      });
+
+      itemsMap[depDate].push({
+        id: crypto.randomUUID(),
+        time: getMidPointTime(DateTimeUtils.formatTime24(seg.departureTime), DateTimeUtils.formatTime24(seg.arrivalTime)),
+        placeName: 'Flight', type: 'Transport', transportType: 'Flight',
+        note: calculateDurationStr(seg.departureTime, seg.arrivalTime), date: depDate
+      });
+
+      itemsMap[arrDate].push({ 
+        id: crypto.randomUUID(), 
+        time: DateTimeUtils.formatTime24(seg.arrivalTime), 
+        placeName: `${seg.arrivalAirport} Airport`, 
+        type: 'Place', transportType: 'Flight', note: 'Arrival', date: arrDate 
+      });
+    };
+
+    const itemsMap: Record<string, ItineraryItem[]> = {};
+    outboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
+    inboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
+
     for (let i = 0; i < totalDays; i++) {
       const currentDate = new Date(start);
       currentDate.setDate(start.getDate() + i);
       const dateStr = DateTimeUtils.formatDate(currentDate);
-      const items: ItineraryItem[] = [];
+      const items = itemsMap[dateStr] || [];
+      
+      const uniqueItems: ItineraryItem[] = [];
+      items.forEach(item => {
+        const isDuplicate = uniqueItems.some(existing => 
+          existing.time === item.time && 
+          existing.placeName === item.placeName && 
+          existing.type === item.type
+        );
+        if (!isDuplicate) {
+          uniqueItems.push(item);
+        }
+      });
 
-      // Outbound logic
-      if (dateStr === outboundFlight.departureTime.split('T')[0]) {
-         items.push({ 
-          id: crypto.randomUUID(), 
-          time: DateTimeUtils.formatTime24(outboundFlight.departureTime), 
-          placeName: `${outboundFlight.departureAirport} Airport`, 
-          type: 'Place', transportType: 'Flight', 
-          note: `Flight: ${outboundFlight.flightNumber}`, date: dateStr 
-        });
-        items.push({
-           id: crypto.randomUUID(),
-           time: getMidPointTime(DateTimeUtils.formatTime24(outboundFlight.departureTime), DateTimeUtils.formatTime24(outboundFlight.arrivalTime)),
-           placeName: 'Flight', type: 'Transport', transportType: 'Flight',
-           note: calculateDurationStr(outboundFlight.departureTime, outboundFlight.arrivalTime), date: dateStr
-        });
-      }
-      if (dateStr === outboundFlight.arrivalTime.split('T')[0]) {
-         items.push({ 
-          id: crypto.randomUUID(), 
-          time: DateTimeUtils.formatTime24(outboundFlight.arrivalTime), 
-          placeName: `${outboundFlight.arrivalAirport} Airport`, 
-          type: 'Place', transportType: 'Flight', note: 'Arrival', date: dateStr 
-        });
-      }
-
-      // Inbound logic
-      if (dateStr === inboundFlight.departureTime.split('T')[0]) {
-         items.push({ 
-          id: crypto.randomUUID(), 
-          time: DateTimeUtils.formatTime24(inboundFlight.departureTime), 
-          placeName: `${inboundFlight.departureAirport} Airport`, 
-          type: 'Place', transportType: 'Flight', 
-          note: `Flight: ${inboundFlight.flightNumber}`, date: dateStr 
-        });
-        items.push({
-           id: crypto.randomUUID(),
-           time: getMidPointTime(DateTimeUtils.formatTime24(inboundFlight.departureTime), DateTimeUtils.formatTime24(inboundFlight.arrivalTime)),
-           placeName: 'Flight', type: 'Transport', transportType: 'Flight',
-           note: calculateDurationStr(inboundFlight.departureTime, inboundFlight.arrivalTime), date: dateStr
-        });
-      }
-      if (dateStr === inboundFlight.arrivalTime.split('T')[0]) {
-         items.push({ 
-          id: crypto.randomUUID(), 
-          time: DateTimeUtils.formatTime24(inboundFlight.arrivalTime), 
-          placeName: `${inboundFlight.arrivalAirport} Airport`, 
-          type: 'Place', transportType: 'Flight', note: 'Arrival', date: dateStr 
-        });
-      }
-
-      generatedItinerary.push({ date: dateStr, items: items.sort((a,b) => a.time.localeCompare(b.time)) });
+      generatedItinerary.push({ date: dateStr, items: uniqueItems.sort((a,b) => a.time.localeCompare(b.time)) });
     }
 
-    const newTrip = createNewTrip({ destination, startDate: startStr, endDate: endStr });
+    const buildCompoundSegment = (segs: FlightSegment[]): FlightSegment => {
+      if (segs.length === 1) return segs[0];
+      return {
+        airline: segs.map(s => s.airline).join(' + '),
+        airlineID: segs[0].airlineID,
+        airlineNameZh: segs.map(s => s.airlineNameZh || s.airline).join(' + '),
+        airlineNameEn: segs.map(s => s.airlineNameEn || s.airline).join(' + '),
+        flightNumber: segs.map(s => s.flightNumber).join(' + '),
+        departureTime: segs[0].departureTime,
+        arrivalTime: segs[segs.length - 1].arrivalTime,
+        departureAirport: segs[0].departureAirport,
+        arrivalAirport: segs[segs.length - 1].arrivalAirport,
+        terminal: segs[0].terminal || '',
+        gate: segs[0].gate || '',
+        status: 'Scheduled',
+        baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } },
+        segments: segs
+      };
+    };
+
+    const outboundFlightInfo = buildCompoundSegment(outboundSegments);
+    const inboundFlightInfo = buildCompoundSegment(inboundSegments);
+
+    const newTrip = createNewTrip({ destination: lastOutbound.arrivalAirport, startDate: startStr, endDate: endStr });
     newTrip.itinerary = generatedItinerary;
     newTrip.checklist = getDefaultChecklist();
     newTrip.flights = [{ 
       id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: 'Economy', 
-      outbound: [{ ...outboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }], 
-      inbound: [{ ...inboundFlight, baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } } }], 
+      outbound: outboundFlightInfo, 
+      inbound: inboundFlightInfo, 
       baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } }, budget: 50000
     }];
     onSubmit(newTrip);
@@ -210,6 +292,41 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
            {step === 'outbound-search' && (
              <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.outboundSearch}</h3></div>
+                
+                {outboundSegments.length > 0 && (
+                  <div className="space-y-2 mb-6">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.outboundSelected}</label>
+                    <div className="space-y-2">
+                      {outboundSegments.map((seg, idx) => (
+                        <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-slate-850">
+                          <div>
+                            <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                            <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); removeOutboundSegment(idx); }}
+                              className="p-1 text-red-550 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={nextToInbound} 
+                      className="w-full bg-primary text-white py-3.5 rounded-xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-3"
+                    >
+                      {labels.nextToInbound} <ArrowRight size={14} />
+                    </button>
+                    <div className="w-full h-px bg-slate-100 dark:bg-slate-700 my-4" />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.origin ? "text-red-500" : "text-slate-400"}`}>{labels.origin}</label>
@@ -230,17 +347,28 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     <input value={outboundFlightNumber} onChange={e => {setOutboundFlightNumber(e.target.value.toUpperCase()); setErrors({...errors, outboundFlightNumber: false})}} className={inputClass(errors.outboundFlightNumber)} placeholder="BR198" />
                   </div>
                 </div>
-                <button onClick={() => handleSearch('outbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black transition-all active:scale-95">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
+                <button onClick={() => handleSearch('outbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black transition-all active:scale-95 flex items-center justify-center gap-2">
+                  {loading ? <Loader2 className="animate-spin" /> : outboundSegments.length > 0 ? labels.addLayoverSegment : labels.searchBtn}
+                </button>
              </div>
            )}
            {step === 'outbound-select' && (
              <div className="space-y-4 animate-in fade-in duration-300">
                 <h3 className="font-black text-slate-800 dark:text-white">{labels.selectOut}</h3>
                 <div className="space-y-3">{flightOptions.map((f, i) => (
-                   <div key={i} onClick={() => { setOutboundFlight(f); setStep('inbound-search'); setFlightOptions([]); }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary">
+                    <div key={i} onClick={() => {
+                      const newSegs = [...outboundSegments, f];
+                      setOutboundSegments(newSegs);
+                      setFlightOptions([]);
+                      setOrigin(f.arrivalAirport);
+                      setDestination('');
+                      setOutboundDate(f.arrivalTime.split('T')[0]);
+                      setOutboundFlightNumber('');
+                      setStep('outbound-search');
+                    }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-slate-800">
                       <div className="flex justify-between items-center mb-1"><span className="font-black text-sm">{f.airline}</span><span className="text-xs font-black text-slate-400">{f.flightNumber}</span></div>
                       <div className="flex justify-between text-xs font-black"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
-                   </div>
+                    </div>
                 ))}</div>
                 <button onClick={() => setStep('outbound-search')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
              </div>
@@ -248,6 +376,51 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
            {step === 'inbound-search' && (
              <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.inboundSearch}</h3></div>
+                
+                {inboundSegments.length > 0 && (
+                  <div className="space-y-2 mb-6">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.inboundSelected}</label>
+                    <div className="space-y-2">
+                      {inboundSegments.map((seg, idx) => (
+                        <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-slate-800">
+                          <div>
+                            <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                            <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); removeInboundSegment(idx); }}
+                              className="p-1 text-red-550 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={nextToReview} 
+                      className="w-full bg-primary text-white py-3.5 rounded-xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mt-3"
+                    >
+                      {labels.nextToReview} <ArrowRight size={14} />
+                    </button>
+                    <div className="w-full h-px bg-slate-100 dark:bg-slate-700 my-4" />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.origin ? "text-red-500" : "text-slate-400"}`}>{labels.origin}</label>
+                    <input value={origin} onChange={e => {setOrigin(e.target.value.toUpperCase()); setErrors({...errors, origin: false})}} className={inputClass(errors.origin)} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-black uppercase tracking-widest ${errors.destination ? "text-red-500" : "text-slate-400"}`}>{labels.destination}</label>
+                    <input value={destination} onChange={e => {setDestination(e.target.value.toUpperCase()); setErrors({...errors, destination: false})}} className={inputClass(errors.destination)} />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-black uppercase tracking-widest ${errors.inboundDate ? "text-red-500" : "text-slate-400"}`}>{labels.date}</label>
@@ -258,18 +431,35 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     <input value={inboundFlightNumber} onChange={e => {setInboundFlightNumber(e.target.value.toUpperCase()); setErrors({...errors, inboundFlightNumber: false})}} className={inputClass(errors.inboundFlightNumber)} placeholder="BR197" />
                   </div>
                 </div>
-                <button onClick={() => handleSearch('inbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black">{loading ? <Loader2 className="animate-spin mx-auto" /> : labels.searchBtn}</button>
-                <button onClick={() => setStep('outbound-select')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
+                <button onClick={() => handleSearch('inbound')} disabled={loading} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black flex items-center justify-center gap-2">
+                  {loading ? <Loader2 className="animate-spin" /> : inboundSegments.length > 0 ? labels.addLayoverSegment : labels.searchBtn}
+                </button>
+                <button onClick={() => {
+                  if (inboundSegments.length > 0) {
+                    setStep('inbound-search');
+                  } else {
+                    setStep('outbound-search');
+                  }
+                }} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
              </div>
            )}
            {step === 'inbound-select' && (
              <div className="space-y-4 animate-in fade-in duration-300">
                 <h3 className="font-black text-slate-800 dark:text-white">{labels.selectIn}</h3>
                 <div className="space-y-3">{flightOptions.map((f, i) => (
-                   <div key={i} onClick={() => { setInboundFlight(f); setStep('review'); }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary">
+                    <div key={i} onClick={() => {
+                      const newSegs = [...inboundSegments, f];
+                      setInboundSegments(newSegs);
+                      setFlightOptions([]);
+                      setOrigin(f.arrivalAirport);
+                      setDestination('');
+                      setInboundDate(f.arrivalTime.split('T')[0]);
+                      setInboundFlightNumber('');
+                      setStep('inbound-search');
+                    }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-slate-800">
                       <div className="flex justify-between items-center mb-1"><span className="font-black text-sm">{f.airline}</span><span className="text-xs font-black text-slate-400">{f.flightNumber}</span></div>
                       <div className="flex justify-between text-xs font-black"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
-                   </div>
+                    </div>
                 ))}</div>
                 <button onClick={() => setStep('inbound-search')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
              </div>
@@ -277,12 +467,37 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
            {step === 'review' && (
              <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="text-center mb-6"><h3 className="text-xl font-black text-slate-800 dark:text-white">{labels.review}</h3></div>
-                <div className="space-y-2">
-                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>{outboundFlight?.flightNumber}</span><span>{outboundFlight?.departureAirport} → {outboundFlight?.arrivalAirport}</span></div>
-                   <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent font-black text-sm flex justify-between"><span>{inboundFlight?.flightNumber}</span><span>{inboundFlight?.departureAirport} → {inboundFlight?.arrivalAirport}</span></div>
+                
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{labels.outboundSelected}</div>
+                    {outboundSegments.map((seg, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-850 font-black text-xs flex justify-between items-center">
+                        <div>
+                          <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                          <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                        </div>
+                        <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{labels.inboundSelected}</div>
+                    {inboundSegments.map((seg, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-850 font-black text-xs flex justify-between items-center">
+                        <div>
+                          <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                          <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                        </div>
+                        <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
                 <button onClick={handleCreateTrip} className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-xl font-black shadow-lg flex items-center justify-center gap-2">{labels.confirmBtn} <ArrowRight size={18}/></button>
-                <button onClick={() => setStep('inbound-select')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
+                <button onClick={() => setStep('inbound-search')} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {labels.back}</button>
              </div>
            )}
         </div>

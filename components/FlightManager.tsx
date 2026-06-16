@@ -26,13 +26,14 @@ import {
   AlertCircle,
   Briefcase,
   Luggage,
+  ArrowRight,
 } from "lucide-react";
 import { fetchTdxFlights } from "../services/tdxService";
 import { BoardingPass } from "./BoardingPass";
 import { SegmentedDateInput } from "./SegmentedDateInput";
 import { DateTimeUtils } from "../services/dateTimeUtils";
 import { useTranslation } from "../contexts/LocalizationContext";
-import { supabase, ensureSegments } from "../services/storageService";
+import { supabase } from "../services/storageService";
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -68,8 +69,9 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
   const [outFlightNo, setOutFlightNo] = useState("");
   const [inFlightNo, setInFlightNo] = useState("");
   const [options, setOptions] = useState<FlightSegment[]>([]);
-  const [tempOutbound, setTempOutbound] = useState<FlightSegment | null>(null);
-  const [tempInbound, setTempInbound] = useState<FlightSegment | null>(null);
+
+  const [outboundSegments, setOutboundSegments] = useState<FlightSegment[]>([]);
+  const [inboundSegments, setInboundSegments] = useState<FlightSegment[]>([]);
 
   const handleSearch = async (type: "out" | "in") => {
     const fNo = type === "out" ? outFlightNo : inFlightNo;
@@ -77,8 +79,8 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
     if (!fNo.trim()) return;
     setLoading(true);
     try {
-      const from = type === "out" ? origin : destination;
-      const to = type === "out" ? destination : origin;
+      const from = origin;
+      const to = destination;
       const res = await fetchTdxFlights(from, to, date, fNo);
       setOptions(res);
       setStep(type === "out" ? "outbound-select" : "inbound-select");
@@ -89,8 +91,83 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
     }
   };
 
+  const removeOutboundSegment = (idx: number) => {
+    const newSegs = [...outboundSegments];
+    newSegs.splice(idx, 1);
+    setOutboundSegments(newSegs);
+    if (newSegs.length > 0) {
+      const last = newSegs[newSegs.length - 1];
+      setOrigin(last.arrivalAirport);
+      setOutDate(last.arrivalTime.split("T")[0]);
+    } else {
+      setOrigin(initialOrigin);
+      setOutDate(initialOutDate);
+    }
+  };
+
+  const removeInboundSegment = (idx: number) => {
+    const newSegs = [...inboundSegments];
+    newSegs.splice(idx, 1);
+    setInboundSegments(newSegs);
+    if (newSegs.length > 0) {
+      const last = newSegs[newSegs.length - 1];
+      setOrigin(last.arrivalAirport);
+      setInDate(last.arrivalTime.split("T")[0]);
+    } else {
+      if (outboundSegments.length > 0) {
+        const lastOut = outboundSegments[outboundSegments.length - 1];
+        setOrigin(lastOut.arrivalAirport);
+        setInDate(lastOut.arrivalTime.split("T")[0]);
+      } else {
+        setOrigin("");
+        setInDate("");
+      }
+    }
+  };
+
+  const handleNextToInbound = () => {
+    if (outboundSegments.length === 0) return;
+    const lastOut = outboundSegments[outboundSegments.length - 1];
+    setOrigin(lastOut.arrivalAirport);
+    setDestination(outboundSegments[0].departureAirport);
+    setInDate(lastOut.arrivalTime.split("T")[0]);
+    setInFlightNo("");
+    setStep("inbound-search");
+  };
+
+  const handleNextToReview = () => {
+    if (inboundSegments.length === 0) return;
+    setStep("review");
+  };
+
+  const handleConfirm = () => {
+    if (outboundSegments.length === 0 || inboundSegments.length === 0) return;
+
+    const buildCompoundSegment = (segs: FlightSegment[]): FlightSegment => {
+      if (segs.length === 1) return segs[0];
+      return {
+        airline: segs.map(s => s.airline).join(' + '),
+        airlineID: segs[0].airlineID,
+        airlineNameZh: segs.map(s => s.airlineNameZh || s.airline).join(' + '),
+        airlineNameEn: segs.map(s => s.airlineNameEn || s.airline).join(' + '),
+        flightNumber: segs.map(s => s.flightNumber).join(' + '),
+        departureTime: segs[0].departureTime,
+        arrivalTime: segs[segs.length - 1].arrivalTime,
+        departureAirport: segs[0].departureAirport,
+        arrivalAirport: segs[segs.length - 1].arrivalAirport,
+        terminal: segs[0].terminal || '',
+        gate: segs[0].gate || '',
+        status: 'Scheduled',
+        baggage: segs[0].baggage,
+        segments: segs
+      };
+    };
+
+    onConfirm(buildCompoundSegment(outboundSegments), buildCompoundSegment(inboundSegments));
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
       <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
           <h3 className="font-black text-xl text-slate-800 dark:text-white">
@@ -110,18 +187,80 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
         <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
           {step === "outbound-search" || step === "inbound-search" ? (
             <div className="space-y-6">
+              {step === "outbound-search" && outboundSegments.length > 0 && (
+                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("outboundSelected")}</div>
+                  <div className="space-y-2">
+                    {outboundSegments.map((seg, idx) => (
+                      <div key={idx} className="bg-white dark:bg-slate-850 p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-slate-800">
+                        <div>
+                          <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                          <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                          <button 
+                            type="button"
+                            onClick={() => removeOutboundSegment(idx)}
+                            className="p-1 text-red-550 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleNextToInbound} 
+                    className="w-full bg-primary text-white py-3 rounded-xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1 mt-2"
+                  >
+                    {t("nextToInbound")} <ArrowRight size={14} className="ml-1" />
+                  </button>
+                </div>
+              )}
+
+              {step === "inbound-search" && inboundSegments.length > 0 && (
+                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("inboundSelected")}</div>
+                  <div className="space-y-2">
+                    {inboundSegments.map((seg, idx) => (
+                      <div key={idx} className="bg-white dark:bg-slate-850 p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-slate-800">
+                        <div>
+                          <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+                          <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                          <button 
+                            type="button"
+                            onClick={() => removeInboundSegment(idx)}
+                            className="p-1 text-red-550 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleNextToReview} 
+                    className="w-full bg-primary text-white py-3 rounded-xl font-black text-xs shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1 mt-2"
+                  >
+                    {t("nextToReview")} <ArrowRight size={14} className="ml-1" />
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     {t("origin")}
                   </label>
                   <input
-                    value={step === "outbound-search" ? origin : destination}
-                    onChange={(e) =>
-                      step === "outbound-search"
-                        ? setOrigin(e.target.value.toUpperCase())
-                        : setDestination(e.target.value.toUpperCase())
-                    }
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value.toUpperCase())}
                     className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold outline-none"
                   />
                 </div>
@@ -130,21 +269,14 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                     {t("destination")}
                   </label>
                   <input
-                    value={step === "outbound-search" ? destination : origin}
-                    onChange={(e) =>
-                      step === "outbound-search"
-                        ? setDestination(e.target.value.toUpperCase())
-                        : setOrigin(e.target.value.toUpperCase())
-                    }
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value.toUpperCase())}
                     className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold outline-none"
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {t("date")}
-                  </label>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     {t("date")}
                   </label>
@@ -171,6 +303,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                         : setInFlightNo(e.target.value.toUpperCase())
                     }
                     className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold font-mono outline-none"
+                    placeholder={step === "outbound-search" ? "BR198" : "BR197"}
                   />
                 </div>
               </div>
@@ -185,10 +318,21 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                   <Loader2 className="animate-spin" />
                 ) : (
                   <>
-                    <Search size={20} /> {t("search")}
+                    <Search size={20} /> {(step === "outbound-search" && outboundSegments.length > 0) || (step === "inbound-search" && inboundSegments.length > 0) ? t("addLayoverSegment") : t("search")}
                   </>
                 )}
               </button>
+              <button onClick={() => {
+                if (step === "inbound-search") {
+                  if (inboundSegments.length > 0) {
+                    setStep("inbound-search");
+                  } else {
+                    setStep("outbound-search");
+                  }
+                } else {
+                  onClose();
+                }
+              }} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {t("back")}</button>
             </div>
           ) : step === "outbound-select" || step === "inbound-select" ? (
             <div className="space-y-4">
@@ -198,12 +342,23 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                     key={i}
                     onClick={() => {
                       if (step === "outbound-select") {
-                        setTempOutbound(f);
-                        setStep("inbound-search");
+                        const newSegs = [...outboundSegments, f];
+                        setOutboundSegments(newSegs);
                         setOptions([]);
+                        setOrigin(f.arrivalAirport);
+                        setDestination("");
+                        setOutDate(f.arrivalTime.split("T")[0]);
+                        setOutFlightNo("");
+                        setStep("outbound-search");
                       } else {
-                        setTempInbound(f);
-                        setStep("review");
+                        const newSegs = [...inboundSegments, f];
+                        setInboundSegments(newSegs);
+                        setOptions([]);
+                        setOrigin(f.arrivalAirport);
+                        setDestination("");
+                        setInDate(f.arrivalTime.split("T")[0]);
+                        setInFlightNo("");
+                        setStep("inbound-search");
                       }
                     }}
                     className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all"
@@ -245,33 +400,37 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="p-5 bg-blue-50/50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800">
-                  <div className="text-[10px] font-black text-blue-400 uppercase mb-2">
-                    Outbound
+              <div className="space-y-4">
+                <div className="p-5 bg-blue-50/50 dark:bg-blue-900/20 rounded-2xl border border-blue-100 dark:border-blue-800 space-y-2">
+                  <div className="text-[10px] font-black text-blue-400 uppercase">
+                    {t("outboundSelected")}
                   </div>
-                  <div className="font-black dark:text-white">
-                    {tempOutbound?.flightNumber} (
-                    {tempOutbound?.departureAirport} →{" "}
-                    {tempOutbound?.arrivalAirport})
-                  </div>
+                  {outboundSegments.map((seg, idx) => (
+                    <div key={idx} className="font-black text-xs dark:text-white flex justify-between border-b border-blue-100/30 dark:border-blue-800/30 pb-1.5 last:border-b-0 last:pb-0 font-mono">
+                      <span>{seg.flightNumber} ({seg.departureAirport} → {seg.arrivalAirport})</span>
+                      <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="p-5 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
-                  <div className="text-[10px] font-black text-indigo-400 uppercase mb-2">
-                    Inbound
+                <div className="p-5 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800 space-y-2">
+                  <div className="text-[10px] font-black text-indigo-400 uppercase">
+                    {t("inboundSelected")}
                   </div>
-                  <div className="font-black dark:text-white">
-                    {tempInbound?.flightNumber} ({tempInbound?.departureAirport}{" "}
-                    → {tempInbound?.arrivalAirport})
-                  </div>
+                  {inboundSegments.map((seg, idx) => (
+                    <div key={idx} className="font-black text-xs dark:text-white flex justify-between border-b border-indigo-100/30 dark:border-indigo-800/30 pb-1.5 last:border-b-0 last:pb-0 font-mono">
+                      <span>{seg.flightNumber} ({seg.departureAirport} → {seg.arrivalAirport})</span>
+                      <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
               <button
-                onClick={() => onConfirm(tempOutbound!, tempInbound!)}
+                onClick={handleConfirm}
                 className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-xl shadow-primary/20 flex items-center justify-center gap-2 transition-transform active:scale-95"
               >
                 <Check size={20} /> {t("confirm")}
               </button>
+              <button onClick={() => setStep("inbound-search")} className="w-full text-xs font-black text-slate-400 py-2 flex items-center justify-center gap-1"><ChevronLeft size={14}/> {t("back")}</button>
             </div>
           )}
         </div>
@@ -451,234 +610,6 @@ export const FlightManager: React.FC<Props> = ({
   isGuest = false,
 }) => {
   const { t } = useTranslation();
-  const defaultBaggage = {
-    carryOn: { count: 1, weight: "7kg" },
-    checked: { count: 1, weight: "23kg" },
-  };
-
-  const renderLayover = (prevSeg: FlightSegment, nextSeg: FlightSegment) => {
-    const s = new Date(prevSeg.arrivalTime).getTime();
-    const e = new Date(nextSeg.departureTime).getTime();
-    if (isNaN(s) || isNaN(e) || e <= s) return null;
-    const diffMins = Math.floor((e - s) / 60000);
-    const h = Math.floor(diffMins / 60);
-    const m = diffMins % 60;
-    const duration = h > 0 ? `${h}h ${m}m` : `${m}m`;
-    const layoverText = t("layoverAt").replace("{airport}", prevSeg.arrivalAirport);
-    return (
-      <div key={`layover-${prevSeg.arrivalAirport}-${nextSeg.departureAirport}`} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-100 dark:border-slate-800/80 my-2 w-full">
-        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-          ✈️ {layoverText} ({duration})
-        </span>
-      </div>
-    );
-  };
-
-  const formatForDatetimeLocal = (isoStr: string) => {
-    if (!isoStr) return "";
-    return isoStr.substring(0, 16);
-  };
-
-  const renderSegmentEditor = (segments: FlightSegment[], isOutbound: boolean) => {
-    const key = isOutbound ? "outbound" : "inbound";
-    return (
-      <div className="space-y-4 w-full">
-        <div className="flex justify-between items-center">
-          <h4 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-            {isOutbound ? t("outbound") : t("inbound")} {t("flight")}
-          </h4>
-          {!isOutbound && (
-            <button
-              onClick={() => {
-                setTempFlightData(prev => prev ? { ...prev, inbound: undefined } : null);
-              }}
-              className="text-red-500 hover:text-red-600 text-[10px] font-black uppercase tracking-widest"
-            >
-              {t("removeInboundFlight")}
-            </button>
-          )}
-        </div>
-
-        {segments.map((seg, idx) => (
-          <div key={idx} className="p-5 bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {t("addSegment")} {idx + 1}
-              </span>
-              {segments.length > 1 && (
-                <button
-                  onClick={() => {
-                    const newSegs = segments.filter((_, i) => i !== idx);
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="text-red-500 hover:text-red-600 text-[10px] font-black uppercase tracking-widest"
-                >
-                  {t("deleteSegment")}
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("airline")}</label>
-                <input
-                  value={seg.airline || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], airline: e.target.value };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="EVA Air"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Airline Code</label>
-                <input
-                  value={seg.airlineID || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], airlineID: e.target.value.toUpperCase() };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="BR"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("flightNo")}</label>
-                <input
-                  value={seg.flightNumber || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], flightNumber: e.target.value.toUpperCase() };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="BR198"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("origin")}</label>
-                <input
-                  value={seg.departureAirport || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], departureAirport: e.target.value.toUpperCase() };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="TPE"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("destination")}</label>
-                <input
-                  value={seg.arrivalAirport || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], arrivalAirport: e.target.value.toUpperCase() };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="NRT"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("dep")} {t("time")}</label>
-                <input
-                  type="datetime-local"
-                  value={formatForDatetimeLocal(seg.departureTime)}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], departureTime: e.target.value };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("arr")} {t("time")}</label>
-                <input
-                  type="datetime-local"
-                  value={formatForDatetimeLocal(seg.arrivalTime)}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], arrivalTime: e.target.value };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t("terminal")}</label>
-                <input
-                  value={seg.terminal || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], terminal: e.target.value };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="1"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Gate</label>
-                <input
-                  value={seg.gate || ""}
-                  onChange={(e) => {
-                    const newSegs = [...segments];
-                    newSegs[idx] = { ...newSegs[idx], gate: e.target.value.toUpperCase() };
-                    setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-                  }}
-                  className="w-full p-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border border-transparent outline-none focus:ring-2 focus:ring-primary/20 dark:text-white"
-                  placeholder="B5"
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-
-        <button
-          onClick={() => {
-            const newSegs = [
-              ...segments,
-              {
-                airline: "",
-                airlineID: "",
-                flightNumber: "",
-                departureAirport: "",
-                arrivalAirport: "",
-                departureTime: "",
-                arrivalTime: "",
-                baggage: defaultBaggage,
-              },
-            ];
-            setTempFlightData(prev => prev ? { ...prev, [key]: newSegs } : null);
-          }}
-          className="w-full py-3 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl text-[10px] font-black text-slate-400 hover:text-primary hover:border-primary transition-all uppercase tracking-wider"
-        >
-          {t("addSegmentBtn")}
-        </button>
-      </div>
-    );
-  };
-
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
   const [tempFlightData, setTempFlightData] = useState<FlightInfo | null>(null);
@@ -697,6 +628,55 @@ export const FlightManager: React.FC<Props> = ({
       trip.flights.find((f) => f.user_id === trip.user_id) || trip.flights[0]
     );
   }, [trip.flights, trip.user_id]);
+
+  const calculateLayoverDuration = (seg1: FlightSegment, seg2: FlightSegment) => {
+    const s1 = new Date(seg1.arrivalTime).getTime();
+    const s2 = new Date(seg2.departureTime).getTime();
+    if (isNaN(s1) || isNaN(s2)) return "";
+    let diffMins = Math.floor((s2 - s1) / 60000);
+    if (diffMins < 0) return "";
+    const h = Math.floor(diffMins / 60);
+    const m = diffMins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  const renderFlightBoardingPasses = (
+    segment: FlightSegment,
+    travelerName: string,
+    cabinClass: string
+  ) => {
+    if (segment.segments && segment.segments.length > 0) {
+      return (
+        <div className="space-y-4">
+          {segment.segments.map((seg, idx) => (
+            <React.Fragment key={idx}>
+              <BoardingPass
+                segment={seg}
+                passengerName={travelerName}
+                cabinClass={cabinClass}
+              />
+              {idx < segment.segments.length - 1 && (
+                <div className="flex items-center justify-center gap-2 py-2 text-xs font-black text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-2xl mx-8 border border-slate-100/50 dark:border-slate-800">
+                  <Plane size={12} className="text-slate-300 rotate-90 shrink-0" />
+                  <span>
+                    {t("layoverAt")} {seg.arrivalAirport} ({calculateLayoverDuration(seg, segment.segments[idx + 1])})
+                  </span>
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <BoardingPass
+        segment={segment}
+        passengerName={travelerName}
+        cabinClass={cabinClass}
+      />
+    );
+  };
 
   // Removed auto-edit mode on zero price to prevent looping and allow user to view the list first
   /* 
@@ -720,24 +700,23 @@ export const FlightManager: React.FC<Props> = ({
   }, [currentUser, trip.flights, editingFlightId, ownerFlight]);
   */
 
-
+  const defaultBaggage = {
+    carryOn: { count: 1, weight: "7kg" },
+    checked: { count: 1, weight: "23kg" },
+  };
 
   const handleStartAdd = () => {
     if (!currentUser) return;
 
     // Default values from owner flight if available
-    const ownerOut = ownerFlight ? ensureSegments(ownerFlight.outbound) : [];
-    const firstOwnerOut = ownerOut[0];
-    const lastOwnerOut = ownerOut[ownerOut.length - 1];
-
-    const initialOutbound = firstOwnerOut
+    const initialOutbound = ownerFlight
       ? {
           airline: "",
           flightNumber: "",
           departureTime: "",
           arrivalTime: "",
-          departureAirport: firstOwnerOut.departureAirport,
-          arrivalAirport: lastOwnerOut?.arrivalAirport || "",
+          departureAirport: ownerFlight.outbound.departureAirport,
+          arrivalAirport: ownerFlight.outbound.arrivalAirport,
           baggage: defaultBaggage,
         }
       : {
@@ -754,18 +733,16 @@ export const FlightManager: React.FC<Props> = ({
       id: crypto.randomUUID(),
       user_id: currentUser.id,
       traveler_name: currentUser.name,
-      outbound: [initialOutbound],
-      inbound: [
-        {
-          airline: "",
-          flightNumber: "",
-          departureTime: "",
-          arrivalTime: "",
-          departureAirport: "",
-          arrivalAirport: "",
-          baggage: defaultBaggage,
-        },
-      ],
+      outbound: initialOutbound,
+      inbound: {
+        airline: "",
+        flightNumber: "",
+        departureTime: "",
+        arrivalTime: "",
+        departureAirport: "",
+        arrivalAirport: "",
+        baggage: defaultBaggage,
+      },
       price: 0,
       currency: Currency.TWD,
       cabinClass: "Economy",
@@ -782,15 +759,9 @@ export const FlightManager: React.FC<Props> = ({
       id: crypto.randomUUID(),
       user_id: currentUser.id,
       traveler_name: currentUser.name,
-      outbound: ensureSegments(ownerFlight.outbound).map(seg => ({
-        ...seg,
-        baggage: seg.baggage || defaultBaggage,
-      })),
+      outbound: { ...ownerFlight.outbound, baggage: defaultBaggage },
       inbound: ownerFlight.inbound
-        ? ensureSegments(ownerFlight.inbound).map(seg => ({
-            ...seg,
-            baggage: seg.baggage || defaultBaggage,
-          }))
+        ? { ...ownerFlight.inbound, baggage: defaultBaggage }
         : undefined,
       price: 0,
       currency: Currency.TWD,
@@ -819,8 +790,8 @@ export const FlightManager: React.FC<Props> = ({
 
     setTempFlightData({
       ...tempFlightData,
-      outbound: [outWithBag],
-      inbound: [inWithBag],
+      outbound: outWithBag,
+      inbound: inWithBag,
     });
     setIsSyncingWithOwner(false);
     setIsSelectorOpen(false);
@@ -848,19 +819,10 @@ export const FlightManager: React.FC<Props> = ({
     travelerName: string
   ): { date: string; items: ItineraryItem[] } | null => {
     if (!segment.flightNumber || !currentUser) return null;
-    const depDate = segment.departureTime.split("T")[0];
+    
     const items: ItineraryItem[] = [];
     const noteSuffix = ` (${travelerName})`;
-    items.push({
-      id: crypto.randomUUID(),
-      user_id: currentUser.id,
-      time: DateTimeUtils.formatTime24(segment.departureTime),
-      placeName: `${segment.departureAirport} Airport`,
-      type: "Place",
-      transportType: "Flight",
-      note: `Flight: ${segment.flightNumber}${noteSuffix}`,
-      date: depDate,
-    });
+    
     const calculateDuration = (start: string, end: string) => {
       const s = new Date(start).getTime();
       const e = new Date(end).getTime();
@@ -871,6 +833,7 @@ export const FlightManager: React.FC<Props> = ({
       const m = diffMins % 60;
       return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
+    
     const getMidPointTime = (t1: string, t2: string) => {
       const [h1, m1] = t1.split(":").map(Number);
       const [h2, m2] = t2.split(":").map(Number);
@@ -879,33 +842,57 @@ export const FlightManager: React.FC<Props> = ({
       if (min2 < min1) min2 += 24 * 60;
       const mid = Math.floor((min1 + min2) / 2) % (24 * 60);
       return `${Math.floor(mid / 60)
-         .toString()
-         .padStart(2, "0")}:${(mid % 60).toString().padStart(2, "0")}`;
+        .toString()
+        .padStart(2, "0")}:${(mid % 60).toString().padStart(2, "0")}`;
     };
-    items.push({
-      id: crypto.randomUUID(),
-      user_id: currentUser.id,
-      time: getMidPointTime(
-        DateTimeUtils.formatTime24(segment.departureTime),
-        DateTimeUtils.formatTime24(segment.arrivalTime)
-      ),
-      placeName: "Flight",
-      type: "Transport",
-      transportType: "Flight",
-      note: calculateDuration(segment.departureTime, segment.arrivalTime),
-      date: depDate,
-    });
-    const arrDate = segment.arrivalTime.split("T")[0];
-    items.push({
-      id: crypto.randomUUID(),
-      user_id: currentUser.id,
-      time: DateTimeUtils.formatTime24(segment.arrivalTime),
-      placeName: `${segment.arrivalAirport} Airport`,
-      type: "Place",
-      transportType: "Flight",
-      note: `Arrival${noteSuffix}`,
-      date: arrDate,
-    });
+
+    const processSingleSegment = (seg: FlightSegment) => {
+      const depDate = seg.departureTime.split("T")[0];
+      const arrDate = seg.arrivalTime.split("T")[0];
+
+      items.push({
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        time: DateTimeUtils.formatTime24(seg.departureTime),
+        placeName: `${seg.departureAirport} Airport`,
+        type: "Place",
+        transportType: "Flight",
+        note: `Flight: ${seg.flightNumber}${noteSuffix}`,
+        date: depDate,
+      });
+
+      items.push({
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        time: getMidPointTime(
+          DateTimeUtils.formatTime24(seg.departureTime),
+          DateTimeUtils.formatTime24(seg.arrivalTime)
+        ),
+        placeName: "Flight",
+        type: "Transport",
+        transportType: "Flight",
+        note: calculateDuration(seg.departureTime, seg.arrivalTime) + noteSuffix,
+        date: depDate,
+      });
+
+      items.push({
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        time: DateTimeUtils.formatTime24(seg.arrivalTime),
+        placeName: `${seg.arrivalAirport} Airport`,
+        type: "Place",
+        transportType: "Flight",
+        note: `Arrival${noteSuffix}`,
+        date: arrDate,
+      });
+    };
+
+    if (segment.segments && segment.segments.length > 0) {
+      segment.segments.forEach((seg) => processSingleSegment(seg));
+    } else {
+      processSingleSegment(segment);
+    }
+
     return { date: "SPLIT", items };
   };
 
@@ -922,10 +909,10 @@ export const FlightManager: React.FC<Props> = ({
       setPriceError(false);
     }
 
-    const firstOutSeg = ensureSegments(tempFlightData.outbound)[0];
-    const outErrors = firstOutSeg ? validateBaggage(firstOutSeg.baggage || defaultBaggage) : {};
-    const firstInSeg = tempFlightData.inbound ? ensureSegments(tempFlightData.inbound)[0] : null;
-    const inErrors = firstInSeg ? validateBaggage(firstInSeg.baggage || defaultBaggage) : {};
+    const outErrors = validateBaggage(tempFlightData.outbound.baggage);
+    const inErrors = tempFlightData.inbound
+      ? validateBaggage(tempFlightData.inbound.baggage)
+      : {};
     setBaggageErrors({ outbound: outErrors, inbound: inErrors });
 
     if (Object.keys(outErrors).length > 0 || Object.keys(inErrors).length > 0)
@@ -969,10 +956,8 @@ export const FlightManager: React.FC<Props> = ({
           }
         });
       };
-      ensureSegments(tempFlightData.outbound).forEach(injectItems);
-      if (tempFlightData.inbound) {
-        ensureSegments(tempFlightData.inbound).forEach(injectItems);
-      }
+      injectItems(tempFlightData.outbound);
+      if (tempFlightData.inbound) injectItems(tempFlightData.inbound);
     }
 
     onUpdate({ ...trip, flights: newFlights, itinerary: newItinerary });
@@ -985,27 +970,24 @@ export const FlightManager: React.FC<Props> = ({
     if (flight.user_id !== currentUser?.id) return;
     const safeFlight = {
       ...flight,
-      outbound: ensureSegments(flight.outbound).map((seg) => ({
-        ...seg,
-        baggage: seg.baggage || defaultBaggage,
-      })),
+      outbound: {
+        ...flight.outbound,
+        baggage: flight.outbound.baggage || defaultBaggage,
+      },
       inbound: flight.inbound
-        ? ensureSegments(flight.inbound).map((seg) => ({
-            ...seg,
-            baggage: seg.baggage || defaultBaggage,
-          }))
+        ? {
+            ...flight.inbound,
+            baggage: flight.inbound?.baggage || defaultBaggage,
+          }
         : undefined,
     };
     setTempFlightData(safeFlight);
     setEditingFlightId(flight.id);
     setPriceError(false);
     setBaggageErrors({ outbound: {}, inbound: {} });
-
-    const ownerFirstOut = ownerFlight ? ensureSegments(ownerFlight.outbound)[0] : null;
-    const flightFirstOut = ensureSegments(flight.outbound)[0];
     if (
       ownerFlight &&
-      ownerFirstOut?.flightNumber === flightFirstOut?.flightNumber &&
+      ownerFlight.outbound.flightNumber === flight.outbound.flightNumber &&
       flight.user_id !== ownerFlight.user_id
     ) {
       setIsSyncingWithOwner(true);
@@ -1201,104 +1183,43 @@ export const FlightManager: React.FC<Props> = ({
             <div className="space-y-4">
               <BaggageEditor
                 label={t("outboundBag")}
-                baggage={ensureSegments(tempFlightData.outbound)[0]?.baggage || defaultBaggage}
-                onChange={(bag) => {
-                  const newOut = [...ensureSegments(tempFlightData.outbound)];
-                  if (newOut[0]) {
-                    newOut[0] = { ...newOut[0], baggage: bag };
-                  }
+                baggage={tempFlightData.outbound.baggage || defaultBaggage}
+                onChange={(bag) =>
                   setTempFlightData({
                     ...tempFlightData,
-                    outbound: newOut,
-                  });
-                }}
+                    outbound: { ...tempFlightData.outbound, baggage: bag },
+                  })
+                }
                 errors={baggageErrors.outbound}
               />
-              {tempFlightData.inbound && tempFlightData.inbound.length > 0 && (
+              {tempFlightData.inbound && (
                 <BaggageEditor
                   label={t("inboundBag")}
-                  baggage={ensureSegments(tempFlightData.inbound)[0]?.baggage || defaultBaggage}
-                  onChange={(bag) => {
-                    const newIn = [...ensureSegments(tempFlightData.inbound)];
-                    if (newIn[0]) {
-                      newIn[0] = { ...newIn[0], baggage: bag };
-                    }
+                  baggage={tempFlightData.inbound.baggage || defaultBaggage}
+                  onChange={(bag) =>
                     setTempFlightData({
                       ...tempFlightData,
-                      inbound: newIn,
-                    });
-                  }}
+                      inbound: { ...tempFlightData.inbound!, baggage: bag },
+                    })
+                  }
                   errors={baggageErrors.inbound}
                 />
               )}
             </div>
           </div>
 
-          {/* Segment Editors */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-slate-100 dark:border-slate-700 pt-8 mt-6">
-            {renderSegmentEditor(tempFlightData.outbound, true)}
-            {tempFlightData.inbound ? (
-              renderSegmentEditor(tempFlightData.inbound, false)
-            ) : (
-              <div className="flex flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900/30 rounded-3xl border border-dashed border-slate-100 dark:border-slate-800 min-h-[200px] w-full">
-                <button
-                  onClick={() => {
-                    setTempFlightData(prev =>
-                      prev
-                        ? {
-                            ...prev,
-                            inbound: [
-                              {
-                                airline: "",
-                                airlineID: "",
-                                flightNumber: "",
-                                departureAirport: "",
-                                arrivalAirport: "",
-                                departureTime: "",
-                                arrivalTime: "",
-                                baggage: defaultBaggage,
-                              },
-                            ],
-                          }
-                        : null
-                    );
-                  }}
-                  className="px-6 py-3 bg-white dark:bg-slate-800 text-primary border border-primary/20 rounded-2xl font-black text-xs shadow-md hover:bg-primary/5 transition-all uppercase tracking-wider"
-                >
-                  {t("addInboundFlight")}
-                </button>
-              </div>
+          <div className="mt-8 space-y-6 opacity-60 pointer-events-none grayscale">
+            {renderFlightBoardingPasses(
+              tempFlightData.outbound,
+              tempFlightData.traveler_name,
+              tempFlightData.cabinClass
             )}
-          </div>
-
-          {/* Previews */}
-          <div className="mt-8 space-y-6 opacity-60 pointer-events-none grayscale border-t border-slate-100 dark:border-slate-700 pt-8">
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("outbound")}</div>
-            {ensureSegments(tempFlightData.outbound).map((seg, idx) => (
-              <React.Fragment key={`prev-out-${idx}`}>
-                {idx > 0 && renderLayover(ensureSegments(tempFlightData.outbound)[idx - 1], seg)}
-                <BoardingPass
-                  segment={seg}
-                  passengerName={tempFlightData.traveler_name}
-                  cabinClass={tempFlightData.cabinClass}
-                />
-              </React.Fragment>
-            ))}
-            {tempFlightData.inbound && tempFlightData.inbound.length > 0 && (
-              <>
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-6">{t("inbound")}</div>
-                {ensureSegments(tempFlightData.inbound).map((seg, idx) => (
-                  <React.Fragment key={`prev-in-${idx}`}>
-                    {idx > 0 && renderLayover(ensureSegments(tempFlightData.inbound)[idx - 1], seg)}
-                    <BoardingPass
-                      segment={seg}
-                      passengerName={tempFlightData.traveler_name}
-                      cabinClass={tempFlightData.cabinClass}
-                    />
-                  </React.Fragment>
-                ))}
-              </>
-            )}
+            {tempFlightData.inbound?.flightNumber &&
+              renderFlightBoardingPasses(
+                tempFlightData.inbound,
+                tempFlightData.traveler_name,
+                tempFlightData.cabinClass
+              )}
           </div>
         </div>
       ) : (
@@ -1317,35 +1238,17 @@ export const FlightManager: React.FC<Props> = ({
                     {flight.user_id === currentUser?.id ? "(Me)" : ""}
                   </div>
                   <div className="space-y-4">
-                    {ensureSegments(flight.outbound).map((seg, idx) => (
-                      <React.Fragment key={`out-${idx}`}>
-                        {idx > 0 && renderLayover(ensureSegments(flight.outbound)[idx - 1], seg)}
-                        <BoardingPass
-                          segment={seg}
-                          passengerName={flight.traveler_name}
-                          cabinClass={flight.cabinClass}
-                        />
-                      </React.Fragment>
-                    ))}
-                    {flight.inbound && ensureSegments(flight.inbound).length > 0 && (
-                      <>
-                        <div className="h-px bg-slate-200 dark:bg-slate-700/50 my-6 flex items-center justify-center">
-                          <span className="bg-white dark:bg-slate-800 px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.25em]">
-                            {t("inbound")}
-                          </span>
-                        </div>
-                        {ensureSegments(flight.inbound).map((seg, idx) => (
-                          <React.Fragment key={`in-${idx}`}>
-                            {idx > 0 && renderLayover(ensureSegments(flight.inbound)[idx - 1], seg)}
-                            <BoardingPass
-                              segment={seg}
-                              passengerName={flight.traveler_name}
-                              cabinClass={flight.cabinClass}
-                            />
-                          </React.Fragment>
-                        ))}
-                      </>
+                    {renderFlightBoardingPasses(
+                      flight.outbound,
+                      flight.traveler_name,
+                      flight.cabinClass
                     )}
+                    {flight.inbound?.flightNumber &&
+                      renderFlightBoardingPasses(
+                        flight.inbound,
+                        flight.traveler_name,
+                        flight.cabinClass
+                      )}
                   </div>
                   {flight.user_id === currentUser?.id && (
                     <button
@@ -1370,24 +1273,14 @@ export const FlightManager: React.FC<Props> = ({
         <FlightSelectorModal
           onClose={() => setIsSelectorOpen(false)}
           onConfirm={handleFlightSelect}
-          initialOrigin={
-            ownerFlight
-              ? ensureSegments(ownerFlight.outbound)[0]?.departureAirport || "TPE"
-              : "TPE"
-          }
-          initialDestination={
-            ownerFlight
-              ? ensureSegments(ownerFlight.outbound)[ensureSegments(ownerFlight.outbound).length - 1]?.arrivalAirport || ""
-              : ""
-          }
+          initialOrigin={ownerFlight?.outbound.departureAirport || "TPE"}
+          initialDestination={ownerFlight?.outbound.arrivalAirport || ""}
           initialOutDate={
-            ownerFlight
-              ? ensureSegments(ownerFlight.outbound)[0]?.departureTime?.split("T")[0] || ""
-              : ""
+            ownerFlight ? ownerFlight.outbound.departureTime.split("T")[0] : ""
           }
           initialInDate={
             ownerFlight?.inbound
-              ? ensureSegments(ownerFlight.inbound)[0]?.departureTime?.split("T")[0] || ""
+              ? ownerFlight.inbound.departureTime.split("T")[0]
               : ""
           }
         />
