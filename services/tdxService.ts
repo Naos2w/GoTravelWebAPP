@@ -161,12 +161,40 @@ export async function fetchAviationstackFlights(
   }
 }
 
+const TAIWAN_AIRPORTS = new Set([
+  'TPE', 'KHH', 'TSA', 'RMQ', 'TNN', 'HUN', 'TTT', 'CYI', 'HSZ', 'PIF', 
+  'MZG', 'KNH', 'MFK', 'LZN', 'GNI', 'KYD', 'WOT', 'CMJ'
+]);
+
+function parseTdxTime(dateStr: string, timeStr: string): string {
+  if (!timeStr) return `${dateStr}T00:00`;
+  const match = timeStr.match(/^(\d{2}:\d{2})(?:\+(\d+))?$/);
+  if (!match) return `${dateStr}T${timeStr}`;
+  
+  const [_, time, offsetDays] = match;
+  if (!offsetDays) return `${dateStr}T${time}`;
+  
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + parseInt(offsetDays, 10));
+  
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dateVal = String(d.getDate()).padStart(2, '0');
+  
+  return `${y}-${m}-${dateVal}T${time}`;
+}
+
 export async function fetchTdxFlights(
   origin: string,
   destination: string,
   date: string,
   flightNumber?: string
 ): Promise<FlightSegment[]> {
+  // If the flight departs from a foreign airport, bypass TDX and query Aviationstack directly to avoid TDX UTC departure time shift bugs.
+  if (!TAIWAN_AIRPORTS.has(origin.toUpperCase())) {
+    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+  }
+
   const token = await getTdxToken();
   if (!token) {
     return fetchAviationstackFlights(origin, destination, date, flightNumber);
@@ -200,8 +228,8 @@ export async function fetchTdxFlights(
     await Promise.all(uniqueAirlines.map(id => fetchAirlineName(id, token)));
 
     return data.map((item: any) => {
-      const depTime = `${date}T${item.DepartureTime}`;
-      const arrTime = `${date}T${item.ArrivalTime}`;
+      const depTime = parseTdxTime(date, item.DepartureTime);
+      const arrTime = parseTdxTime(date, item.ArrivalTime);
       const names = airlineCache.get(item.AirlineID) || { zh: item.AirlineID, en: item.AirlineID };
 
       return {
