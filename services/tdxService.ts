@@ -86,7 +86,7 @@ export async function fetchAviationstackFlights(
   }
 
   try {
-    let url = `http://api.aviationstack.com/v1/flights?access_key=${accessKey}`;
+    let url = `https://api.aviationstack.com/v1/flights?access_key=${accessKey}`;
     
     if (flightNumber && flightNumber.trim()) {
       url += `&flight_iata=${encodeURIComponent(flightNumber.trim().toUpperCase())}`;
