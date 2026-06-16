@@ -102,7 +102,7 @@ export async function fetchAviationstackFlights(
     const data = await response.json();
     if (!data || !Array.isArray(data.data)) return [];
 
-    return data.data.map((item: any) => {
+    const mapped = data.data.map((item: any) => {
       const depScheduled = item.departure?.scheduled || '';
       const arrScheduled = item.arrival?.scheduled || '';
       
@@ -144,6 +144,17 @@ export async function fetchAviationstackFlights(
       }
       return matches;
     });
+
+    const uniqueSegments: FlightSegment[] = [];
+    const seenSignatures = new Set<string>();
+    for (const f of mapped) {
+      const signature = `${f.flightNumber}-${f.departureAirport}-${f.arrivalAirport}-${f.departureTime}-${f.arrivalTime}`;
+      if (!seenSignatures.has(signature)) {
+        seenSignatures.add(signature);
+        uniqueSegments.push(f);
+      }
+    }
+    return uniqueSegments;
   } catch (e) {
     console.error("Aviationstack Data Fetch Error:", e);
     return [];
