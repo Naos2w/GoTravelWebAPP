@@ -595,6 +595,14 @@ const BaggageEditor: React.FC<BaggageEditorProps> = ({
   );
 };
 
+const toDateTimeLocalValue = (isoStr: string | undefined | null): string => {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 // TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
@@ -618,6 +626,7 @@ export const FlightManager: React.FC<Props> = ({
     outbound: { carryOn?: boolean; checked?: boolean };
     inbound: { carryOn?: boolean; checked?: boolean };
   }>({ outbound: {}, inbound: {} });
+  const [showManualDetails, setShowManualDetails] = useState(false);
 
   const isOwner = trip.user_id === currentUser?.id || !trip.user_id;
   const [isSyncingWithOwner, setIsSyncingWithOwner] = useState(false);
@@ -630,8 +639,13 @@ export const FlightManager: React.FC<Props> = ({
   }, [trip.flights, trip.user_id]);
 
   const calculateLayoverDuration = (seg1: FlightSegment, seg2: FlightSegment) => {
-    const s1 = new Date(seg1.arrivalTime).getTime();
-    const s2 = new Date(seg2.departureTime).getTime();
+    const stripTimezone = (str: string) => {
+      if (!str) return "";
+      const match = str.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?)/);
+      return match ? match[1] : str;
+    };
+    const s1 = new Date(stripTimezone(seg1.arrivalTime)).getTime();
+    const s2 = new Date(stripTimezone(seg2.departureTime)).getTime();
     if (isNaN(s1) || isNaN(s2)) return "";
     let diffMins = Math.floor((s2 - s1) / 60000);
     if (diffMins < 0) return "";
@@ -814,6 +828,192 @@ export const FlightManager: React.FC<Props> = ({
     return errs;
   };
 
+  const updateSegmentField = (
+    type: "outbound" | "inbound",
+    segmentIndex: number | null,
+    field: keyof FlightSegment,
+    value: any
+  ) => {
+    if (!tempFlightData) return;
+
+    const segment = type === "outbound" ? tempFlightData.outbound : tempFlightData.inbound;
+    if (!segment) return;
+
+    let updatedSegment = { ...segment };
+
+    if (segmentIndex === null) {
+      updatedSegment = {
+        ...updatedSegment,
+        [field]: value,
+      };
+    } else if (updatedSegment.segments) {
+      const updatedSubSegments = [...updatedSegment.segments];
+      updatedSubSegments[segmentIndex] = {
+        ...updatedSubSegments[segmentIndex],
+        [field]: value,
+      };
+      
+      updatedSegment.segments = updatedSubSegments;
+      updatedSegment.airline = updatedSubSegments.map(s => s.airline).join(' + ');
+      updatedSegment.flightNumber = updatedSubSegments.map(s => s.flightNumber).join(' + ');
+      updatedSegment.airlineNameZh = updatedSubSegments.map(s => s.airlineNameZh || s.airline).join(' + ');
+      updatedSegment.airlineNameEn = updatedSubSegments.map(s => s.airlineNameEn || s.airline).join(' + ');
+      updatedSegment.departureTime = updatedSubSegments[0].departureTime;
+      updatedSegment.arrivalTime = updatedSubSegments[updatedSubSegments.length - 1].arrivalTime;
+      updatedSegment.departureAirport = updatedSubSegments[0].departureAirport;
+      updatedSegment.arrivalAirport = updatedSubSegments[updatedSubSegments.length - 1].arrivalAirport;
+    }
+
+    if (isSyncingWithOwner) {
+      setIsSyncingWithOwner(false);
+    }
+
+    setTempFlightData({
+      ...tempFlightData,
+      [type]: updatedSegment,
+    });
+  };
+
+  const renderSegmentInputs = (type: "outbound" | "inbound", segment: FlightSegment) => {
+    const segmentsList = segment.segments && segment.segments.length > 0 
+      ? segment.segments 
+      : [segment];
+
+    return (
+      <div className="space-y-6">
+        {segmentsList.map((seg, idx) => {
+          const isSubSegment = segment.segments && segment.segments.length > 0;
+          const segmentKey = isSubSegment ? idx : null;
+          
+          return (
+            <div 
+              key={idx} 
+              className="p-5 rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 space-y-4"
+            >
+              {isSubSegment && (
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {t("segmentLeg")} {idx + 1}: {seg.departureAirport || "?"} → {seg.arrivalAirport || "?"}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("airline")}
+                  </label>
+                  <input
+                    value={seg.airline || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "airline", e.target.value);
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("flightNo")}
+                  </label>
+                  <input
+                    value={seg.flightNumber || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "flightNumber", e.target.value.toUpperCase());
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("departureAirport")}
+                  </label>
+                  <input
+                    value={seg.departureAirport || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "departureAirport", e.target.value.toUpperCase());
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("arrivalAirport")}
+                  </label>
+                  <input
+                    value={seg.arrivalAirport || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "arrivalAirport", e.target.value.toUpperCase());
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("departureTime")}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(seg.departureTime)}
+                    onChange={(e) => {
+                      const isoVal = e.target.value ? e.target.value + ":00" : "";
+                      updateSegmentField(type, segmentKey, "departureTime", isoVal);
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("arrivalTime")}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={toDateTimeLocalValue(seg.arrivalTime)}
+                    onChange={(e) => {
+                      const isoVal = e.target.value ? e.target.value + ":00" : "";
+                      updateSegmentField(type, segmentKey, "arrivalTime", isoVal);
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("terminal")}
+                  </label>
+                  <input
+                    value={seg.terminal || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "terminal", e.target.value);
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {t("gate")}
+                  </label>
+                  <input
+                    value={seg.gate || ""}
+                    onChange={(e) => {
+                      updateSegmentField(type, segmentKey, "gate", e.target.value);
+                    }}
+                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const generateFlightItems = (
     segment: FlightSegment,
     travelerName: string
@@ -930,6 +1130,63 @@ export const FlightManager: React.FC<Props> = ({
 
     let newItinerary = [...(trip.itinerary || [])];
     if (!isSyncingWithOwner) {
+      // Clean up old itinerary items for this flight to prevent duplication
+      const oldFlight = trip.flights?.find((f) => f.id === actualId);
+      if (oldFlight) {
+        const oldTraveler = oldFlight.traveler_name;
+        const getOldSegments = (seg: FlightSegment): FlightSegment[] => {
+          return seg.segments && seg.segments.length > 0 ? seg.segments : [seg];
+        };
+        const oldSegs = [
+          ...getOldSegments(oldFlight.outbound),
+          ...(oldFlight.inbound ? getOldSegments(oldFlight.inbound) : []),
+        ];
+
+        newItinerary = newItinerary.map((day) => {
+          const filteredItems = day.items.filter((item) => {
+            const isMatch = oldSegs.some((seg) => {
+              const depDate = seg.departureTime.split("T")[0];
+              const arrDate = seg.arrivalTime.split("T")[0];
+              
+              if (
+                item.placeName === `${seg.departureAirport} Airport` &&
+                item.note?.includes(seg.flightNumber) &&
+                (item.note?.includes(`(${oldTraveler})`) || (actualId === ownerFlight?.id && !item.note?.includes("(")))
+              ) {
+                return true;
+              }
+              
+              if (
+                item.placeName === "Flight" &&
+                item.transportType === "Flight" &&
+                (item.note?.includes(`(${oldTraveler})`) || (actualId === ownerFlight?.id && !item.note?.includes("("))) &&
+                item.date === depDate
+              ) {
+                return true;
+              }
+              
+              if (
+                item.placeName === `${seg.arrivalAirport} Airport` &&
+                item.note?.includes("Arrival") &&
+                (item.note?.includes(`(${oldTraveler})`) || (actualId === ownerFlight?.id && !item.note?.includes("("))) &&
+                item.date === arrDate
+              ) {
+                return true;
+              }
+              
+              return false;
+            });
+            
+            return !isMatch;
+          });
+          
+          return {
+            ...day,
+            items: filteredItems,
+          };
+        });
+      }
+
       const injectItems = (segment: FlightSegment) => {
         const res = generateFlightItems(segment, tempFlightData.traveler_name);
         if (!res) return;
@@ -964,6 +1221,7 @@ export const FlightManager: React.FC<Props> = ({
     setEditingFlightId(null);
     setTempFlightData(null);
     setIsSyncingWithOwner(false);
+    setShowManualDetails(false);
   };
 
   const startEdit = (flight: FlightInfo) => {
@@ -1048,6 +1306,7 @@ export const FlightManager: React.FC<Props> = ({
                   setEditingFlightId(null);
                   setTempFlightData(null);
                   setIsSyncingWithOwner(false);
+                  setShowManualDetails(false);
                 }}
                 className="px-5 py-2 text-slate-400 font-black text-xs hover:text-slate-600 transition-colors"
               >
@@ -1206,6 +1465,47 @@ export const FlightManager: React.FC<Props> = ({
                 />
               )}
             </div>
+          </div>
+
+          {/* Manual Flight Details Editor */}
+          <div className="mt-8 border-t border-slate-100 dark:border-slate-700/50 pt-6">
+            <button
+              type="button"
+              onClick={() => setShowManualDetails(!showManualDetails)}
+              className="w-full flex justify-between items-center py-3 px-4 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900/80 rounded-2xl transition-all text-left"
+            >
+              <div className="flex items-center gap-3">
+                <Plane size={18} className="text-primary" />
+                <span className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-wider">
+                  {t("editFlightDetails")}
+                </span>
+              </div>
+              <span className="text-xs font-bold text-slate-400">
+                {showManualDetails ? t("hide") : t("show")}
+              </span>
+            </button>
+
+            {showManualDetails && (
+              <div className="mt-6 space-y-8 animate-in slide-in-from-top-4 duration-300">
+                {/* Outbound Editor */}
+                <div className="space-y-4">
+                  <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-850 pb-2">
+                    {t("outbound")}
+                  </div>
+                  {renderSegmentInputs("outbound", tempFlightData.outbound)}
+                </div>
+
+                {/* Inbound Editor */}
+                {tempFlightData.inbound && (
+                  <div className="space-y-4">
+                    <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-850 pb-2">
+                      {t("inbound")}
+                    </div>
+                    {renderSegmentInputs("inbound", tempFlightData.inbound)}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-8 space-y-6 opacity-60 pointer-events-none grayscale">

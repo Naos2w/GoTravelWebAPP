@@ -227,7 +227,9 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       category: 'Flight',
       date: trip.startDate, // Default to trip start date
       createdAt: new Date().toISOString(), // Just for sorting
-      note: `${t('flight')}: ${f.outbound.flightNumber}`,
+      note: f.inbound?.flightNumber 
+        ? `${t('flight')}: ${f.outbound.flightNumber} ⇄ ${f.inbound.flightNumber}` 
+        : `${t('flight')}: ${f.outbound.flightNumber}`,
       exchangeRate: rates[f.currency] || 1,
       isFlight: true // Helper flag
     } as any));

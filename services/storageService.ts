@@ -444,10 +444,12 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
   }
 
   // 2. Itinerary Items
-  if (trip.itinerary && trip.itinerary.length > 0) {
+  if (trip.itinerary) {
     const itineraryPayloads: any[] = [];
+    const keepItineraryIds = new Set<string>();
     trip.itinerary.forEach((day) => {
       day.items.forEach((item) => {
+        keepItineraryIds.add(item.id);
         itineraryPayloads.push({
           id: item.id,
           trip_id: trip.id,
@@ -463,6 +465,30 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
         });
       });
     });
+
+    try {
+      const { data: dbItems, error: fetchErr } = await supabase
+        .from("itinerary_items")
+        .select("id")
+        .eq("trip_id", trip.id);
+
+      if (!fetchErr && dbItems) {
+        const dbIds = dbItems.map((it: any) => it.id);
+        const toDeleteIds = dbIds.filter((id: string) => !keepItineraryIds.has(id));
+        if (toDeleteIds.length > 0) {
+          const { error: deleteErr } = await supabase
+            .from("itinerary_items")
+            .delete()
+            .in("id", toDeleteIds);
+          if (deleteErr) {
+            console.error("Failed to delete stale itinerary items:", deleteErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stale itinerary cleanup query failed:", err);
+    }
+
     if (itineraryPayloads.length > 0) {
       const { error: iErr } = await supabase.from("itinerary_items").upsert(itineraryPayloads);
       if (iErr) {
@@ -474,25 +500,51 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
   }
 
   // 3. Flights
-  if (trip.flights && trip.flights.length > 0) {
-    const flightPayloads = trip.flights.map((f) => ({
-      id: f.id,
-      trip_id: trip.id,
-      user_id: f.user_id || userId,
-      traveler_name: f.traveler_name,
-      outbound: f.outbound,
-      inbound: f.inbound,
-      price: f.price || 0,
-      currency: f.currency,
-      cabin_class: f.cabinClass,
-      baggage: f.baggage,
-      budget: f.budget || 0,
-    }));
-    const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
-    if (fErr) {
-      console.error("Failed to upsert flights:", fErr);
-      // TODO: [Error Handling] Propagate database error to UI
-      throw fErr;
+  if (trip.flights) {
+    const keepFlightIds = new Set(trip.flights.map((f) => f.id));
+    try {
+      const { data: dbFlights, error: fetchFErr } = await supabase
+        .from("flights")
+        .select("id")
+        .eq("trip_id", trip.id);
+
+      if (!fetchFErr && dbFlights) {
+        const dbFlightIds = dbFlights.map((f: any) => f.id);
+        const toDeleteFlightIds = dbFlightIds.filter((id: string) => !keepFlightIds.has(id));
+        if (toDeleteFlightIds.length > 0) {
+          const { error: deleteFErr } = await supabase
+            .from("flights")
+            .delete()
+            .in("id", toDeleteFlightIds);
+          if (deleteFErr) {
+            console.error("Failed to delete stale flights:", deleteFErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stale flights cleanup query failed:", err);
+    }
+
+    if (trip.flights.length > 0) {
+      const flightPayloads = trip.flights.map((f) => ({
+        id: f.id,
+        trip_id: trip.id,
+        user_id: f.user_id || userId,
+        traveler_name: f.traveler_name,
+        outbound: f.outbound,
+        inbound: f.inbound,
+        price: f.price || 0,
+        currency: f.currency,
+        cabin_class: f.cabinClass,
+        baggage: f.baggage,
+        budget: f.budget || 0,
+      }));
+      const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
+      if (fErr) {
+        console.error("Failed to upsert flights:", fErr);
+        // TODO: [Error Handling] Propagate database error to UI
+        throw fErr;
+      }
     }
   }
 
