@@ -5,6 +5,7 @@ import React, {
   useContext,
   useRef,
   useMemo,
+  Suspense,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { Trip, Currency, Theme, Language, User } from "./types";
@@ -21,6 +22,7 @@ import {
   ensureChecklistItems,
   createFullTrip,
   deleteExpense,
+  deleteItineraryItem,
   supabase,
 } from "./services/storageService";
 import {
@@ -28,16 +30,21 @@ import {
   LocalizationProvider,
   translations,
 } from "./contexts/LocalizationContext";
-import { Checklist } from "./components/Checklist";
-import { Itinerary } from "./components/Itinerary";
 import {
-  Expenses,
   CATEGORY_UI,
   getCategoryName,
-} from "./components/Expenses";
+} from "./components/ExpenseCategories";
 
 import { TripForm } from "./components/TripForm";
-import { FlightManager } from "./components/FlightManager";
+import { NotificationToast } from "./components/NotificationToast";
+import { BudgetModal } from "./components/BudgetModal";
+import { ShareModal } from "./components/ShareModal";
+
+// TODO: [Optimized] Lazy load heavy components for better bundle code-splitting
+const Checklist = React.lazy(() => import("./components/Checklist").then(m => ({ default: m.Checklist })));
+const Itinerary = React.lazy(() => import("./components/Itinerary").then(m => ({ default: m.Itinerary })));
+const Expenses = React.lazy(() => import("./components/Expenses").then(m => ({ default: m.Expenses })));
+const FlightManager = React.lazy(() => import("./components/FlightManager").then(m => ({ default: m.FlightManager })));
 import {
   Plane,
   Calendar,
@@ -119,232 +126,7 @@ const getGradient = (str: string) => {
 
 
 
-const NotificationToast: React.FC<{
-  message: string;
-  type?: "success" | "error" | "info";
-  onClose: () => void;
-}> = ({ message, type = "info", onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-  const bgColors = {
-    success: "bg-green-500",
-    error: "bg-red-500",
-    info: "bg-slate-900 dark:bg-white",
-  };
-  const textColors = {
-    success: "text-white",
-    error: "text-white",
-    info: "text-white dark:text-slate-900",
-  };
-  return (
-    <div
-      className={`fixed top-6 left-1/2 -translate-x-1/2 z-[200] ${bgColors[type]} ${textColors[type]} px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-300`}
-    >
-      {type === "error" ? <AlertCircle size={18} /> : <Check size={18} />}
-      <span className="text-sm font-black tracking-wide">{message}</span>
-    </div>
-  );
-};
 
-const BudgetModal: React.FC<{
-  onClose: () => void;
-  onSave: (val: string) => void;
-  initialValue: string;
-}> = ({ onClose, onSave, initialValue }) => {
-  const { t } = useTranslation();
-  const [val, setVal] = useState(initialValue);
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[32px] p-8 shadow-2xl space-y-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-black dark:text-white">
-            {t("editBudget")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"
-          >
-            <CloseIcon size={20} />
-          </button>
-        </div>
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-            {t("amount")} (TWD)
-          </label>
-          <input
-            autoFocus
-            type="number"
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-900 p-5 rounded-2xl text-2xl font-black outline-none border-2 border-transparent focus:border-primary/20 dark:text-white"
-          />
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => onSave(val)}
-            className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20 transition-transform active:scale-95"
-          >
-            {t("save")}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-6 py-4 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-2xl font-black"
-          >
-            {t("cancel")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const ShareModal: React.FC<{
-  trip: Trip;
-  user: User;
-  onClose: () => void;
-  onInvite: (email: string) => void;
-  onRemoveInvite: (email: string) => void;
-  copyLink: () => void;
-}> = ({ trip, user, onClose, onInvite, onRemoveInvite, copyLink }) => {
-  const { t } = useTranslation();
-  const [email, setEmail] = useState("");
-  const isOwner = trip.user_id === user.id;
-
-  // Identify owner email to prevent duplication in list
-  const ownerEmail =
-    trip.collaborators?.find((c) => c.user_id === trip.user_id)?.email || "";
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-[32px] p-6 shadow-2xl flex flex-col gap-6">
-        <div className="flex justify-between items-center">
-          <h3 className="text-xl font-black text-slate-900 dark:text-white">
-            {t("shareTrip")}
-          </h3>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400"
-          >
-            <CloseIcon size={20} />
-          </button>
-        </div>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-              {t("shareLink")}
-            </label>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-xs font-mono text-slate-500 truncate select-all">{`${window.location.origin}/?tripId=${trip.id}`}</div>
-              <button
-                onClick={copyLink}
-                className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-xl font-black text-xs transition-all hover:bg-slate-200 dark:hover:bg-slate-600"
-              >
-                {t("copy")}
-              </button>
-            </div>
-          </div>
-          <div className="w-full h-px bg-slate-100 dark:bg-slate-700 my-1" />
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-              {t("inviteEmail")}
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl text-sm font-bold outline-none border border-transparent focus:border-primary/20 dark:text-white"
-                placeholder={t("emailPlaceholder")}
-              />
-              <button
-                disabled={!email.trim()}
-                onClick={() => {
-                  onInvite(email);
-                  setEmail("");
-                }}
-                className="bg-primary disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-xs shadow-lg shadow-primary/20"
-              >
-                {t("invite")}
-              </button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-              {t("collaborators")}
-            </label>
-            <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-2 space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-              <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-black text-[9px] shadow-lg shadow-primary/20">
-                  {isOwner ? "YOU" : "OWN"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-black text-slate-900 dark:text-white truncate">
-                    {isOwner ? t("youOwner") : t("creator")}
-                  </div>
-                </div>
-              </div>
-              {trip.allowed_emails &&
-                trip.allowed_emails
-                  .filter((e) => {
-                    const lowerE = e.toLowerCase();
-                    // Exclude current user (viewer) and the owner
-                    return (
-                      lowerE !== user.email.toLowerCase() &&
-                      lowerE !== ownerEmail.toLowerCase()
-                    );
-                  })
-                  .map((e, i) => {
-                    // Check if this email exists in trip_collaborators (meaning they joined)
-                    const isJoined = trip.collaborators?.some(
-                      (c) =>
-                        c.email && c.email.toLowerCase() === e.toLowerCase()
-                    );
-
-                    return (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 p-2 group hover:bg-white/50 dark:hover:bg-slate-800/50 rounded-lg transition-all"
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
-                            isJoined
-                              ? "bg-indigo-100 dark:bg-indigo-900 text-indigo-500"
-                              : "bg-slate-200 dark:bg-slate-700 text-slate-500"
-                          }`}
-                        >
-                          {isJoined ? (
-                            <Users size={14} />
-                          ) : (
-                            <PendingIcon size={14} />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
-                            {e}
-                          </div>
-                          <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">
-                            {isJoined ? t("statusJoined") : t("statusPending")}
-                          </div>
-                        </div>
-                        {isOwner && (
-                          <button
-                            onClick={() => onRemoveInvite(e)}
-                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                          >
-                            <CloseIcon size={14} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -937,7 +719,14 @@ const App: React.FC = () => {
     user &&
     currentTrip &&
     (currentTrip.user_id === user.id || !currentTrip.user_id);
-  const isGuest = user && currentTrip && currentTrip.user_id !== user.id;
+  const isGuest = useMemo(() => {
+    if (!user || !currentTrip) return true;
+    const isOwner = currentTrip.user_id === user.id || !currentTrip.user_id;
+    const isAllowed = currentTrip.allowed_emails?.some(
+      (e) => e.toLowerCase() === user.email.toLowerCase()
+    );
+    return !(isOwner || isAllowed);
+  }, [user, currentTrip]);
   const isPricePending = useMemo(() => {
     if (!currentTrip || !user) return false;
     const myFlight = currentTrip.flights?.find((f) => f.user_id === user.id);
@@ -968,6 +757,18 @@ const App: React.FC = () => {
 
   const updateCurrentTrip = (updatedTrip: Trip, action?: string, payload?: any) => {
     if (!user) return;
+
+    // Snapshot current trips state before we apply the update
+    const previousTrips = [...trips];
+
+    // Handle dummy action for triggering global notifications
+    if (action === "SHOW_ERROR_TOAST") {
+       setNotification({
+         message: typeof payload === "string" ? payload : (translations[language].errorTitle || "Error occurred"),
+         type: "error",
+       });
+       return;
+    }
     
     // Clear any pending save immediately to prevent race conditions
     if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
@@ -983,12 +784,30 @@ const App: React.FC = () => {
           .then(() => {
               activeChannelRef.current?.send({ type: 'broadcast', event: 'EXPENSE_DELETED', payload: { id: payload } });
           })
-          .catch(err => console.error("[App] Delete expense failed:", err));
+          .catch(err => {
+              console.error("[App] Delete expense failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to delete expense",
+                type: "error",
+              });
+          });
        return; 
     }
 
-    // Itinerary Delete is handled in component, just skip save
-    if (action === "DELETE_ITINERARY_ITEM") {
+    // Handle Itinerary item deletion centrally to support revert
+    if (action === "DELETE_ITINERARY_ITEM" && payload) {
+       console.log("[App] Handling DELETE_ITINERARY_ITEM for:", payload);
+       const ids = Array.isArray(payload) ? payload : [payload];
+       Promise.all(ids.map(id => deleteItineraryItem(id, updatedTrip.id)))
+          .catch(err => {
+              console.error("[App] Delete itinerary items failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to delete itinerary items",
+                type: "error",
+              });
+          });
        return;
     }
 
@@ -999,17 +818,28 @@ const App: React.FC = () => {
     ];
     const delay = action && immediateActions.includes(action) ? 0 : 2000;
 
-    saveTimeoutRef.current = window.setTimeout(async () => {
+    const performSave = async () => {
       setIsSyncing(true);
       try {
         await saveTrip(updatedTrip, user.id);
       } catch (err) {
         console.error("Save failed:", err);
+        setTrips(previousTrips);
+        setNotification({
+          message: translations[language].errorTitle || "Sync error: Failed to save changes",
+          type: "error",
+        });
       } finally {
         setIsSyncing(false);
         saveTimeoutRef.current = null;
       }
-    }, 600);
+    };
+
+    if (delay === 0) {
+      performSave();
+    } else {
+      saveTimeoutRef.current = window.setTimeout(performSave, 600);
+    }
   };
 
 
@@ -1047,6 +877,11 @@ const App: React.FC = () => {
       await saveTrip(updatedTrip, user.id);
     } catch (e) {
       console.error("Invite failed", e);
+      // TODO: [Error Handling] Catch invitation/database failure and trigger Toast notification
+      setNotification({
+        message: translations[language].errorTitle || "Invite failed",
+        type: "error",
+      });
       // Revert on failure
       setTrips((prev) =>
         prev.map((t) => (t.id === currentTrip.id ? currentTrip : t))
@@ -1893,7 +1728,7 @@ const App: React.FC = () => {
                         </div>
                         <Clock className="absolute -right-4 -bottom-4 text-slate-100 dark:text-slate-700 w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
                       </div>
-                      {!isGuest && (
+                      {isCreator && (
                         <button
                           onClick={handleDeleteTrip}
                           className="h-16 flex items-center justify-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-white dark:bg-slate-800 border border-red-50 dark:border-red-900/30 hover:bg-red-50 rounded-3xl transition-all shadow-sm"
@@ -1905,34 +1740,45 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-              {activeTab === "itinerary" && (
-                <Itinerary
-                  trip={currentTrip}
-                  onUpdate={updateCurrentTrip}
-                  isGuest={isGuest}
-                />
-              )}
-              {activeTab === "checklist" && (
-                <Checklist
-                  trip={currentTrip}
-                  onUpdate={updateCurrentTrip}
-                  isGuest={isGuest}
-                />
-              )}
-              {activeTab === "expenses" && (
-                <Expenses
-                  trip={currentTrip}
-                  onUpdate={updateCurrentTrip}
-                  isGuest={isGuest}
-                />
-              )}
-              {activeTab === "flights" && (
-                <FlightManager
-                  trip={currentTrip}
-                  onUpdate={updateCurrentTrip}
-                  isGuest={isGuest}
-                />
-              )}
+              {/* TODO: [Optimized] Wrap lazy-loaded components in Suspense and pass down pre-fetched currentUser prop */}
+              <Suspense fallback={
+                <div className="flex items-center justify-center p-20">
+                  <Loader2 className="animate-spin text-primary w-10 h-10" />
+                </div>
+              }>
+                {activeTab === "itinerary" && (
+                  <Itinerary
+                    trip={currentTrip}
+                    currentUser={user!}
+                    onUpdate={updateCurrentTrip}
+                    isGuest={isGuest}
+                  />
+                )}
+                {activeTab === "checklist" && (
+                  <Checklist
+                    trip={currentTrip}
+                    currentUser={user!}
+                    onUpdate={updateCurrentTrip}
+                    isGuest={isGuest}
+                  />
+                )}
+                {activeTab === "expenses" && (
+                  <Expenses
+                    trip={currentTrip}
+                    currentUser={user!}
+                    onUpdate={updateCurrentTrip}
+                    isGuest={isGuest}
+                  />
+                )}
+                {activeTab === "flights" && (
+                  <FlightManager
+                    trip={currentTrip}
+                    currentUser={user!}
+                    onUpdate={updateCurrentTrip}
+                    isGuest={isGuest}
+                  />
+                )}
+              </Suspense>
             </main>
             {isShareModalOpen && user && !isGuest && (
               <ShareModal

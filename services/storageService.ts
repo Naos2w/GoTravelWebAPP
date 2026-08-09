@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import {
   Trip,
   ChecklistItem,
@@ -11,11 +11,10 @@ import {
 } from "../types";
 
 const SUPABASE_URL =
-  process.env.SUPABASE_URL || "https://placeholder-project.supabase.co";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "placeholder-key";
+  import.meta.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
 
-// Casting to any to avoid TypeScript errors when using Supabase v2 auth methods
-export const supabase: any = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const isValidUUID = (id: string) => {
   const uuidRegex =
@@ -30,7 +29,66 @@ const formatDateStr = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-const transformTripRow = (row: any): Trip => {
+interface DbTripRow {
+  id: string;
+  user_id: string;
+  name: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  allowed_emails?: string[];
+  trip_collaborators?: {
+    user_id: string;
+    email?: string;
+    role: string;
+  }[];
+  flights?: {
+    id: string;
+    user_id: string;
+    traveler_name: string;
+    outbound: any;
+    inbound?: any;
+    price: number;
+    currency: Currency;
+    cabin_class: string;
+    baggage: any;
+    budget?: number;
+  }[];
+  checklist_items?: {
+    id: string;
+    user_id: string;
+    text: string;
+    is_completed: boolean;
+    category: ChecklistItem["category"];
+  }[];
+  expenses?: {
+    id: string;
+    user_id: string;
+    user_name: string;
+    amount: string | number;
+    currency: Currency;
+    category: Expense["category"];
+    date: string;
+    note: string;
+    exchange_rate: string | number;
+    created_at?: string;
+  }[];
+  itinerary_items?: {
+    id: string;
+    trip_id: string;
+    user_id: string;
+    time: string;
+    place_name: string;
+    lat?: number;
+    lng?: number;
+    note?: string;
+    type: "Place" | "Transport" | "Food";
+    transport_type?: any;
+    date: string;
+  }[];
+}
+
+const transformTripRow = (row: DbTripRow): Trip => {
   const start = new Date(row.start_date + "T00:00:00");
   const end = new Date(row.end_date + "T00:00:00");
   const diffTime = Math.abs(end.getTime() - start.getTime());
@@ -111,12 +169,14 @@ const transformTripRow = (row: any): Trip => {
       id: ex.id,
       user_id: ex.user_id,
       user_name: ex.user_name,
-      amount: parseFloat(ex.amount),
+      // TODO: [Type Safety] Prevent parseFloat crash if amount is already a parsed number from DB
+      amount: typeof ex.amount === "string" ? parseFloat(ex.amount) : ex.amount,
       currency: ex.currency,
       category: ex.category,
       date: ex.date,
       note: ex.note,
-      exchangeRate: parseFloat(ex.exchange_rate),
+      // TODO: [Type Safety] Prevent parseFloat crash if exchange_rate is already a parsed number from DB
+      exchangeRate: typeof ex.exchange_rate === "string" ? parseFloat(ex.exchange_rate) : ex.exchange_rate,
       createdAt: ex.created_at,
     })),
     itinerary,
@@ -129,72 +189,74 @@ export const joinTrip = async (
   email?: string,
   role: string = "editor"
 ): Promise<void> => {
-  try {
-    // 1. Upsert collaborator status (mark as joined)
-    const { error: joinError } = await supabase
-      .from("trip_collaborators")
-      .upsert(
-        {
-          trip_id: tripId,
-          user_id: userId,
-          role: role,
-          email: email?.toLowerCase(),
-        },
-        { onConflict: "trip_id,user_id" }
-      );
+  // 1. Upsert collaborator status (mark as joined)
+  const { error: joinError } = await supabase
+    .from("trip_collaborators")
+    .upsert(
+      {
+        trip_id: tripId,
+        user_id: userId,
+        role: role,
+        email: email?.toLowerCase(),
+      },
+      { onConflict: "trip_id,user_id" }
+    );
 
-    if (joinError) {
-       console.error("Join error (detailed):", joinError.message, joinError.details, joinError.hint);
-    } else {
-       console.log("Join successful for user:", userId);
-    }
-
-    // 2. Ensure checklist items exist
-    await ensureChecklistItems(tripId, userId);
-  } catch (e) {
-    console.error("Failed to join trip correctly:", e);
+  if (joinError) {
+    console.error("Join error (detailed):", joinError.message, joinError.details, joinError.hint);
+    // TODO: [Error Handling] Propagate database error up to the caller to display in UI
+    throw joinError;
+  } else {
+    console.log("Join successful for user:", userId);
   }
+
+  // 2. Ensure checklist items exist
+  await ensureChecklistItems(tripId, userId);
 };
 
 export const ensureChecklistItems = async (
   tripId: string,
   userId: string
 ): Promise<void> => {
-  try {
-    // Check if this user already has checklist items for this trip
-    const { count, error: countError } = await supabase
+  // Check if this user already has checklist items for this trip
+  const { count, error: countError } = await supabase
+    .from("checklist_items")
+    .select("*", { count: "exact", head: true })
+    .eq("trip_id", tripId)
+    .eq("user_id", userId);
+
+  if (countError) {
+    console.error("Error checking checklist items count:", countError);
+    // TODO: [Error Handling] Propagate DB count error to the UI
+    throw countError;
+  }
+
+  // If no items found, insert defaults specifically for this user
+  if (count === null || count === 0) {
+    const defaultItems = [
+      { text: "Passport & Visa", category: "Documents" },
+      { text: "Phone Charger", category: "Gear" },
+      { text: "Clothes", category: "Clothing" },
+      { text: "Toothbrush", category: "Toiletries" },
+      { text: "Cash / Credit Cards", category: "Other" },
+    ];
+
+    const payload = defaultItems.map((item) => ({
+      trip_id: tripId,
+      user_id: userId,
+      text: item.text,
+      category: item.category,
+      is_completed: false,
+    }));
+
+    const { error: insertError } = await supabase
       .from("checklist_items")
-      .select("*", { count: "exact", head: true })
-      .eq("trip_id", tripId)
-      .eq("user_id", userId);
-
-    // If no items found, insert defaults specifically for this user
-    if (!countError && (count === null || count === 0)) {
-      const defaultItems = [
-        { text: "Passport & Visa", category: "Documents" },
-        { text: "Phone Charger", category: "Gear" },
-        { text: "Clothes", category: "Clothing" },
-        { text: "Toothbrush", category: "Toiletries" },
-        { text: "Cash / Credit Cards", category: "Other" },
-      ];
-
-      const payload = defaultItems.map((item) => ({
-        // id: crypto.randomUUID(), // Let DB default gen_random_uuid() handle it to be safe, or generate new one
-        trip_id: tripId,
-        user_id: userId,
-        text: item.text,
-        category: item.category,
-        is_completed: false,
-      }));
-
-      const { error: insertError } = await supabase
-        .from("checklist_items")
-        .insert(payload);
-      if (insertError)
-        console.error("Auto checklist init failed:", insertError);
+      .insert(payload);
+    if (insertError) {
+      console.error("Auto checklist init failed:", insertError);
+      // TODO: [Error Handling] Propagate checklist insert error to the UI
+      throw insertError;
     }
-  } catch (err) {
-    console.error("Error ensuring checklist items:", err);
   }
 };
 
@@ -374,14 +436,20 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
     const { error: cErr } = await supabase
       .from("checklist_items")
       .upsert(checkPayloads);
-    if (cErr) console.error("Failed to upsert checklist:", cErr);
+    if (cErr) {
+      console.error("Failed to upsert checklist:", cErr);
+      // TODO: [Error Handling] Propagate database error to UI instead of silently eating it
+      throw cErr;
+    }
   }
 
   // 2. Itinerary Items
-  if (trip.itinerary && trip.itinerary.length > 0) {
+  if (trip.itinerary) {
     const itineraryPayloads: any[] = [];
+    const keepItineraryIds = new Set<string>();
     trip.itinerary.forEach((day) => {
       day.items.forEach((item) => {
+        keepItineraryIds.add(item.id);
         itineraryPayloads.push({
           id: item.id,
           trip_id: trip.id,
@@ -397,29 +465,87 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
         });
       });
     });
+
+    try {
+      const { data: dbItems, error: fetchErr } = await supabase
+        .from("itinerary_items")
+        .select("id")
+        .eq("trip_id", trip.id);
+
+      if (!fetchErr && dbItems) {
+        const dbIds = dbItems.map((it: any) => it.id);
+        const toDeleteIds = dbIds.filter((id: string) => !keepItineraryIds.has(id));
+        if (toDeleteIds.length > 0) {
+          const { error: deleteErr } = await supabase
+            .from("itinerary_items")
+            .delete()
+            .in("id", toDeleteIds);
+          if (deleteErr) {
+            console.error("Failed to delete stale itinerary items:", deleteErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stale itinerary cleanup query failed:", err);
+    }
+
     if (itineraryPayloads.length > 0) {
       const { error: iErr } = await supabase.from("itinerary_items").upsert(itineraryPayloads);
-      if (iErr) console.error("Failed to upsert itinerary:", iErr);
+      if (iErr) {
+        console.error("Failed to upsert itinerary:", iErr);
+        // TODO: [Error Handling] Propagate database error to UI
+        throw iErr;
+      }
     }
   }
 
   // 3. Flights
-  if (trip.flights && trip.flights.length > 0) {
-    const flightPayloads = trip.flights.map((f) => ({
-      id: f.id,
-      trip_id: trip.id,
-      user_id: f.user_id || userId,
-      traveler_name: f.traveler_name,
-      outbound: f.outbound,
-      inbound: f.inbound,
-      price: f.price || 0,
-      currency: f.currency,
-      cabin_class: f.cabinClass,
-      baggage: f.baggage,
-      budget: f.budget || 0,
-    }));
-    const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
-    if (fErr) console.error("Failed to upsert flights:", fErr);
+  if (trip.flights) {
+    const keepFlightIds = new Set(trip.flights.map((f) => f.id));
+    try {
+      const { data: dbFlights, error: fetchFErr } = await supabase
+        .from("flights")
+        .select("id")
+        .eq("trip_id", trip.id);
+
+      if (!fetchFErr && dbFlights) {
+        const dbFlightIds = dbFlights.map((f: any) => f.id);
+        const toDeleteFlightIds = dbFlightIds.filter((id: string) => !keepFlightIds.has(id));
+        if (toDeleteFlightIds.length > 0) {
+          const { error: deleteFErr } = await supabase
+            .from("flights")
+            .delete()
+            .in("id", toDeleteFlightIds);
+          if (deleteFErr) {
+            console.error("Failed to delete stale flights:", deleteFErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stale flights cleanup query failed:", err);
+    }
+
+    if (trip.flights.length > 0) {
+      const flightPayloads = trip.flights.map((f) => ({
+        id: f.id,
+        trip_id: trip.id,
+        user_id: f.user_id || userId,
+        traveler_name: f.traveler_name,
+        outbound: f.outbound,
+        inbound: f.inbound,
+        price: f.price || 0,
+        currency: f.currency,
+        cabin_class: f.cabinClass,
+        baggage: f.baggage,
+        budget: f.budget || 0,
+      }));
+      const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
+      if (fErr) {
+        console.error("Failed to upsert flights:", fErr);
+        // TODO: [Error Handling] Propagate database error to UI
+        throw fErr;
+      }
+    }
   }
 
   // 4. Expenses
@@ -437,7 +563,11 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
       exchange_rate: e.exchangeRate,
     }));
     const { error: eErr } = await supabase.from("expenses").upsert(expensePayloads);
-    if (eErr) console.error("Failed to upsert expenses:", eErr);
+    if (eErr) {
+      console.error("Failed to upsert expenses:", eErr);
+      // TODO: [Error Handling] Propagate database error to UI
+      throw eErr;
+    }
   }
 
   // 4. Trip Meta (Last)
@@ -545,7 +675,11 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
       budget: f.budget || 0,
     }));
     const { error: fErr } = await supabase.from("flights").insert(flightPayloads);
-    if (fErr) console.error("Failed to insert flights:", fErr);
+    if (fErr) {
+      console.error("Failed to insert flights:", fErr);
+      // TODO: [Error Handling] Propagate database error to UI
+      throw fErr;
+    }
   }
 
   // 3. Save Checklist
@@ -561,7 +695,11 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
     const { error: cErr } = await supabase
       .from("checklist_items")
       .insert(checkPayloads);
-    if (cErr) console.error("Failed to insert checklist:", cErr);
+    if (cErr) {
+      console.error("Failed to insert checklist:", cErr);
+      // TODO: [Error Handling] Propagate database error to UI
+      throw cErr;
+    }
   }
 
   // 4. Save Itinerary Items
@@ -586,7 +724,11 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
     });
     if (itineraryPayloads.length > 0) {
       const { error: iErr } = await supabase.from("itinerary_items").insert(itineraryPayloads);
-      if (iErr) console.error("Failed to insert itinerary:", iErr);
+      if (iErr) {
+        console.error("Failed to insert itinerary:", iErr);
+        // TODO: [Error Handling] Propagate database error to UI
+        throw iErr;
+      }
     }
   }
 
@@ -605,6 +747,10 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
       exchange_rate: e.exchangeRate,
     }));
     const { error: eErr } = await supabase.from("expenses").insert(expensePayloads);
-    if (eErr) console.error("Failed to insert expenses:", eErr);
+    if (eErr) {
+      console.error("Failed to insert expenses:", eErr);
+      // TODO: [Error Handling] Propagate database error to UI
+      throw eErr;
+    }
   }
 };

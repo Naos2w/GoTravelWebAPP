@@ -8,8 +8,10 @@ import {
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase, deleteChecklistItem } from '../services/storageService';
 
+// TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
+  currentUser: User;
   onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
@@ -22,9 +24,8 @@ const CATEGORY_ICONS: Record<string, any> = {
   Other: Tag
 };
 
-export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
+export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [newItemText, setNewItemText] = useState('');
   const [category, setCategory] = useState<ChecklistItem['category']>('Other');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -35,19 +36,6 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
     Toiletries: true,
     Other: true
   });
-
-  useEffect(() => {
-     supabase.auth.getUser().then(({data}) => {
-       if (data.user) {
-         setCurrentUser({
-            id: data.user.id,
-            name: data.user.user_metadata.full_name,
-            email: data.user.email!,
-            picture: data.user.user_metadata.avatar_url
-         });
-       }
-     });
-  }, []);
 
   const getCatName = (cat: string) => {
     switch(cat) {
@@ -113,18 +101,21 @@ export const Checklist: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) 
   const deleteItem = async (itemId: string) => {
     // No confirmation dialog as requested
     
+    // Backup state for revert on error
+    const backup = [...optimisticChecklist];
+
     // Update local optimistic state first
     const updatedList = optimisticChecklist.filter(i => i.id !== itemId);
     setOptimisticChecklist(updatedList);
 
     // Delete from server directly
-    // We don't call onUpdate here because saveTrip (upsert) doesn't handle deletions.
-    // The real-time subscription in App.tsx will catch the DELETE event and refresh the trip.
     try {
       await deleteChecklistItem(itemId, trip.id);
     } catch (e) {
       console.error("Failed to delete item", e);
-      // Optional: Revert optimistic update on error
+      // Revert optimistic update on error
+      setOptimisticChecklist(backup);
+      onUpdate(trip, "SHOW_ERROR_TOAST", t("errorTitle") || "Failed to delete checklist item");
     }
   };
 

@@ -55,6 +55,7 @@ export interface FlightSegment {
   gate?: string;
   status?: string;
   baggage?: BaggageInfo;
+  segments?: FlightSegment[];
 }
 
 export interface FlightInfo {

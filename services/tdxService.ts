@@ -8,8 +8,8 @@ let tokenExpiry: number | null = null;
 const airlineCache = new Map<string, {zh: string, en: string}>();
 
 async function getTdxToken(): Promise<string | null> {
-  const clientId = process.env.TDX_CLIENT_ID;
-  const clientSecret = process.env.TDX_CLIENT_SECRET;
+  const clientId = import.meta.env.VITE_TDX_CLIENT_ID;
+  const clientSecret = import.meta.env.VITE_TDX_CLIENT_SECRET;
   
   if (!clientId || !clientSecret) return null;
 
@@ -73,14 +73,132 @@ async function fetchAirlineName(airlineID: string, token: string): Promise<{zh: 
   return { zh: airlineID, en: airlineID };
 }
 
+export async function fetchAviationstackFlights(
+  origin: string,
+  destination: string,
+  date: string,
+  flightNumber?: string
+): Promise<FlightSegment[]> {
+  const accessKey = import.meta.env.VITE_AVIATIONSTACK_ACCESS_KEY || "092fc341d83894107f3ee1a229c65fa2";
+  if (!accessKey) {
+    console.warn("Aviationstack Access Key not configured.");
+    return [];
+  }
+
+  try {
+    let url = `https://api.aviationstack.com/v1/flights?access_key=${accessKey}`;
+    
+    if (flightNumber && flightNumber.trim()) {
+      url += `&flight_iata=${encodeURIComponent(flightNumber.trim().toUpperCase())}`;
+    } else if (origin && destination) {
+      url += `&dep_iata=${encodeURIComponent(origin.trim().toUpperCase())}&arr_iata=${encodeURIComponent(destination.trim().toUpperCase())}`;
+    } else {
+      return [];
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Aviationstack API Request failed: ${response.status}`);
+
+    const data = await response.json();
+    if (!data || !Array.isArray(data.data)) return [];
+
+    const mapped = data.data.map((item: any) => {
+      const depScheduled = item.departure?.scheduled || '';
+      const arrScheduled = item.arrival?.scheduled || '';
+      
+      const depTimePart = depScheduled.includes('T') ? depScheduled.split('T')[1] : '00:00:00';
+      const arrTimePart = arrScheduled.includes('T') ? arrScheduled.split('T')[1] : '00:00:00';
+      
+      const depTime = `${date}T${depTimePart.substring(0, 5)}`;
+      const arrTime = `${date}T${arrTimePart.substring(0, 5)}`;
+
+      const airlineName = item.airline?.name || item.airline?.iata || item.airline?.icao || '';
+      const flightNo = item.flight?.iata || (item.airline?.iata && item.flight?.number ? `${item.airline.iata}${item.flight.number}` : item.flight?.number || '');
+
+      return {
+        airline: airlineName,
+        airlineID: item.airline?.iata || '',
+        airlineNameZh: airlineName,
+        airlineNameEn: airlineName,
+        flightNumber: flightNo,
+        departureTime: depTime,
+        arrivalTime: arrTime,
+        departureAirport: item.departure?.iata || origin,
+        arrivalAirport: item.arrival?.iata || destination,
+        terminal: item.departure?.terminal || '',
+        gate: item.departure?.gate || '',
+        status: item.flight_status || 'scheduled',
+        baggage: {
+          carryOn: { count: 1, weight: '' },
+          checked: { count: 0, weight: '' }
+        }
+      };
+    }).filter((f: FlightSegment) => {
+      let matches = true;
+      if (origin) matches = matches && f.departureAirport.toUpperCase() === origin.toUpperCase();
+      if (destination) matches = matches && f.arrivalAirport.toUpperCase() === destination.toUpperCase();
+      if (flightNumber) {
+        const cleanF = f.flightNumber.toUpperCase().replace(/\s+/g, '');
+        const cleanSearch = flightNumber.toUpperCase().replace(/\s+/g, '');
+        matches = matches && cleanF === cleanSearch;
+      }
+      return matches;
+    });
+
+    const uniqueSegments: FlightSegment[] = [];
+    const seenSignatures = new Set<string>();
+    for (const f of mapped) {
+      const signature = `${f.flightNumber}-${f.departureAirport}-${f.arrivalAirport}-${f.departureTime}-${f.arrivalTime}`;
+      if (!seenSignatures.has(signature)) {
+        seenSignatures.add(signature);
+        uniqueSegments.push(f);
+      }
+    }
+    return uniqueSegments;
+  } catch (e) {
+    console.error("Aviationstack Data Fetch Error:", e);
+    return [];
+  }
+}
+
+const TAIWAN_AIRPORTS = new Set([
+  'TPE', 'KHH', 'TSA', 'RMQ', 'TNN', 'HUN', 'TTT', 'CYI', 'HSZ', 'PIF', 
+  'MZG', 'KNH', 'MFK', 'LZN', 'GNI', 'KYD', 'WOT', 'CMJ'
+]);
+
+function parseTdxTime(dateStr: string, timeStr: string): string {
+  if (!timeStr) return `${dateStr}T00:00`;
+  const match = timeStr.match(/^(\d{2}:\d{2})(?:\+(\d+))?$/);
+  if (!match) return `${dateStr}T${timeStr}`;
+  
+  const [_, time, offsetDays] = match;
+  if (!offsetDays) return `${dateStr}T${time}`;
+  
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + parseInt(offsetDays, 10));
+  
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dateVal = String(d.getDate()).padStart(2, '0');
+  
+  return `${y}-${m}-${dateVal}T${time}`;
+}
+
 export async function fetchTdxFlights(
   origin: string,
   destination: string,
   date: string,
   flightNumber?: string
 ): Promise<FlightSegment[]> {
+  // If the flight departs from a foreign airport, bypass TDX and query Aviationstack directly to avoid TDX UTC departure time shift bugs.
+  if (!TAIWAN_AIRPORTS.has(origin.toUpperCase())) {
+    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+  }
+
   const token = await getTdxToken();
-  if (!token) return [];
+  if (!token) {
+    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+  }
 
   try {
     let filter = `DepartureAirportID eq '${origin}' and ArrivalAirportID eq '${destination}' and ScheduleStartDate le ${date} and ScheduleEndDate ge ${date}`;
@@ -102,14 +220,16 @@ export async function fetchTdxFlights(
     if (!response.ok) throw new Error(`TDX API Request failed: ${response.status}`);
 
     const data = await response.json();
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data) || data.length === 0) {
+      return fetchAviationstackFlights(origin, destination, date, flightNumber);
+    }
 
     const uniqueAirlines = Array.from(new Set(data.map((item: any) => item.AirlineID)));
     await Promise.all(uniqueAirlines.map(id => fetchAirlineName(id, token)));
 
     return data.map((item: any) => {
-      const depTime = `${date}T${item.DepartureTime}`;
-      const arrTime = `${date}T${item.ArrivalTime}`;
+      const depTime = parseTdxTime(date, item.DepartureTime);
+      const arrTime = parseTdxTime(date, item.ArrivalTime);
       const names = airlineCache.get(item.AirlineID) || { zh: item.AirlineID, en: item.AirlineID };
 
       return {
@@ -132,7 +252,7 @@ export async function fetchTdxFlights(
       };
     });
   } catch (e) {
-    console.error("TDX Data Fetch Error:", e);
-    return [];
+    console.error("TDX Data Fetch Error, falling back to Aviationstack:", e);
+    return fetchAviationstackFlights(origin, destination, date, flightNumber);
   }
 }

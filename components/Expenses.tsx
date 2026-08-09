@@ -9,39 +9,45 @@ import {
 import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { supabase } from '../services/storageService';
+import { CATEGORY_UI, getCategoryName } from './ExpenseCategories';
 
+// TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
+  currentUser: User;
   onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
 
-export const CATEGORY_UI: Record<string, { icon: any, color: string, hexColor: string, bgColor: string, darkBgColor: string, textColor: string }> = {
-  Flight: { icon: Plane, color: 'bg-sky-500', hexColor: '#0ea5e9', bgColor: 'bg-sky-50', darkBgColor: 'dark:bg-sky-900', textColor: 'text-sky-600' },
-  Food: { icon: Coffee, color: 'bg-orange-500', hexColor: '#f97316', bgColor: 'bg-orange-50', darkBgColor: 'dark:bg-orange-900', textColor: 'text-orange-600' },
-  Accommodation: { icon: Home, color: 'bg-indigo-500', hexColor: '#6366f1', bgColor: 'bg-indigo-50', darkBgColor: 'dark:bg-indigo-900', textColor: 'text-indigo-600' },
-  Transport: { icon: Car, color: 'bg-teal-500', hexColor: '#14b8a6', bgColor: 'bg-teal-50', darkBgColor: 'dark:bg-teal-900', textColor: 'text-teal-600' },
-  Tickets: { icon: Ticket, color: 'bg-emerald-500', hexColor: '#10b981', bgColor: 'bg-emerald-50', darkBgColor: 'dark:bg-emerald-900', textColor: 'text-emerald-600' },
-  Shopping: { icon: ShoppingBag, color: 'bg-pink-500', hexColor: '#ec4899', bgColor: 'bg-pink-50', darkBgColor: 'dark:bg-pink-900', textColor: 'text-pink-600' },
-  Other: { icon: Tag, color: 'bg-slate-400', hexColor: '#94a3b8', bgColor: 'bg-slate-100', darkBgColor: 'dark:bg-slate-800', textColor: 'text-slate-500' }
-};
 
-export const getCategoryName = (cat: string, t: (key: string) => string) => {
-  switch(cat) {
-      case 'Flight': return t('catFlight');
-      case 'Food': return t('catFood');
-      case 'Accommodation': return t('catAccom');
-      case 'Transport': return t('catTransport');
-      case 'Tickets': return t('catTickets');
-      case 'Shopping': return t('catShopping');
-      case 'Other': return t('catOther');
-      default: return cat;
-  }
-};
 
 type SortType = 'date-desc' | 'date-asc' | 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
 
-const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass = "", variant = "filter", isError = false }: any) => {
+interface SelectOption<T = string> {
+  value: T;
+  label: string;
+}
+
+// TODO: [Type Safety] Introduce interface definitions and convert CustomFilterSelect to generic type to avoid using 'any'
+interface CustomFilterSelectProps<T = string> {
+  value: T;
+  onChange: (val: T) => void;
+  options: SelectOption<T>[];
+  icon: React.ComponentType<{ size: number; className?: string }>;
+  wrapperClass?: string;
+  variant?: "filter" | "form";
+  isError?: boolean;
+}
+
+const CustomFilterSelect = <T extends string>({
+  value,
+  onChange,
+  options,
+  icon: Icon,
+  wrapperClass = "",
+  variant = "filter",
+  isError = false,
+}: CustomFilterSelectProps<T>) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
   
@@ -57,7 +63,7 @@ const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const selectedOption = options.find((o:any) => o.value === value) || options[0];
+  const selectedOption = options.find((o) => o.value === value) || options[0];
 
   return (
     <div className={`relative ${wrapperClass} shrink-0`} ref={selectRef}>
@@ -76,7 +82,7 @@ const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass
 
       {isOpen && (
         <div className="absolute top-full mt-2 w-max min-w-[140px] max-w-[220px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-100 dark:border-slate-800/80 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 custom-thin-scrollbar p-1.5">
-          {options.map((opt:any) => (
+          {options.map((opt) => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
@@ -92,11 +98,10 @@ const CustomFilterSelect = ({ value, onChange, options, icon: Icon, wrapperClass
   );
 };
 
-export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) => {
+export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
   const formAnchorRef = useRef<HTMLDivElement>(null);
   
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Expense['category']>('Food');
   const [currency, setCurrency] = useState<Currency>(Currency.TWD);
@@ -113,19 +118,6 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
 
   // Helper to translate categories
   const getCatName = (cat: string) => getCategoryName(cat, t);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({data}) => {
-       if (data.user) {
-          setCurrentUser({
-             id: data.user.id,
-             name: data.user.user_metadata.full_name,
-             email: data.user.email!,
-             picture: data.user.user_metadata.avatar_url
-          });
-       }
-    });
-  }, []);
 
   const members = useMemo(() => {
     const userMap = new Map<string, string>();
@@ -235,7 +227,9 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
       category: 'Flight',
       date: trip.startDate, // Default to trip start date
       createdAt: new Date().toISOString(), // Just for sorting
-      note: `${t('flight')}: ${f.outbound.flightNumber}`,
+      note: f.inbound?.flightNumber 
+        ? `${t('flight')}: ${f.outbound.flightNumber} ⇄ ${f.inbound.flightNumber}` 
+        : `${t('flight')}: ${f.outbound.flightNumber}`,
       exchangeRate: rates[f.currency] || 1,
       isFlight: true // Helper flag
     } as any));
@@ -429,7 +423,7 @@ export const Expenses: React.FC<Props> = ({ trip, onUpdate, isGuest = false }) =
               <CustomFilterSelect 
                 icon={ArrowUpDown} 
                 value={sortOrder} 
-                onChange={setSortOrder} 
+                onChange={(val) => setSortOrder(val)} 
                 options={[
                   { value: 'date-desc', label: t('sortDateDesc') },
                   { value: 'date-asc', label: t('sortDateAsc') },

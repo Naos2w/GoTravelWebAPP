@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "taste-skill": {
+      "source": "CoWork-OS/CoWork-OS",
+      "sourceType": "github",
+      "skillPath": "resources/skills/taste-skill/SKILL.md",
+      "computedHash": "3290ade6b120734860d8bd48ca1390163e1ccc884c953e56f7140bf26a5d4c89"
+    },
+    "ui-ux-pro-max": {
+      "source": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ui-ux-pro-max/SKILL.md",
+      "computedHash": "6337038fe1fe6bbe1b9f252ab678ee575859190bab6f0f246f4061824eb40875"
+    }
+  }
+}
