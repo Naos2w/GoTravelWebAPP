@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
 
 // Remove default marker icon logic since we'll use custom DivIcons
-import { MapPin, Car, Search, Loader2 } from 'lucide-react';
+import { MapPin, Car, Search, Loader2, Footprints, TrainFront, Bike, Plane, Route } from 'lucide-react';
 import { renderToString } from 'react-dom/server';
 
 interface Props {
@@ -92,14 +92,92 @@ const MapResizer = () => {
   return null;
 };
 
+const fetchLegRoute = (
+  stop1: ItineraryItem,
+  stop2: ItineraryItem,
+  mode: string
+): Promise<{
+  geometry: [number, number][];
+  duration: number;
+  distance: number;
+  mode: string;
+}> => {
+  const lat1 = Number(stop1.lat);
+  const lng1 = Number(stop1.lng);
+  const lat2 = Number(stop2.lat);
+  const lng2 = Number(stop2.lng);
+
+  if (mode === 'flight') {
+    return Promise.resolve({
+      geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
+      duration: 0,
+      distance: 0,
+      mode
+    });
+  }
+
+  return fetchOSRM(lat1, lng1, lat2, lng2, mode);
+};
+
+const fetchOSRM = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+  mode: string
+): Promise<{
+  geometry: [number, number][];
+  duration: number;
+  distance: number;
+  mode: string;
+}> => {
+  let profile = 'driving';
+  if (mode === 'walking') profile = 'foot';
+  else if (mode === 'bicycling') profile = 'bicycle';
+  
+  return fetch(`https://router.project-osrm.org/route/v1/${profile}/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`)
+    .then((res) => res.json())
+    .then((data) => {
+      if (data && data.code === 'Ok' && data.routes?.[0]) {
+        const route = data.routes[0];
+        const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]] as [number, number]);
+        return {
+          geometry,
+          duration: route.duration,
+          distance: route.distance,
+          mode
+        };
+      }
+      return {
+        geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
+        duration: 0,
+        distance: 0,
+        mode
+      };
+    })
+    .catch((err) => {
+      console.error("OSRM fetch error", err);
+      return {
+        geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
+        duration: 0,
+        distance: 0,
+        mode
+      };
+    });
+};
+
 export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick }) => {
   const { language } = useTranslation();
   const isEn = language?.startsWith('en');
 
-  const [routeInfo, setRouteInfo] = useState<{
+  const [legsRouteInfo, setLegsRouteInfo] = useState<{
     geometry: [number, number][];
-    legs: { duration: number; distance: number }[];
-  } | null>(null);
+    duration: number;
+    distance: number;
+    mode: string;
+  }[]>([]);
+
+  const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -123,23 +201,30 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
          return;
       }
 
-      // 2. Check if user pasted a Google Maps Full URL containing @lat,lng
+      // 2. Check if user pasted a Google Maps Full URL containing @lat,lng or data=!3d...!4d...
       const isGoogleUrl = searchQuery.includes('google.') && searchQuery.includes('/maps/');
-      const googleCoordsMatch = searchQuery.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-      if (isGoogleUrl && googleCoordsMatch) {
-         let name = isEn ? 'Google Maps Custom Place' : 'Google Maps 自訂地點';
-         const placeMatch = searchQuery.match(/\/place\/([^\/]+)/);
-         if (placeMatch && placeMatch[1]) {
-           try { name = decodeURIComponent(placeMatch[1].replace(/\+/g, ' ')); } catch(e) {}
-         }
+      if (isGoogleUrl) {
+         // Try to find the exact place pin coordinates in the data parameter (!3d...!4d...)
+         const dataCoordsMatch = searchQuery.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+         // Fallback to viewport camera coordinates (@...)
+         const googleCoordsMatch = searchQuery.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
          
-         setSearchResults([{
-            display_name: name,
-            lat: googleCoordsMatch[1],
-            lon: googleCoordsMatch[2],
-         }]);
-         setIsSearching(false);
-         return;
+         const match = dataCoordsMatch || googleCoordsMatch;
+         if (match) {
+            let name = isEn ? 'Google Maps Custom Place' : 'Google Maps 自訂地點';
+            const placeMatch = searchQuery.match(/\/place\/([^\/]+)/);
+            if (placeMatch && placeMatch[1]) {
+              try { name = decodeURIComponent(placeMatch[1].replace(/\+/g, ' ')); } catch(e) {}
+            }
+            
+            setSearchResults([{
+               display_name: name,
+               lat: match[1],
+               lon: match[2],
+            }]);
+            setIsSearching(false);
+            return;
+         }
       }
 
       // 2.5. Provide existing items as search results if the name matches (Exact or Partial) to save API calls
@@ -287,32 +372,56 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     bounds = L.latLngBounds(pathPositions);
   }
 
-  // Fetch routing data whenever validItems changes
+  const getLegMode = (stop1: ItineraryItem, stop2: ItineraryItem) => {
+    if (routingModeOverride !== 'auto') {
+      return routingModeOverride;
+    }
+    
+    const idx1 = items.findIndex(it => it.id === stop1.id);
+    const idx2 = items.findIndex(it => it.id === stop2.id);
+    if (idx1 === -1 || idx2 === -1) return 'driving';
+    
+    const start = Math.min(idx1, idx2);
+    const end = Math.max(idx1, idx2);
+    for (let i = start + 1; i < end; i++) {
+      if (items[i].type === 'Transport') {
+        const mode = items[i].transportType;
+        if (mode === 'Walking') return 'walking';
+        if (mode === 'Public') return 'transit';
+        if (mode === 'Car') return 'driving';
+        if (mode === 'Bicycle') return 'bicycling';
+        if (mode === 'Flight') return 'flight';
+      }
+    }
+    return 'driving';
+  };
+
+  // Fetch routing data leg-by-leg whenever validItems or routingModeOverride changes
   useEffect(() => {
     if (validItems.length < 2) {
-      setRouteInfo(null);
+      setLegsRouteInfo([]);
       return;
     }
     
-    // Construct coordinate string for OSRM: lng,lat;lng,lat...
-    const coordsStr = validItems.map(i => `${i.lng},${i.lat}`).join(';');
-    
-    fetch(`https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
-           const route = data.routes[0];
-           // GeoJSON coordinates are [lng, lat], Leaflet wants [lat, lng]
-           const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]]);
-           const legs = route.legs.map((l: any) => ({
-             duration: l.duration,
-             distance: l.distance
-           }));
-           setRouteInfo({ geometry, legs });
-        }
-      })
-      .catch(err => console.error("OSRM fetch error", err));
-  }, [JSON.stringify(pathPositions)]);
+    const fetchAllLegs = async () => {
+      const legPromises = [];
+      for (let idx = 0; idx < validItems.length - 1; idx++) {
+        const stop1 = validItems[idx];
+        const stop2 = validItems[idx + 1];
+        const mode = getLegMode(stop1, stop2);
+        legPromises.push(fetchLegRoute(stop1, stop2, mode));
+      }
+      
+      try {
+        const results = await Promise.all(legPromises);
+        setLegsRouteInfo(results);
+      } catch (err) {
+        console.error("Error fetching all legs route info", err);
+      }
+    };
+
+    fetchAllLegs();
+  }, [JSON.stringify(pathPositions), routingModeOverride]);
 
   const activeItem = validItems.find(i => i.id === activeItemId);
 
@@ -368,7 +477,53 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           </p>
         </div>
       ) : (
-      <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
+      <>
+        {/* Travel Mode Selector Overlay */}
+        <div className="absolute bottom-4 left-4 z-[1000] pointer-events-auto flex items-center gap-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-lg rounded-2xl p-1 border border-slate-100 dark:border-slate-700">
+          <button
+            type="button"
+            onClick={() => setRoutingModeOverride('auto')}
+            title={isEn ? "Auto (by Itinerary)" : "自動 (依行程)"}
+            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'auto' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+          >
+            <Route size={15} />
+          </button>
+          <div className="w-px h-5 bg-slate-100 dark:bg-slate-700" />
+          <button
+            type="button"
+            onClick={() => setRoutingModeOverride('driving')}
+            title={isEn ? "Always Driving" : "全域開車"}
+            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'driving' ? 'bg-slate-600 dark:bg-slate-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+          >
+            <Car size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoutingModeOverride('walking')}
+            title={isEn ? "Always Walking" : "全域走路"}
+            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'walking' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+          >
+            <Footprints size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoutingModeOverride('transit')}
+            title={isEn ? "Always Transit" : "全域大眾運輸"}
+            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'transit' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+          >
+            <TrainFront size={15} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setRoutingModeOverride('bicycling')}
+            title={isEn ? "Always Cycling" : "全域自行車"}
+            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'bicycling' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+          >
+            <Bike size={15} />
+          </button>
+        </div>
+
+        <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
         {/* Using a Premium, Clean Basemap (CartoDB Positron) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -378,39 +533,94 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
-        {/* Draw the connected route */}
-        {routeInfo && routeInfo.geometry.length > 1 ? (
-          <Polyline 
-            positions={routeInfo.geometry} 
-            color="#3b82f6" 
-            weight={4} 
-            opacity={0.8} 
-          />
+        {/* Draw the connected route legs */}
+        {legsRouteInfo && legsRouteInfo.length > 0 ? (
+          legsRouteInfo.map((leg, idx) => {
+            let color = '#64748B'; // Slate (Driving / default)
+            let dashArray = undefined;
+            let weight = 4;
+            let opacity = 0.8;
+
+            if (leg.mode === 'walking') {
+              color = '#F59E0B'; // Amber
+              dashArray = '5, 8'; // Dotted/dashed
+              weight = 4;
+            } else if (leg.mode === 'transit') {
+              color = '#6366F1'; // Indigo
+              dashArray = '10, 10';
+              weight = 4;
+            } else if (leg.mode === 'bicycling') {
+              color = '#10B981'; // Emerald
+              weight = 4;
+            } else if (leg.mode === 'flight') {
+              color = '#3B82F6'; // Blue
+              dashArray = '5, 10';
+              weight = 3;
+              opacity = 0.6;
+            }
+
+            return (
+              <Polyline
+                key={`leg-route-${idx}`}
+                positions={leg.geometry}
+                color={color}
+                weight={weight}
+                opacity={opacity}
+                dashArray={dashArray}
+              />
+            );
+          })
         ) : pathPositions.length > 1 ? (
           <Polyline 
             positions={pathPositions} 
-            color="#4F46E5" 
+            color="#64748B" 
             weight={3} 
             opacity={0.8} 
             dashArray="10, 10" 
-            className="animate-dash"
           />
         ) : null}
 
         {/* Draw Driving Times between stops if we have routing data */}
-        {routeInfo && validItems.length > 1 && validItems.map((item, idx) => {
+        {legsRouteInfo && legsRouteInfo.length > 0 && validItems.length > 1 && validItems.map((item, idx) => {
            if (idx === validItems.length - 1) return null;
            const nextItem = validItems[idx + 1];
-           const leg = routeInfo.legs[idx];
-           if (!leg) return null;
+           const leg = legsRouteInfo[idx];
+           if (!leg || !leg.geometry || leg.geometry.length < 2) return null;
            
-           const lat1 = Number(item.lat!);
-           const lng1 = Number(item.lng!);
-           const lat2 = Number(nextItem.lat!);
-           const lng2 = Number(nextItem.lng!);
-           const midLat = (lat1 + lat2) / 2;
-           const midLng = (lng1 + lng2) / 2;
+           // Calculate midpoint of the route geometry instead of straight line midpoint for better accuracy!
+           const midPointIdx = Math.floor(leg.geometry.length / 2);
+           const [midLat, midLng] = leg.geometry[midPointIdx];
+           
            const mins = Math.max(1, Math.round(leg.duration / 60)); // Minimum 1 min
+           if (mins === 0 && leg.mode !== 'flight') return null; // hide if 0 duration except for flight
+           
+           let modeIcon = '';
+           let modeText = isEn ? 'Drive' : '車程';
+           let bgClass = 'bg-slate-500 border-slate-400/30 text-white';
+           
+           if (leg.mode === 'walking') {
+             modeIcon = renderToString(<Footprints size={11} strokeWidth={2.5} />);
+             modeText = isEn ? 'Walk' : '步行';
+             bgClass = 'bg-amber-500 border-amber-400/30 text-white';
+           } else if (leg.mode === 'transit') {
+             modeIcon = renderToString(<TrainFront size={11} strokeWidth={2.5} />);
+             modeText = isEn ? 'Transit' : '乘車';
+             bgClass = 'bg-indigo-500 border-indigo-400/30 text-white';
+           } else if (leg.mode === 'bicycling') {
+             modeIcon = renderToString(<Bike size={11} strokeWidth={2.5} />);
+             modeText = isEn ? 'Bike' : '騎車';
+             bgClass = 'bg-emerald-500 border-emerald-400/30 text-white';
+           } else if (leg.mode === 'flight') {
+             modeIcon = renderToString(<Plane size={11} strokeWidth={2.5} />);
+             modeText = isEn ? 'Flight' : '飛行';
+             bgClass = 'bg-blue-500 border-blue-400/30 text-white';
+           } else {
+             modeIcon = renderToString(<Car size={11} strokeWidth={2.5} />);
+           }
+           
+           const displayStr = leg.mode === 'flight' 
+             ? modeText
+             : `${modeText} ${mins} ${isEn ? 'min' : '分鐘'}`;
            
            return (
              <Marker 
@@ -418,15 +628,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                position={[midLat, midLng]}
                zIndexOffset={100}
                icon={L.divIcon({
-                 html: `<div class="bg-indigo-600/95 backdrop-blur-md text-white px-2 py-1 rounded-xl shadow-[0_5px_15px_-5px_rgba(79,70,229,0.5)] border border-indigo-400/30 text-[9px] sm:text-[10px] font-black whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="text-indigo-200 group-hover/time:text-white transition-colors">
-                            ${renderToString(<Car size={11} strokeWidth={2.5} />)}
+                 html: `<div class="${bgClass} backdrop-blur-md px-2 py-1 rounded-xl shadow-lg border text-[9px] sm:text-[10px] font-black whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
+                          <div class="text-white/80 group-hover/time:text-white transition-colors">
+                            ${modeIcon}
                           </div>
-                          車程 ${mins} 分鐘
+                          ${displayStr}
                         </div>`,
                  className: 'custom-leaflet-marker z-[999]',
-                 iconSize: [80, 24],
-                 iconAnchor: [40, 12]
+                 iconSize: [85, 24],
+                 iconAnchor: [42, 12]
                })}
              />
            );
@@ -478,6 +688,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           </Marker>
         ))}
       </MapContainer>
+      </>
       )}
     </div>
   );
