@@ -46,6 +46,7 @@ import { TripForm } from "./components/TripForm";
 import { NotificationToast } from "./components/NotificationToast";
 import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
+import { LoginModal } from "./components/LoginModal";
 
 // TODO: [Optimized] Lazy load heavy components for better bundle code-splitting
 const Checklist = React.lazy(() => import("./components/Checklist").then(m => ({ default: m.Checklist })));
@@ -161,6 +162,7 @@ const App: React.FC = () => {
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -665,6 +667,28 @@ const App: React.FC = () => {
       } else {
         if (!session && !window.location.hash.includes("access_token")) {
           if (!userRef.current) {
+            // Check if there is a tripId in the URL to allow Guest Preview!
+            const params = new URLSearchParams(window.location.search);
+            const urlTripId = params.get("tripId");
+            if (urlTripId) {
+              getTripById(urlTripId)
+                .then((trip) => {
+                  if (trip) {
+                    setTrips([trip]);
+                    setCurrentTripId(urlTripId);
+                    setView("detail");
+                  } else {
+                    setView("landing");
+                  }
+                  setIsLoading(false);
+                })
+                .catch(() => {
+                  setView("landing");
+                  setIsLoading(false);
+                });
+              return;
+            }
+
             setIsLoading(false);
             setView("landing");
           }
@@ -1190,7 +1214,21 @@ const App: React.FC = () => {
   );
 
   const UserHeaderProfile = () => {
-    if (!user) return null;
+    if (!user) {
+      return (
+        <div className="flex items-center gap-2 pl-3 border-l border-black/[0.06] dark:border-white/10">
+          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            {t("guestPreview")}
+          </span>
+          <button
+            onClick={() => setIsLoginModalOpen(true)}
+            className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>{t("loginToJoin")}</span>
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center gap-2.5 pl-3 border-l border-black/[0.06] dark:border-white/10">
         <img
@@ -1414,7 +1452,7 @@ const App: React.FC = () => {
                 <button
                   onClick={handleLogin}
                   disabled={isLoggingIn}
-                  className="bg-primary text-white px-10 py-5 rounded-[24px] font-black text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center gap-3 cursor-pointer"
+                  className="bg-primary text-white px-8 py-4 sm:px-10 sm:py-5 rounded-[24px] font-black text-base sm:text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center gap-3 cursor-pointer"
                 >
                   {isLoggingIn ? (
                     <>
@@ -1422,8 +1460,23 @@ const App: React.FC = () => {
                       <span>{t("loggingIn")}</span>
                     </>
                   ) : (
-                    <span>{t("login")}</span>
+                    <>
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <span>{t("login")}</span>
+                    </>
                   )}
+                </button>
+                <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-4 sm:px-8 sm:py-5 rounded-[24px] font-bold text-base sm:text-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Mail size={20} />
+                  <span>{t("emailLogin")}</span>
                 </button>
               </div>
             </div>
@@ -1431,6 +1484,11 @@ const App: React.FC = () => {
               {t("appName")} © 2024
             </footer>
           </div>
+          <LoginModal
+            isOpen={isLoginModalOpen}
+            onClose={() => setIsLoginModalOpen(false)}
+            redirectTripId={currentTripId}
+          />
         </div>
       </LocalizationProvider>
     );
@@ -1460,10 +1518,15 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => {
-                      setView("list");
-                      setCurrentTripId(null);
+                      if (!user) {
+                        setView("landing");
+                        setCurrentTripId(null);
+                      } else {
+                        setView("list");
+                        setCurrentTripId(null);
+                      }
                     }}
-                    className="w-8 h-8 flex items-center justify-center rounded-full text-primary hover:bg-primary/10 transition-all -ml-1"
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-primary hover:bg-primary/10 transition-all -ml-1 cursor-pointer"
                   >
                     <ChevronLeft size={20} strokeWidth={2.5} />
                   </button>
@@ -1530,6 +1593,25 @@ const App: React.FC = () => {
                 </div>
               </div>
             </nav>
+
+            {!user && (
+              <div className="bg-gradient-to-r from-amber-500/10 via-primary/10 to-amber-500/5 border-b border-amber-500/20 px-4 py-2.5">
+                <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-medium">
+                    <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    <span>
+                      {t("guestBannerText")} {t("previewModeNotice")}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsLoginModalOpen(true)}
+                    className="shrink-0 bg-primary hover:bg-primary/90 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs shadow-sm hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  >
+                    {t("loginToJoin")}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
               {activeTab === "dashboard" && (
@@ -1959,6 +2041,12 @@ const App: React.FC = () => {
             )}
           </div>
         )}
+
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+          redirectTripId={currentTripId}
+        />
       </div>
     </LocalizationProvider>
   );

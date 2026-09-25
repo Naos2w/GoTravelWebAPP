@@ -11,6 +11,7 @@ import { supabase } from "../services/storageService";
 import {
   parseSupabaseUser,
   signInWithGoogle,
+  signInWithEmail,
   signOutSafely,
   consumeRedirectTripId,
   isSupabaseConfigured,
@@ -22,6 +23,7 @@ export interface AuthContextType {
   isLoggingIn: boolean;
   isConfigured: boolean;
   login: (redirectTripId?: string | null) => Promise<void>;
+  loginWithEmail: (email: string, redirectTripId?: string | null) => Promise<void>;
   logout: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   consumeRedirectTripId: () => string | null;
@@ -84,6 +86,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const loginWithEmail = async (email: string, redirectTripId?: string | null) => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    try {
+      await signInWithEmail(email, redirectTripId);
+    } catch (err) {
+      setIsLoggingIn(false);
+      throw err;
+    }
+  };
+
   const logout = async () => {
     try {
       await signOutSafely();
@@ -100,6 +113,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isLoggingIn,
         isConfigured: isSupabaseConfigured(),
         login,
+        loginWithEmail,
         logout,
         setUser,
         consumeRedirectTripId,

@@ -109,6 +109,45 @@ export const signInWithGoogle = async (redirectTripId?: string | null): Promise<
 };
 
 /**
+ * Initiates Email Magic Link (OTP) passwordless sign in.
+ * Sends a one-time sign-in link to user's email.
+ */
+export const signInWithEmail = async (
+  email: string,
+  redirectTripId?: string | null
+): Promise<void> => {
+  if (!isSupabaseConfigured()) {
+    throw new Error("SUPABASE_NOT_CONFIGURED");
+  }
+
+  const trimmedEmail = email.trim();
+  if (!trimmedEmail || !trimmedEmail.includes("@")) {
+    throw new Error("INVALID_EMAIL");
+  }
+
+  if (redirectTripId) {
+    saveRedirectTripId(redirectTripId);
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    const urlTripId = params.get("tripId");
+    if (urlTripId) {
+      saveRedirectTripId(urlTripId);
+    }
+  }
+
+  const redirectUrl = window.location.origin + window.location.pathname;
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email: trimmedEmail,
+    options: {
+      emailRedirectTo: redirectUrl,
+    },
+  });
+
+  if (error) throw error;
+};
+
+/**
  * Resilient sign-out function.
  * Even if Supabase server returns 403 Forbidden (e.g. expired or invalid token),
  * this ensures local storage tokens and local state are cleared cleanly.
