@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
 import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
+import { resolveLocationInput } from '../services/mapUrlService';
 
 // Remove default marker icon logic since we'll use custom DivIcons
 import { MapPin, Car, Search, Loader2, Footprints, TrainFront, Bike, Plane, Route } from 'lucide-react';
@@ -189,42 +190,24 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     if(!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      // 1. Check if user pasted a raw coordinate string (e.g., "35.6585, 139.7454")
-      const rawCoordsMatch = searchQuery.match(/^(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)$/);
-      if (rawCoordsMatch) {
-         setSearchResults([{
-            display_name: isEn ? 'Pasted Coordinates (Custom Place)' : '貼上的座標位置 (新增自訂地點)',
-            lat: rawCoordsMatch[1],
-            lon: rawCoordsMatch[2],
-         }]);
-         setIsSearching(false);
-         return;
-      }
+      // 1. Resolve raw coordinates or Google Maps URL using mapUrlService (prioritizing exact POI pin coordinates)
+      const resolved = resolveLocationInput(searchQuery);
+      if (resolved) {
+        let addressNotice = isEn ? 'Location from Google Maps' : '來自 Google Maps 的定位';
+        if (resolved.source === 'data_pin') {
+          addressNotice = isEn ? 'Exact Pin Location (Google Maps)' : 'Google Maps 精確標記位置';
+        } else if (resolved.source === 'raw_coords') {
+          addressNotice = isEn ? 'Pasted Coordinates' : '貼上的自訂座標';
+        }
 
-      // 2. Check if user pasted a Google Maps Full URL containing @lat,lng or data=!3d...!4d...
-      const isGoogleUrl = searchQuery.includes('google.') && searchQuery.includes('/maps/');
-      if (isGoogleUrl) {
-         // Try to find the exact place pin coordinates in the data parameter (!3d...!4d...)
-         const dataCoordsMatch = searchQuery.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-         // Fallback to viewport camera coordinates (@...)
-         const googleCoordsMatch = searchQuery.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-         
-         const match = dataCoordsMatch || googleCoordsMatch;
-         if (match) {
-            let name = isEn ? 'Google Maps Custom Place' : 'Google Maps 自訂地點';
-            const placeMatch = searchQuery.match(/\/place\/([^\/]+)/);
-            if (placeMatch && placeMatch[1]) {
-              try { name = decodeURIComponent(placeMatch[1].replace(/\+/g, ' ')); } catch(e) {}
-            }
-            
-            setSearchResults([{
-               display_name: name,
-               lat: match[1],
-               lon: match[2],
-            }]);
-            setIsSearching(false);
-            return;
-         }
+        setSearchResults([{
+          display_name: resolved.placeName,
+          address: addressNotice,
+          lat: resolved.lat,
+          lon: resolved.lng,
+        }]);
+        setIsSearching(false);
+        return;
       }
 
       // 2.5. Provide existing items as search results if the name matches (Exact or Partial) to save API calls

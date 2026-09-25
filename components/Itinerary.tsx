@@ -9,6 +9,7 @@ import {
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
+import { resolveLocationInput } from '../services/mapUrlService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -289,9 +290,19 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   // Round minutes up to nearest 5 to align with the TimePicker's 5-minute grid
   const roundTo5 = (mins: number) => Math.ceil(mins / 5) * 5;
 
-  const fetchRouteMins = async (lat1: string|number, lng1: string|number, lat2: string|number, lng2: string|number): Promise<number> => {
+  const fetchRouteMins = async (
+    lat1: string | number,
+    lng1: string | number,
+    lat2: string | number,
+    lng2: string | number,
+    transportType?: TransportType
+  ): Promise<number> => {
+    let profile = 'driving';
+    if (transportType === 'Walking') profile = 'foot';
+    else if (transportType === 'Bicycle') profile = 'bicycle';
+
     try {
-      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
+      const res = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
       const data = await res.json();
       if (data?.routes?.[0]) return roundTo5(Math.max(5, Math.round(data.routes[0].duration / 60)));
     } catch(e) {}
@@ -462,6 +473,14 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     setIsSaving(true);
     let finalItem = { ...editingItem };
     
+    // Automatically parse Google Maps URL or raw coordinates if pasted into placeName
+    const resolvedUrl = resolveLocationInput(finalItem.placeName);
+    if (resolvedUrl) {
+      finalItem.placeName = resolvedUrl.placeName;
+      finalItem.lat = resolvedUrl.lat;
+      finalItem.lng = resolvedUrl.lng;
+    }
+
     if (finalItem.type !== 'Transport') {
         // Find the original item to check if the name has changed
         const originalItem = displayItems.find(i => i.id === finalItem.id);
@@ -586,14 +605,32 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     }
   };
 
-  const handleChangeTransportType = (transportId: string, type: TransportType) => {
+  const handleChangeTransportType = async (transportId: string, type: TransportType) => {
     if (isGuest) return;
+
+    // Recalculate duration note with new transport mode profile if neighbors have coordinates
+    const idx = displayItems.findIndex(it => it.id === transportId);
+    let updatedNote: string | undefined = undefined;
+
+    if (idx > 0 && idx < displayItems.length - 1) {
+      const prev = displayItems[idx - 1];
+      const next = displayItems[idx + 1];
+      if (prev.lat != null && prev.lng != null && next.lat != null && next.lng != null && type !== 'Flight') {
+        const mins = await fetchRouteMins(prev.lat, prev.lng, next.lat, next.lng, type);
+        updatedNote = `${mins} ${language === 'en' ? 'min' : '分鐘'}`;
+      }
+    }
+
     const newItems = displayItems.map(it => 
-      it.id === transportId ? { ...it, transportType: type } : it
+      it.id === transportId ? { ...it, transportType: type, ...(updatedNote !== undefined ? { note: updatedNote } : {}) } : it
     );
     const newDays = [...days];
     newDays[selectedDayIndex] = { ...currentDay, items: newItems };
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", { id: transportId, transportType: type });
+    onUpdate(
+      { ...trip, itinerary: newDays },
+      "UPDATE_ITINERARY_ITEM",
+      { id: transportId, transportType: type, ...(updatedNote !== undefined ? { note: updatedNote } : {}) }
+    );
   };
 
   const handleInsertTransport = (index: number, type: TransportType) => {
@@ -982,7 +1019,21 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         autoFocus
                         type="text"
                         value={editingItem.placeName}
-                        onChange={e => {setEditingItem({ ...editingItem, placeName: e.target.value }); setNameError(false);}}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const resolved = resolveLocationInput(val);
+                          if (resolved) {
+                            setEditingItem({
+                              ...editingItem,
+                              placeName: resolved.placeName,
+                              lat: resolved.lat,
+                              lng: resolved.lng,
+                            });
+                          } else {
+                            setEditingItem({ ...editingItem, placeName: val });
+                          }
+                          setNameError(false);
+                        }}
                         placeholder="..."
                         className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
                       />
