@@ -26,6 +26,13 @@ import {
   supabase,
 } from "./services/storageService";
 import {
+  parseSupabaseUser,
+  signInWithGoogle,
+  signOutSafely,
+  consumeRedirectTripId,
+  isSupabaseConfigured,
+} from "./services/authService";
+import {
   useTranslation,
   LocalizationProvider,
   translations,
@@ -132,6 +139,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<"landing" | "list" | "detail">("landing");
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentTripId, setCurrentTripId] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
@@ -581,24 +589,20 @@ const App: React.FC = () => {
   }, [theme]);
 
   const handleAuthUser = async (supabaseUser: any) => {
-    setUser({
-      id: supabaseUser.id,
-      name: supabaseUser.user_metadata.full_name,
-      email: supabaseUser.email!,
-      picture: supabaseUser.user_metadata.avatar_url || "",
-    });
+    const parsedUser = parseSupabaseUser(supabaseUser);
+    setUser(parsedUser);
 
-    // Read the URL param directly here, before any state updates can clear it
+    // Read the URL param directly here, or restore from sessionStorage deep link
     const urlParams = new URLSearchParams(window.location.search);
-    const urlTripId = urlParams.get("tripId");
+    const urlTripId = urlParams.get("tripId") || consumeRedirectTripId();
 
     if (urlTripId) {
       setIsLoading(true);
       try {
         const trip = await getTripById(urlTripId);
         if (trip) {
-          const userEmailLower = supabaseUser.email.toLowerCase();
-          const isOwner = trip.user_id === supabaseUser.id;
+          const userEmailLower = parsedUser.email.toLowerCase();
+          const isOwner = trip.user_id === parsedUser.id;
           const isAllowed = trip.allowed_emails?.some(
             (e) => e.toLowerCase() === userEmailLower
           );
@@ -629,64 +633,49 @@ const App: React.FC = () => {
 
   // Use a ref to track the latest user state.
   // This allows us to access the current user inside the onAuthStateChange callback
-  // (which runs only once on mount) without adding 'user' to the dependency array,
-  // preventing the infinite loop the user encountered.
+  // without adding 'user' to the dependency array, preventing infinite loops.
   const userRef = useRef<User | null>(null);
   useEffect(() => {
     userRef.current = user;
   }, [user]);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      
-      // Initial check
+    let isMounted = true;
+
+    // Supabase v2 onAuthStateChange triggers INITIAL_SESSION automatically on mount,
+    // which avoids race conditions with a redundant getSession() call.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
       if (session?.user) {
-         // Only run if we are effectively changing users (or initializing)
-         if (!userRef.current || userRef.current.id !== session.user.id) {
-            handleAuthUser(session.user);
-         }
+        // Check against Ref to prevent redundant state resets during TOKEN_REFRESHED
+        if (userRef.current && userRef.current.id === session.user.id) {
+          return;
+        }
+        await handleAuthUser(session.user);
+      } else if (event === "SIGNED_OUT") {
+        window.history.replaceState(null, "", window.location.pathname);
+        setUser(null);
+        setView("landing");
+        setTrips([]);
+        setCurrentTripId(null);
+        setIsLoading(false);
       } else {
-        if (!window.location.hash.includes("access_token")) {
-           // Prevent clearing view if we have a user (though theoretically session should exist)
-           if (!userRef.current) {
-              setIsLoading(false);
-              setView("landing");
-           }
+        if (!session && !window.location.hash.includes("access_token")) {
+          if (!userRef.current) {
+            setIsLoading(false);
+            setView("landing");
+          }
         }
       }
+    });
 
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((event, session) => {
-        if (session?.user) {
-          // KEY FIX: Check against the Ref (latest state).
-          // If IDs match, it's just a token refresh or redundant event -> content remains untouched.
-          if (userRef.current && userRef.current.id === session.user.id) {
-             console.log("Skipping redundant auth and view reset for same user [Token Refresh]");
-             return;
-          }
-          handleAuthUser(session.user);
-        } else if (event === "SIGNED_OUT") {
-          window.history.replaceState(null, "", window.location.pathname);
-          setUser(null);
-          setView("landing");
-          setTrips([]);
-          setIsLoading(false);
-        } else {
-          if (!session && !window.location.hash.includes("access_token")) {
-             // Only clear loading if we really aren't logged in
-             if (!userRef.current) {
-                setIsLoading(false);
-             }
-          }
-        }
-      });
-      return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
     };
-    initAuth();
   }, []);
 
   useEffect(() => {
@@ -704,14 +693,49 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: window.location.href },
+    if (isLoggingIn) return;
+
+    if (!isSupabaseConfigured()) {
+      setNotification({
+        message:
+          translations[language].configMissing ||
+          "Supabase configuration is missing",
+        type: "error",
       });
-      if (error) throw error;
-    } catch (error) {
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      await signInWithGoogle();
+    } catch (error: any) {
       console.error("Error logging in:", error);
+      setIsLoggingIn(false);
+      setNotification({
+        message:
+          error?.message ||
+          translations[language].loginFailed ||
+          "Failed to log in",
+        type: "error",
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOutSafely();
+    } catch (error) {
+      console.warn("Logout error:", error);
+    } finally {
+      setUser(null);
+      setView("landing");
+      setTrips([]);
+      setCurrentTripId(null);
+      setIsLoading(false);
+      setNotification({
+        message: translations[language].logoutSuccess || "Logged out",
+        type: "info",
+      });
     }
   };
 
@@ -1176,7 +1200,7 @@ const App: React.FC = () => {
         />
         <div className="text-right hidden sm:block">
           <div className="text-xs font-bold truncate max-w-[100px] text-slate-900 dark:text-slate-100">
-            {user.name.split(' ')[0]}
+            {user.name ? user.name.split(" ")[0] : "User"}
           </div>
           {view === "detail" && currentTrip && (
             <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -1185,8 +1209,9 @@ const App: React.FC = () => {
           )}
         </div>
         <button
-          onClick={() => supabase.auth.signOut()}
-          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all"
+          onClick={handleLogout}
+          aria-label="Logout"
+          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cursor-pointer"
         >
           <LogOut size={16} />
         </button>
@@ -1367,6 +1392,13 @@ const App: React.FC = () => {
               : "bg-[#FBFBFD] text-slate-900"
           }`}
         >
+          {notification && (
+            <NotificationToast
+              message={notification.message}
+              type={notification.type}
+              onClose={() => setNotification(null)}
+            />
+          )}
           <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] -z-10" />
             <div className="max-w-2xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
@@ -1381,9 +1413,17 @@ const App: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
                 <button
                   onClick={handleLogin}
-                  className="bg-primary text-white px-10 py-5 rounded-[24px] font-black text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                  disabled={isLoggingIn}
+                  className="bg-primary text-white px-10 py-5 rounded-[24px] font-black text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center gap-3 cursor-pointer"
                 >
-                  {t("login")}
+                  {isLoggingIn ? (
+                    <>
+                      <Loader2 className="animate-spin" size={22} />
+                      <span>{t("loggingIn")}</span>
+                    </>
+                  ) : (
+                    <span>{t("login")}</span>
+                  )}
                 </button>
               </div>
             </div>
