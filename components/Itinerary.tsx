@@ -10,6 +10,7 @@ import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
 import { resolveLocationInput } from '../services/mapUrlService';
+import { searchFreePlaces } from '../services/searchPlaceService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -502,38 +503,22 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 finalItem.lng = existingItem.lng;
             } else {
                 try {
-                    const query = encodeURIComponent(finalItem.placeName);
-                    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-                if (apiKey) {
-                    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Goog-Api-Key': apiKey,
-                            'X-Goog-FieldMask': 'places.location'
-                        },
-                        body: JSON.stringify({ textQuery: finalItem.placeName, languageCode: language === 'en' ? 'en' : 'zh-TW' })
+                    // Try to find an existing anchor item to use as proximity bias
+                    const refItem = displayItems.find(i => i.lat != null && i.lng != null && !isNaN(Number(i.lat)));
+                    const freeResults = await searchFreePlaces(finalItem.placeName, {
+                        language: language === 'en' ? 'en' : 'zh-TW',
+                        lat: refItem?.lat ? Number(refItem.lat) : undefined,
+                        lng: refItem?.lng ? Number(refItem.lng) : undefined,
+                        limit: 1
                     });
-                    const data = await response.json();
-                    if (data && data.places && data.places.length > 0) {
-                        finalItem.lat = data.places[0].location.latitude;
-                        finalItem.lng = data.places[0].location.longitude;
+                    if (freeResults && freeResults.length > 0) {
+                        finalItem.lat = freeResults[0].lat;
+                        finalItem.lng = freeResults[0].lng;
                     }
-                } else {
-                    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
-                        headers: { 'User-Agent': 'GoTravel/1.0 (Contact: admin@gotravel.example.com)' }
-                    });
-                    const data = await res.json();
-                    if (data && data.length > 0) {
-                        finalItem.lat = parseFloat(data[0].lat);
-                        finalItem.lng = parseFloat(data[0].lon);
-                    }
+                } catch (e) {
+                    console.error('Failed to geocode with searchFreePlaces:', e);
                 }
-            } catch (e) {
-                console.error('Failed to geocode:', e);
-            }
-        } // Close else
+            } // Close else
         } // Close if (nameChanged && !alreadyHasCoords)
         // Precise coords (e.g. from Google Places) are always preserved as-is
     }
