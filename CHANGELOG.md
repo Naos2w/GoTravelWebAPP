@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `npm run test:unit`：專注執行 8 個單元測試套件（56 項測試）。
     - `npm run test:smoke`：專注執行 9 個元件冒煙測試套件（22 項測試）。
     - `npm run test:watch`：即時熱重載測試模式。
+- **升級 GitHub Actions 自動化 CI 檢查流程 (`.github/workflows/ci.yml`)**：
+  - 修正觸發分支，完整支援預設分支 `master`、`main` 與 `develop` 之 Push 與 Pull Request 監聽。
+  - 獨立視覺化步驟：TypeScript 型別檢查 (`npm run type-check`)、單元測試 (`npm run test:unit`)、冒煙測試 (`npm run test:smoke`) 與生產環境打包 (`npm run build`)，確保任何提交與 PR 皆能自動防禦回歸。
 - **100% 免 Token 多引擎地點搜尋 (`services/searchPlaceService.ts`)**：
   - **層級一 (0ms 本地解析)**：支援貼上完整 Google Maps 連結與自訂經緯度座標，自動優先抓取 `!3d...!4d...` 精確景點標記 Pin 點（避開 `@` 視角相機中心），0 網路請求、0 延遲。
   - **層級二 (現有行程比對)**：輸入現有行程名稱時自動列出快速選取標籤。
