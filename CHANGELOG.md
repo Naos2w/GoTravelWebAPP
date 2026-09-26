@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **層級三 (雙開源引擎平行檢索)**：整合 **OpenStreetMap Nominatim**（帶繁中 `zh-TW` 語系加權，精準搜尋「東京鐵塔」、「清水寺」等中文地標）與 **Komoot Photon API**（以地圖中心經緯度距離加權排序）。
 - **地圖左下角全域交通模式切換器 (`routingModeOverride`)**：
   - 支援 **Auto (自動依行程)**、**開車 (Driving)**、**步行 (Walking)**、**大眾運輸 (Transit)**、**自行車 (Bicycling)**。
-  - 切換時即時向 OSRM 重新發送請求，動態更新路線折線幾何（Polyline）與中途耗時標籤。
+  - 根據實際路網距離與各運具物理速度（步行 4.5 km/h、自行車 15 km/h、大眾運輸都市通勤速率）即時精確重算時間，並支援小時與分鐘自動排版（如「步行 1小時20分」）。
+  - 切換時即時更新路線折線幾何、虛線樣式與中途耗時標籤。
 - **底圖整合原生高畫質圖磚與極致流暢深淺主題適配**：
   - 採用 Leaflet 原生點陣圖磚配合 GPU 硬體加速，達成 **60 FPS 零卡頓、零延遲**。
   - **淺色模式**：自然鮮豔、色彩豐富的標準 OpenStreetMap 大地色。
@@ -27,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 點擊搜尋結果時自動平滑平移至目標景點。
 
 #### Fixed
+- **修復地圖左下角切換交通模式時「時間未重新計算」問題**：
+  - 解決 OSRM 公共展示伺服器（demo server）對不同 profile（`driving`、`foot`、`bicycle`）皆回傳相同車程秒數的缺陷，改由路網精確距離結合真實運具速率動態運算，切換交通工具時時間立即顯著更新。
+- **修復 Session 過期或未登入時未直接跳回首頁問題**：
+  - 當以帶有 `?tripId` 的 URL 進入且 Session 已失效或未登入時，系統立即將目標行程快取至 `sessionStorage`，並瞬間導向首頁（Landing Page），清除網址列參數。
+  - 避免未登入狀態下對 Supabase 發送無效的私有資料請求與多餘錯誤提示，且使用者在首頁登入後能自動直達該行程。
 - **修復 CARTO Voyager 底圖浮水印錯誤**：
   - 因 CARTO 官方政策變更，未帶 API Key 之請求全面回傳 `API KEY REQUIRED` 浮水印。已全面遷移至 100% 免 Key 開源圖磚。
 - **徹底解決 WebGL 轉接層造成的卡頓 (Lag) 與全黑問題**：

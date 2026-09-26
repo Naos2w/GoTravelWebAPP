@@ -143,9 +143,28 @@ const fetchOSRM = (
       if (data && data.code === 'Ok' && data.routes?.[0]) {
         const route = data.routes[0];
         const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]] as [number, number]);
+        
+        // Compute realistic travel time for each specific mode based on road network distance
+        let calculatedDuration = route.duration;
+        const distanceM = route.distance || 0;
+
+        if (mode === 'walking') {
+          // Average walking speed: 4.5 km/h (1.25 m/s)
+          calculatedDuration = Math.round(distanceM / 1.25);
+        } else if (mode === 'bicycling') {
+          // Average city cycling speed: 15 km/h (4.16 m/s)
+          calculatedDuration = Math.round(distanceM / 4.16);
+        } else if (mode === 'transit') {
+          // Public transit (bus/metro) includes stop wait times and transfers (~1.5x driving time + 4 mins buffer)
+          calculatedDuration = Math.max(Math.round(route.duration * 1.5 + 240), Math.round(distanceM / 5.5));
+        } else {
+          // Driving: use OSRM driving duration
+          calculatedDuration = route.duration;
+        }
+
         return {
           geometry,
-          duration: route.duration,
+          duration: calculatedDuration,
           distance: route.distance,
           mode
         };
@@ -615,9 +634,20 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
              modeIcon = renderToString(<Car size={11} strokeWidth={2.5} />);
            }
            
+           let timeText = '';
+           if (mins >= 60) {
+             const hrs = Math.floor(mins / 60);
+             const remMins = mins % 60;
+             timeText = isEn 
+               ? (remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`)
+               : (remMins > 0 ? `${hrs}小時${remMins}分` : `${hrs}小時`);
+           } else {
+             timeText = `${mins} ${isEn ? 'min' : '分鐘'}`;
+           }
+
            const displayStr = leg.mode === 'flight' 
              ? modeText
-             : `${modeText} ${mins} ${isEn ? 'min' : '分鐘'}`;
+             : `${modeText} ${timeText}`;
            
            return (
              <Marker 
@@ -632,8 +662,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                           ${displayStr}
                         </div>`,
                  className: 'custom-leaflet-marker z-[999]',
-                 iconSize: [85, 24],
-                 iconAnchor: [42, 12]
+                 iconSize: [100, 26],
+                 iconAnchor: [50, 13]
                })}
              />
            );

@@ -30,6 +30,7 @@ import {
   signInWithGoogle,
   signOutSafely,
   consumeRedirectTripId,
+  saveRedirectTripId,
   isSupabaseConfigured,
 } from "./services/authService";
 import {
@@ -677,37 +678,21 @@ const App: React.FC = () => {
           authHandled = true;
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
-          // Unauthenticated session
+          // Unauthenticated or expired session: jump directly to landing page!
           authHandled = true;
           const params = new URLSearchParams(window.location.search);
           const urlTripId = params.get("tripId");
           if (urlTripId) {
-            try {
-              const trip = await getTripById(urlTripId);
-              if (isMounted) {
-                if (trip) {
-                  setTrips([trip]);
-                  setCurrentTripId(urlTripId);
-                  setView("detail");
-                } else {
-                  setNotification({
-                    message: translations[language].tripNotFound || "Trip not found",
-                    type: "error",
-                  });
-                  setView("landing");
-                }
-              }
-            } catch {
-              if (isMounted) setView("landing");
-            } finally {
-              if (isMounted) setIsLoading(false);
-            }
-            return;
+            // Save deep link target into sessionStorage so it is restored right after login
+            saveRedirectTripId(urlTripId);
+            window.history.replaceState(null, "", window.location.pathname);
           }
 
           if (isMounted) {
-            setIsLoading(false);
+            setUser(null);
+            setCurrentTripId(null);
             setView("landing");
+            setIsLoading(false);
           }
         }
       })
@@ -745,30 +730,16 @@ const App: React.FC = () => {
       } else {
         if (!session && !window.location.hash.includes("access_token")) {
           if (!userRef.current) {
-            // Check if there is a tripId in the URL to allow Guest Preview!
             const params = new URLSearchParams(window.location.search);
             const urlTripId = params.get("tripId");
             if (urlTripId) {
-              getTripById(urlTripId)
-                .then((trip) => {
-                  if (trip) {
-                    setTrips([trip]);
-                    setCurrentTripId(urlTripId);
-                    setView("detail");
-                  } else {
-                    setView("landing");
-                  }
-                  setIsLoading(false);
-                })
-                .catch(() => {
-                  setView("landing");
-                  setIsLoading(false);
-                });
-              return;
+              saveRedirectTripId(urlTripId);
+              window.history.replaceState(null, "", window.location.pathname);
             }
-
-            setIsLoading(false);
+            setUser(null);
+            setCurrentTripId(null);
             setView("landing");
+            setIsLoading(false);
           }
         }
       }
