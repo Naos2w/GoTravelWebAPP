@@ -618,8 +618,18 @@ const App: React.FC = () => {
               const exists = prev.some((t) => t.id === trip.id);
               return exists ? prev : [trip, ...prev];
             });
+            // Keep ?tripId in URL bar so user permalinks and reloads work seamlessly
+            if (!window.location.search.includes(urlTripId)) {
+              window.history.replaceState(
+                null,
+                "",
+                `${window.location.pathname}?tripId=${urlTripId}`
+              );
+            }
             setView("detail");
           } else {
+            // Access denied: clean URL and notify
+            window.history.replaceState(null, "", window.location.pathname);
             setNotification({
               message: translations[language].accessDenied || "Access Denied",
               type: "error",
@@ -627,6 +637,8 @@ const App: React.FC = () => {
             setView("list");
           }
         } else {
+          // Trip not found: clean URL and notify
+          window.history.replaceState(null, "", window.location.pathname);
           setNotification({
             message: translations[language].tripNotFound || "Trip not found",
             type: "error",
@@ -634,6 +646,7 @@ const App: React.FC = () => {
           setView("list");
         }
       } catch (e) {
+        window.history.replaceState(null, "", window.location.pathname);
         setView("list");
       } finally {
         setIsLoading(false);
@@ -645,8 +658,6 @@ const App: React.FC = () => {
   };
 
   // Use a ref to track the latest user state.
-  // This allows us to access the current user inside the onAuthStateChange callback
-  // without adding 'user' to the dependency array, preventing infinite loops.
   const userRef = useRef<User | null>(null);
   useEffect(() => {
     userRef.current = user;
@@ -654,38 +665,31 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    let authHandled = false;
 
     // Safety timeout: Guarantee that isLoading will never remain stuck on true under any circumstances
     const safetyTimer = window.setTimeout(() => {
       if (isMounted) {
-        setIsLoading((loading) => {
-          if (loading) {
-            console.warn("[Auth] Initial loading safety timeout reached (6s). Forcing spinner release.");
-            return false;
-          }
-          return false;
-        });
+        setIsLoading(false);
       }
-    }, 6000);
+    }, 10000);
 
-    // Step 1: Immediately query getSession() to avoid onAuthStateChange delay or dropped INITIAL_SESSION in StrictMode
-    supabase.auth
-      .getSession()
-      .then(async ({ data: { session }, error }) => {
+    const initAuth = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
         if (!isMounted) return;
         if (error) console.warn("[Auth] getSession error:", error);
 
         if (session?.user) {
-          authHandled = true;
+          // User is authenticated, proceed to handle user and view trip if requested
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
-          // Unauthenticated or expired session: prompt user and jump to landing page!
-          authHandled = true;
+          // Truly unauthenticated or session expired
           const params = new URLSearchParams(window.location.search);
           const urlTripId = params.get("tripId");
           if (urlTripId) {
-            // Save deep link target into sessionStorage so it is restored right after login
             saveRedirectTripId(urlTripId);
             setPendingTripId(urlTripId);
             window.history.replaceState(null, "", window.location.pathname);
@@ -700,31 +704,30 @@ const App: React.FC = () => {
             setIsLoading(false);
           }
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.warn("[Auth] getSession unexpected failure:", err);
-        if (isMounted) setIsLoading(false);
-      });
+        if (isMounted) {
+          setView("landing");
+          setIsLoading(false);
+        }
+      }
+    };
 
-    // Step 2: Subscribe to auth state changes for ongoing lifecycle (e.g. login, logout, token refresh)
+    initAuth();
+
+    // Subscribe to auth state changes for ongoing lifecycle (e.g. login, logout, token refresh)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
-      if (event === "INITIAL_SESSION" && authHandled) {
-        // Already handled by direct getSession() call
-        setIsLoading(false);
-        return;
-      }
+      // Ignore INITIAL_SESSION because initAuth() handles startup deterministically without race condition
+      if (event === "INITIAL_SESSION") return;
 
-      if (session?.user) {
-        // Check against Ref to prevent redundant state resets during TOKEN_REFRESHED
-        if (userRef.current && userRef.current.id === session.user.id) {
-          setIsLoading(false);
-          return;
-        }
+      if (event === "SIGNED_IN" && session?.user) {
         await handleAuthUser(session.user);
+      } else if (event === "TOKEN_REFRESHED" && session?.user) {
+        setUser(parseSupabaseUser(session.user));
       } else if (event === "SIGNED_OUT") {
         window.history.replaceState(null, "", window.location.pathname);
         if (currentTripId) {
@@ -738,24 +741,6 @@ const App: React.FC = () => {
         setIsLoading(false);
         setLoginReason("session_expired");
         setIsLoginModalOpen(true);
-      } else {
-        if (!session && !window.location.hash.includes("access_token")) {
-          if (!userRef.current) {
-            const params = new URLSearchParams(window.location.search);
-            const urlTripId = params.get("tripId");
-            if (urlTripId) {
-              saveRedirectTripId(urlTripId);
-              setPendingTripId(urlTripId);
-              window.history.replaceState(null, "", window.location.pathname);
-              setLoginReason("session_expired");
-              setIsLoginModalOpen(true);
-            }
-            setUser(null);
-            setCurrentTripId(null);
-            setView("landing");
-            setIsLoading(false);
-          }
-        }
       }
     });
 
@@ -775,8 +760,16 @@ const App: React.FC = () => {
     try {
       const userTrips = await getTrips(user.id, user.email);
       setTrips(userTrips);
+      setError(null);
     } catch (err: any) {
-      setError(err.message || "Failed to load trips");
+      console.warn("[Storage] loadTrips caught error:", err);
+      // Only display prominent error banner if no trips have been loaded yet
+      setTrips((prev) => {
+        if (prev.length === 0) {
+          setError(err.message || "Failed to load trips");
+        }
+        return prev;
+      });
     }
   };
 

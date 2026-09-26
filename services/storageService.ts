@@ -369,11 +369,13 @@ export const getTrips = async (
       .or(`user_id.eq.${userId}${emailFilter}`)
       .order("start_date", { ascending: false });
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Database query timeout (getTrips)")), 8000)
-    );
+    let timerId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => reject(new Error("Database query timeout (getTrips)")), 15000);
+    });
 
     const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+    clearTimeout(timerId);
 
     if (error) throw error;
 
@@ -397,11 +399,13 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
       .eq("id", tripId)
       .maybeSingle();
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Database query timeout (getTripById)")), 8000)
-    );
+    let timerId: any;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => reject(new Error("Database query timeout (getTripById)")), 15000);
+    });
 
     const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+    clearTimeout(timerId);
 
     if (error || !data) return null;
     return transformTripRow(data);

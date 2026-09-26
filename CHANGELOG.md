@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Fixed
 - **修復地圖左下角切換交通模式時「時間未重新計算」問題**：
   - 解決 OSRM 公共展示伺服器（demo server）對不同 profile（`driving`、`foot`、`bicycle`）皆回傳相同車程秒數的缺陷，改由路網精確距離結合真實運具速率動態運算，切換交通工具時時間立即顯著更新。
+- **徹底修復帶 `tripId` 網址進入時「先跳回登入首頁、再跳轉到列表」的狀態競爭 (Race Condition)**：
+  - **根本原因**：
+    1. 掛載當下 `supabase.auth.onAuthStateChange` 立即觸發初次事件，此時 Supabase 尚未自本地儲存完成 Session 水合（Hydration），導致程式碼誤判為未登入，瞬間執行 `replaceState` 抹除網址 `tripId` 參數，並將視圖強制切換至 `landing` 首頁。
+    2. 微秒後 `getSession()` 解析出真實登入用戶，再次切換為 `list` 列表視圖，造成使用者眼中的「先跳登入首頁、再抹除網址跳回挑選行程畫面」。
+    3. 資料庫多表關聯查詢逾時設為 8 秒過於激進，在冷啟動或跨國網路連線時過早中斷，導致 `getTripById` 誤報「找不到旅程或無權限存取」與「Database query timeout (getTrips)」。
+  - **解決方案**：
+    1. **單一確定性驗證流程 (`initAuth`)**：由 `getSession()` 作為初次唯一驗證來源，嚴格保留全螢幕載入狀態，在尚未確認登入狀態前絕不提前抹除 URL 參數或切換視圖。
+    2. **解耦 `onAuthStateChange`**：忽略初次 `INITIAL_SESSION` 重複觸發，僅監聽後續 `SIGNED_IN`、`SIGNED_OUT`、`TOKEN_REFRESHED` 生命週期，徹底消滅競爭條件。
+    3. **行程固定連結保護 (Permalinks)**：經由 `tripId` 成功載入行程後，網址列完整保留 `?tripId=...`，無論重新整理或複製分享皆能穩定停留在該行程詳情。
+    4. **放寬資料庫逾時至 15 秒並清理計時器**：防止冷啟動查詢被提早中斷，並在已有行程快取時抑制背景同步的阻礙性錯誤卡片。
 - **新增 Session 過期 / 未登入存取時的明確視覺畫面與自動導回機制 (`LoginModal`, `App.tsx`)**：
   - 避免使用者遭遇「無聲無息跳回首頁」的困惑體驗，跳回首頁時主動彈出情境化視窗：
     - **登入逾時情境**：顯示琥珀色盾牌警示圖標、標題「登入階段已逾時」，並說明「您的登入已過期。為保護行程安全，請重新登入，系統已為您暫存目標行程！」，提供「重新登入並返回行程」單鍵操作。
