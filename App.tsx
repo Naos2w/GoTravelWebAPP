@@ -48,6 +48,7 @@ import { NotificationToast } from "./components/NotificationToast";
 import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
 import { LoginModal, LoginReason } from "./components/LoginModal";
+import { APP_VERSION } from "./services/version";
 
 // TODO: [Optimized] Lazy load heavy components for better bundle code-splitting
 const Checklist = React.lazy(() => import("./components/Checklist").then(m => ({ default: m.Checklist })));
@@ -1553,8 +1554,10 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
-            <footer className="absolute bottom-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-              {t("appName")} © 2024
+            <footer className="absolute bottom-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+              <span>{t("appName")}</span>
+              <span>•</span>
+              <span className="font-mono">v{APP_VERSION}</span>
             </footer>
           </div>
           {pendingTripId && (
@@ -2086,8 +2089,13 @@ const App: React.FC = () => {
         {view === "list" && (
           <div className="p-6 sm:p-10 max-w-7xl mx-auto min-h-screen">
             <header className="flex justify-between items-center mb-12">
-              <div className="text-lg font-bold text-primary tracking-tight">
-                {t("appName")}
+              <div className="flex items-center gap-2.5">
+                <div className="text-lg font-bold text-primary tracking-tight">
+                  {t("appName")}
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700">
+                  v{APP_VERSION}
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <GlobalNav />

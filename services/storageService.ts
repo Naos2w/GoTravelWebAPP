@@ -29,20 +29,20 @@ export const supabase: SupabaseClient = createClient(
   }
 );
 
-const isValidUUID = (id: string) => {
+export const isValidUUID = (id: string) => {
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   return uuidRegex.test(id);
 };
 
-const formatDateStr = (date: Date) => {
+export const formatDateStr = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
 
-interface DbTripRow {
+export interface DbTripRow {
   id: string;
   user_id: string;
   name: string;
@@ -101,7 +101,7 @@ interface DbTripRow {
   }[];
 }
 
-const transformTripRow = (row: DbTripRow): Trip => {
+export const transformTripRow = (row: DbTripRow): Trip => {
   const start = new Date(row.start_date + "T00:00:00");
   const end = new Date(row.end_date + "T00:00:00");
   const diffTime = Math.abs(end.getTime() - start.getTime());

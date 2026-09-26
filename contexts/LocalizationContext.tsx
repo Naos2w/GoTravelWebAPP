@@ -405,10 +405,16 @@ const LocalizationContext = createContext<LocalizationContextType | undefined>(
 
 export const LocalizationProvider: React.FC<{
   children: ReactNode;
-  value: LocalizationContextType;
+  value?: LocalizationContextType;
 }> = ({ children, value }) => {
+  const defaultValue: LocalizationContextType = {
+    t: (key: keyof typeof translations.en) =>
+      (translations.zh as any)[key] || (translations.en as any)[key] || key,
+    language: "zh",
+    setLanguage: () => {},
+  };
   return (
-    <LocalizationContext.Provider value={value}>
+    <LocalizationContext.Provider value={value || defaultValue}>
       {children}
     </LocalizationContext.Provider>
   );

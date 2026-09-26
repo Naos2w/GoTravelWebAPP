@@ -121,8 +121,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
 
   const members = useMemo(() => {
     const userMap = new Map<string, string>();
-    trip.expenses.forEach(e => { if(e.user_id && e.user_name) userMap.set(e.user_id, e.user_name); });
-    trip.flights.forEach(f => { if(f.user_id && f.traveler_name) userMap.set(f.user_id, f.traveler_name); });
+    (trip.expenses || []).forEach(e => { if(e.user_id && e.user_name) userMap.set(e.user_id, e.user_name); });
+    (trip.flights || []).forEach(f => { if(f.user_id && f.traveler_name) userMap.set(f.user_id, f.traveler_name); });
     return Array.from(userMap.entries()).map(([id, name]) => ({ id, name }));
   }, [trip.expenses, trip.flights]);
 

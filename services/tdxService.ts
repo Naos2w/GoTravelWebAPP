@@ -161,12 +161,12 @@ export async function fetchAviationstackFlights(
   }
 }
 
-const TAIWAN_AIRPORTS = new Set([
+export const TAIWAN_AIRPORTS = new Set([
   'TPE', 'KHH', 'TSA', 'RMQ', 'TNN', 'HUN', 'TTT', 'CYI', 'HSZ', 'PIF', 
   'MZG', 'KNH', 'MFK', 'LZN', 'GNI', 'KYD', 'WOT', 'CMJ'
 ]);
 
-function parseTdxTime(dateStr: string, timeStr: string): string {
+export function parseTdxTime(dateStr: string, timeStr: string): string {
   if (!timeStr) return `${dateStr}T00:00`;
   const match = timeStr.match(/^(\d{2}:\d{2})(?:\+(\d+))?$/);
   if (!match) return `${dateStr}T${timeStr}`;
