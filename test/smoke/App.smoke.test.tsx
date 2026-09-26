@@ -34,8 +34,9 @@ describe("App Component (Smoke Test)", () => {
 
     // Initially or during loading, should not crash
     await waitFor(() => {
-      // Landing page renders Go Travel title / login button
-      expect(screen.getByText("Go Travel © 2024")).toBeInTheDocument();
+      // Landing page renders Go Travel title and version badge
+      expect(screen.getByText("Go Travel")).toBeInTheDocument();
+      expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument();
     });
   });
 });

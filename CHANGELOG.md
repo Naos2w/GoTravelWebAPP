@@ -33,13 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `LoginModal.smoke.test.tsx`：驗證登入階段已逾時 (`session_expired`) 與需登入存取行程 (`trip_access`) 之視覺標籤與關閉事件。
     - `NotificationToast.smoke.test.tsx`：驗證訊息格式渲染與 4000ms 自動定時銷毀。
   - **測試指令**：
-    - `npm test`：執行完整測試套件（**17 測試檔案、78 項測試全數通過**）。
-    - `npm run test:unit`：專注執行 8 個單元測試套件（56 項測試）。
+    - `npm test`：執行完整測試套件（**18 測試檔案、80 項測試全數通過**）。
+    - `npm run test:unit`：專注執行 9 個單元測試套件（58 項測試）。
     - `npm run test:smoke`：專注執行 9 個元件冒煙測試套件（22 項測試）。
     - `npm run test:watch`：即時熱重載測試模式。
 - **升級 GitHub Actions 自動化 CI 檢查流程 (`.github/workflows/ci.yml`)**：
   - 修正觸發分支，完整支援預設分支 `master`、`main` 與 `develop` 之 Push 與 Pull Request 監聽。
   - 獨立視覺化步驟：TypeScript 型別檢查 (`npm run type-check`)、單元測試 (`npm run test:unit`)、冒煙測試 (`npm run test:smoke`) 與生產環境打包 (`npm run build`)，確保任何提交與 PR 皆能自動防禦回歸。
+- **語意化版本控制與 Release 自動化 (Semantic Versioning & Release Workflow)**：
+  - 將專案版本號升級至 `v1.3.0`，並新增版本號單元測試 (`test/unit/version.test.ts`) 與統一版本導出模組 (`services/version.ts`)。
+  - 於前端主畫面展示即時版本徽章（首頁 footer 標註 `Go Travel • v1.3.0`，行程列表頂部導航列顯示 `v1.3.0` 膠囊標籤）。
+  - 新增 `npm run version:tag` 便捷 Git Tag 標註腳本。
+  - 建立 GitHub Actions Release 發布流程 (`.github/workflows/release.yml`)，於推送 `v*` tag 或手動觸發時自動執行型別檢查、測試驗證、生產打包，並自動產生 GitHub Release 與發行筆記。
 - **100% 免 Token 多引擎地點搜尋 (`services/searchPlaceService.ts`)**：
   - **層級一 (0ms 本地解析)**：支援貼上完整 Google Maps 連結與自訂經緯度座標，自動優先抓取 `!3d...!4d...` 精確景點標記 Pin 點（避開 `@` 視角相機中心），0 網路請求、0 延遲。
   - **層級二 (現有行程比對)**：輸入現有行程名稱時自動列出快速選取標籤。
