@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
 import { ItineraryItem } from '../types';
 import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
@@ -91,6 +93,46 @@ const MapResizer = () => {
       resizeObserver.disconnect();
     };
   }, [map]);
+  return null;
+};
+
+const OpenFreeMapLayer: React.FC<{ defaultStyle?: string }> = ({
+  defaultStyle = 'https://tiles.openfreemap.org/styles/bright'
+}) => {
+  const map = useMap();
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const activeStyle = isDark 
+    ? 'https://tiles.openfreemap.org/styles/dark' 
+    : defaultStyle;
+
+  useEffect(() => {
+    let layer: any = null;
+    try {
+      layer = maplibreGL({
+        style: activeStyle,
+      }).addTo(map);
+    } catch (e) {
+      console.warn('OpenFreeMap layer initialization error:', e);
+    }
+
+    return () => {
+      if (layer && map) {
+        try {
+          map.removeLayer(layer);
+        } catch (e) {}
+      }
+    };
+  }, [map, activeStyle]);
+
   return null;
 };
 
@@ -521,13 +563,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
-        {/* OpenStreetMap Standard Basemap (100% Free & No API Key Required) */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          className="dark:invert dark:contrast-90 dark:hue-rotate-180 dark:brightness-95 transition-all duration-300"
-          maxZoom={19}
-        />
+        {/* OpenFreeMap Bright Vector Basemap (100% Free, Vector Tiles & No API Key Required) */}
+        <OpenFreeMapLayer styleUrl="https://tiles.openfreemap.org/styles/bright" />
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
