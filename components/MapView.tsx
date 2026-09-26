@@ -525,7 +525,6 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          className="dark:invert dark:hue-rotate-180 dark:brightness-[0.78] dark:contrast-[1.1] transition-all duration-300"
           maxZoom={19}
         />
         <MapResizer />
