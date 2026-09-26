@@ -14,7 +14,20 @@ const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
 
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase: SupabaseClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      lock: async (_name, _acquireTimeout, fn) => {
+        return await fn();
+      },
+    },
+  }
+);
 
 const isValidUUID = (id: string) => {
   const uuidRegex =
@@ -361,21 +374,13 @@ export const getTrips = async (
       ? `,allowed_emails.cs.{${userEmail.toLowerCase()}}`
       : "";
 
-    const fetchPromise = supabase
+    const { data, error } = await supabase
       .from("trips")
       .select(
         `*, checklist_items (*), itinerary_items (*), expenses (*), flights (*), trip_collaborators (*)`
       )
       .or(`user_id.eq.${userId}${emailFilter}`)
       .order("start_date", { ascending: false });
-
-    let timerId: any;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timerId = setTimeout(() => reject(new Error("Database query timeout (getTrips)")), 15000);
-    });
-
-    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-    clearTimeout(timerId);
 
     if (error) throw error;
 
@@ -391,7 +396,7 @@ export const getTrips = async (
 export const getTripById = async (tripId: string): Promise<Trip | null> => {
   if (!tripId || !isValidUUID(tripId)) return null;
   try {
-    const fetchPromise = supabase
+    const { data, error } = await supabase
       .from("trips")
       .select(
         `*, checklist_items (*), itinerary_items (*), expenses (*), flights (*), trip_collaborators (*)`
@@ -399,18 +404,10 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
       .eq("id", tripId)
       .maybeSingle();
 
-    let timerId: any;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timerId = setTimeout(() => reject(new Error("Database query timeout (getTripById)")), 15000);
-    });
-
-    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
-    clearTimeout(timerId);
-
     if (error || !data) return null;
     return transformTripRow(data);
   } catch (err) {
-    console.warn("[Storage] getTripById timed out or failed:", err);
+    console.warn("[Storage] getTripById error:", err);
     return null;
   }
 };
