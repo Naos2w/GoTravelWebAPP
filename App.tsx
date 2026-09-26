@@ -628,19 +628,23 @@ const App: React.FC = () => {
             }
             setView("detail");
           } else {
-            // Access denied: clean URL and notify
+            // 有登入但無權限：清除無效參數，跳出訊息，跳轉到自己的行程頁面
             window.history.replaceState(null, "", window.location.pathname);
             setNotification({
-              message: translations[language].accessDenied || "Access Denied",
+              message:
+                translations[language].noPermissionRedirect ||
+                "您沒有此行程的存取權限，已為您跳轉至您的行程頁面",
               type: "error",
             });
             setView("list");
           }
         } else {
-          // Trip not found: clean URL and notify
+          // 找不到此行程：清除無效參數，跳出訊息，跳轉到自己的行程頁面
           window.history.replaceState(null, "", window.location.pathname);
           setNotification({
-            message: translations[language].tripNotFound || "Trip not found",
+            message:
+              translations[language].tripNotFoundRedirect ||
+              "找不到此行程或無權限存取，已為您跳轉至您的行程頁面",
             type: "error",
           });
           setView("list");
@@ -683,17 +687,24 @@ const App: React.FC = () => {
         if (error) console.warn("[Auth] getSession error:", error);
 
         if (session?.user) {
-          // User is authenticated, proceed to handle user and view trip if requested
+          // 1. 有登入：交給 handleAuthUser 驗證該行程讀取權限
+          // 若有權限則進入行程詳情頁；若無權限則跳出提示並跳轉到自己的行程頁面 (list)
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
-          // Truly unauthenticated or session expired
+          // 2. 沒登入：跳出訊息提示，跳轉到登入主頁 (landing)
           const params = new URLSearchParams(window.location.search);
           const urlTripId = params.get("tripId");
           if (urlTripId) {
             saveRedirectTripId(urlTripId);
             setPendingTripId(urlTripId);
             window.history.replaceState(null, "", window.location.pathname);
-            setLoginReason("session_expired");
+            setNotification({
+              message:
+                translations[language].loginRequiredRedirect ||
+                "此行程需要登入存取，已為您前往登入主頁",
+              type: "info",
+            });
+            setLoginReason("trip_access");
             setIsLoginModalOpen(true);
           }
 
@@ -739,6 +750,11 @@ const App: React.FC = () => {
         setTrips([]);
         setCurrentTripId(null);
         setIsLoading(false);
+        setNotification({
+          message:
+            translations[language].sessionExpired || "登入已過期，請重新登入",
+          type: "info",
+        });
         setLoginReason("session_expired");
         setIsLoginModalOpen(true);
       }

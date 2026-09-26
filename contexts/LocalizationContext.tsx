@@ -193,6 +193,9 @@ export const translations = {
     reloginAndContinue: "重新登入並返回行程",
     loginAndContinue: "登入並開啟行程",
     exploreLanding: "暫時留在首頁",
+    tripNotFoundRedirect: "找不到此行程或無權限存取，已為您跳轉至您的行程頁面",
+    loginRequiredRedirect: "此行程需要登入存取，已為您前往登入主頁",
+    noPermissionRedirect: "您沒有此行程的存取權限，已為您跳轉至您的行程頁面",
   },
   en: {
     appName: "Go Travel",
@@ -384,6 +387,9 @@ export const translations = {
     reloginAndContinue: "Sign in and continue to trip",
     loginAndContinue: "Sign in and open trip",
     exploreLanding: "Browse homepage first",
+    tripNotFoundRedirect: "Trip not found or no permission, redirected to your trips.",
+    loginRequiredRedirect: "Login required to view this trip, redirected to login page.",
+    noPermissionRedirect: "You do not have permission to view this trip, redirected to your trips.",
   },
 };
 
