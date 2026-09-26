@@ -1,12 +1,27 @@
 import React, { useState } from "react";
-import { X as CloseIcon, Mail, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  X as CloseIcon,
+  Mail,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Lock,
+  ShieldAlert,
+} from "lucide-react";
 import { useTranslation } from "../contexts/LocalizationContext";
-import { signInWithGoogle, signInWithEmail, isSupabaseConfigured } from "../services/authService";
+import {
+  signInWithGoogle,
+  signInWithEmail,
+  isSupabaseConfigured,
+} from "../services/authService";
+
+export type LoginReason = "session_expired" | "trip_access" | null;
 
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   redirectTripId?: string | null;
+  reason?: LoginReason;
   onSuccess?: () => void;
 }
 
@@ -14,6 +29,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   isOpen,
   onClose,
   redirectTripId,
+  reason,
 }) => {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
@@ -71,6 +87,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   };
 
+  const isSessionExpired = reason === "session_expired";
+  const isTripAccess =
+    reason === "trip_access" || (!!redirectTripId && !isSessionExpired);
+
+  const title = isSessionExpired
+    ? t("sessionExpiredTitle")
+    : isTripAccess
+    ? t("loginRequiredTitle")
+    : t("loginModalTitle");
+
+  const subtitle = isSessionExpired
+    ? t("sessionExpiredDesc")
+    : isTripAccess
+    ? t("loginRequiredDesc")
+    : t("loginModalSubtitle");
+
+  const googleButtonText = isSessionExpired
+    ? t("reloginAndContinue")
+    : isTripAccess
+    ? t("loginAndContinue")
+    : t("googleLogin");
+
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200"
@@ -81,19 +119,33 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glow ambient background */}
-        <div className="absolute top-0 right-0 w-36 h-36 bg-primary/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+        <div
+          className={`absolute top-0 right-0 w-36 h-36 ${
+            isSessionExpired ? "bg-amber-500/15" : "bg-primary/10"
+          } rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none`}
+        />
 
         {/* Modal Header */}
         <div className="flex justify-between items-start relative z-10">
           <div>
-            <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">
-              {t("appName")}
-            </div>
+            {isSessionExpired ? (
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mb-3 animate-in zoom-in-75">
+                <ShieldAlert size={26} />
+              </div>
+            ) : isTripAccess ? (
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0 mb-3 animate-in zoom-in-75">
+                <Lock size={26} />
+              </div>
+            ) : (
+              <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mb-1">
+                {t("appName")}
+              </div>
+            )}
             <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              {t("loginModalTitle")}
+              {title}
             </h3>
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              {t("loginModalSubtitle")}
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 leading-relaxed">
+              {subtitle}
             </p>
           </div>
           <button
@@ -103,6 +155,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <CloseIcon size={20} />
           </button>
         </div>
+
+        {/* Redirect Notice when accessing a trip */}
+        {redirectTripId && (
+          <div className="bg-primary/10 border border-primary/20 text-primary p-3.5 rounded-2xl text-xs flex items-center gap-2.5 animate-in slide-in-from-top-2">
+            <Lock size={16} className="shrink-0" />
+            <span className="flex-1 font-bold leading-relaxed">
+              {t("targetTripSaved")}
+            </span>
+          </div>
+        )}
 
         {/* Error message alert */}
         {errorMessage && (
@@ -132,7 +194,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>{t("googleLogin")}</span>
+                <span>{googleButtonText}</span>
               </>
             )}
           </button>
@@ -198,6 +260,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 )}
               </button>
             </form>
+          )}
+          {isTripAccess && (
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium transition-colors cursor-pointer"
+              >
+                {t("exploreLanding")}
+              </button>
+            </div>
           )}
         </div>
       </div>

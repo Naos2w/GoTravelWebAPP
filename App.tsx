@@ -47,7 +47,7 @@ import { TripForm } from "./components/TripForm";
 import { NotificationToast } from "./components/NotificationToast";
 import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
-import { LoginModal } from "./components/LoginModal";
+import { LoginModal, LoginReason } from "./components/LoginModal";
 
 // TODO: [Optimized] Lazy load heavy components for better bundle code-splitting
 const Checklist = React.lazy(() => import("./components/Checklist").then(m => ({ default: m.Checklist })));
@@ -164,6 +164,8 @@ const App: React.FC = () => {
   const [tempBudget, setTempBudget] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [pendingTripId, setPendingTripId] = useState<string | null>(null);
+  const [loginReason, setLoginReason] = useState<LoginReason>(null);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -678,14 +680,17 @@ const App: React.FC = () => {
           authHandled = true;
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
-          // Unauthenticated or expired session: jump directly to landing page!
+          // Unauthenticated or expired session: prompt user and jump to landing page!
           authHandled = true;
           const params = new URLSearchParams(window.location.search);
           const urlTripId = params.get("tripId");
           if (urlTripId) {
             // Save deep link target into sessionStorage so it is restored right after login
             saveRedirectTripId(urlTripId);
+            setPendingTripId(urlTripId);
             window.history.replaceState(null, "", window.location.pathname);
+            setLoginReason("session_expired");
+            setIsLoginModalOpen(true);
           }
 
           if (isMounted) {
@@ -722,11 +727,17 @@ const App: React.FC = () => {
         await handleAuthUser(session.user);
       } else if (event === "SIGNED_OUT") {
         window.history.replaceState(null, "", window.location.pathname);
+        if (currentTripId) {
+          saveRedirectTripId(currentTripId);
+          setPendingTripId(currentTripId);
+        }
         setUser(null);
         setView("landing");
         setTrips([]);
         setCurrentTripId(null);
         setIsLoading(false);
+        setLoginReason("session_expired");
+        setIsLoginModalOpen(true);
       } else {
         if (!session && !window.location.hash.includes("access_token")) {
           if (!userRef.current) {
@@ -734,7 +745,10 @@ const App: React.FC = () => {
             const urlTripId = params.get("tripId");
             if (urlTripId) {
               saveRedirectTripId(urlTripId);
+              setPendingTripId(urlTripId);
               window.history.replaceState(null, "", window.location.pathname);
+              setLoginReason("session_expired");
+              setIsLoginModalOpen(true);
             }
             setUser(null);
             setCurrentTripId(null);
@@ -781,7 +795,7 @@ const App: React.FC = () => {
 
     setIsLoggingIn(true);
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(pendingTripId || currentTripId);
     } catch (error: any) {
       console.error("Error logging in:", error);
       setIsLoggingIn(false);
@@ -1534,10 +1548,38 @@ const App: React.FC = () => {
               {t("appName")} © 2024
             </footer>
           </div>
+          {pendingTripId && (
+            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-[#2C2C2E]/95 backdrop-blur-xl border border-primary/30 shadow-2xl px-5 py-3 rounded-2xl flex items-center gap-3 animate-in slide-in-from-top-4 max-w-[90vw]">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <Lock size={16} />
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {t("loginToViewTrip")}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {t("targetTripSaved")}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setLoginReason("trip_access");
+                  setIsLoginModalOpen(true);
+                }}
+                className="bg-primary text-white text-xs font-black px-4 py-2 rounded-xl hover:scale-105 active:scale-95 transition-all cursor-pointer shrink-0 ml-2 shadow-md shadow-primary/20"
+              >
+                {t("login")}
+              </button>
+            </div>
+          )}
           <LoginModal
             isOpen={isLoginModalOpen}
-            onClose={() => setIsLoginModalOpen(false)}
-            redirectTripId={currentTripId}
+            onClose={() => {
+              setIsLoginModalOpen(false);
+              setLoginReason(null);
+            }}
+            redirectTripId={pendingTripId || currentTripId}
+            reason={loginReason}
           />
         </div>
       </LocalizationProvider>
@@ -2117,8 +2159,12 @@ const App: React.FC = () => {
 
         <LoginModal
           isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          redirectTripId={currentTripId}
+          onClose={() => {
+            setIsLoginModalOpen(false);
+            setLoginReason(null);
+          }}
+          redirectTripId={pendingTripId || currentTripId}
+          reason={loginReason}
         />
       </div>
     </LocalizationProvider>
