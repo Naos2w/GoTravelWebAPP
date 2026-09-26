@@ -1,16 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import { setWorkerUrl } from 'maplibre-gl';
-// @ts-ignore
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
-
-// Tell MapLibre GL where to find the worker bundle in Vite
-if (typeof window !== 'undefined') {
-  setWorkerUrl(maplibreWorkerUrl);
-}
 import { ItineraryItem } from '../types';
 import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
@@ -101,72 +91,6 @@ const MapResizer = () => {
       resizeObserver.disconnect();
     };
   }, [map]);
-  return null;
-};
-
-const OpenFreeMapLayer: React.FC<{ styleUrl?: string; defaultStyle?: string }> = ({
-  styleUrl,
-  defaultStyle = 'https://tiles.openfreemap.org/styles/bright'
-}) => {
-  const map = useMap();
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.classList.contains('dark'));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
-
-  const activeStyle = styleUrl || defaultStyle;
-
-  useEffect(() => {
-    let layer: any = null;
-    try {
-      layer = maplibreGL({
-        style: activeStyle,
-      });
-
-      layer.addTo(map);
-
-      // Listen for runtime errors from MapLibre
-      const glMap = typeof layer.getMaplibreMap === 'function' ? layer.getMaplibreMap() : null;
-      if (glMap) {
-        glMap.on('error', (err: any) => {
-          const msg = err?.error?.message || String(err);
-          if (msg.includes('Worker') || msg.includes('WebGL') || msg.includes('failed to load')) {
-            console.warn('MapLibre GL worker/rendering error detected, switching to OSM fallback:', msg);
-            setHasError(true);
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('OpenFreeMap layer initialization error, switching to OSM fallback:', e);
-      setHasError(true);
-    }
-
-    return () => {
-      if (layer && map) {
-        try {
-          map.removeLayer(layer);
-        } catch (e) {}
-      }
-    };
-  }, [map, activeStyle]);
-
-  if (hasError) {
-    return (
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        className="dark:invert dark:contrast-90 dark:hue-rotate-180 dark:brightness-95 transition-all duration-300"
-        maxZoom={19}
-      />
-    );
-  }
-
   return null;
 };
 
@@ -597,8 +521,13 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
-        {/* OpenFreeMap Bright Vector Basemap (100% Free, Vector Tiles & No API Key Required) */}
-        <OpenFreeMapLayer styleUrl="https://tiles.openfreemap.org/styles/bright" />
+        {/* High-Performance 60 FPS Basemap with Smooth Dark/Light Adaptation (Zero Lag & 100% Free) */}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="dark:invert dark:hue-rotate-180 dark:brightness-[0.78] dark:contrast-[1.1] transition-all duration-300"
+          maxZoom={19}
+        />
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
