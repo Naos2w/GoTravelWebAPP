@@ -12,6 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🗺️ 地圖與搜尋引擎全面升級 (Map & Search Engine Modernization)
 
 #### Added
+- **現代化測試架構與自動化測試套件 (`vitest`, `@testing-library/react`, `jsdom`)**：
+  - **單元測試 (Unit Tests)**：
+    - `authService.test.ts`：用戶資料格式化、SessionStorage 目標行程暫存與單次讀取消耗（One-time consumption）機制。
+    - `mapUrlService.test.ts`：0ms 本地解析 Google Maps URL（`!3d...!4d...` 精確圖標座標優先於相機視角）、自訂經緯度字串解析與無效字串過濾。
+    - `travelCalculation.test.ts`：多運具物理速度換算公式（步行 4.5 km/h、自行車 15 km/h、大眾運輸都市通勤速率）與跨小時時間排版。
+    - `localization.test.ts`：繁中 (`zh`) 與英文 (`en`) 語系鍵值 100% 對齊與完整性驗證。
+  - **冒煙測試 (Smoke Tests)**：
+    - `App.smoke.test.tsx`：根應用程式無崩潰掛載、認證狀態流轉與主頁顯示。
+    - `LoginModal.smoke.test.tsx`：驗證登入階段已逾時 (`session_expired`) 與需登入存取行程 (`trip_access`) 之視覺標籤與關閉事件。
+    - `NotificationToast.smoke.test.tsx`：驗證訊息格式渲染與 4000ms 自動定時銷毀。
+  - **測試指令**：
+    - `npm test`：執行完整測試套件（7 測試檔案、33 項測試全數通過）。
+    - `npm run test:unit`：專注執行單元測試。
+    - `npm run test:smoke`：專注執行元件冒煙測試。
+    - `npm run test:watch`：即時熱重載測試模式。
 - **100% 免 Token 多引擎地點搜尋 (`services/searchPlaceService.ts`)**：
   - **層級一 (0ms 本地解析)**：支援貼上完整 Google Maps 連結與自訂經緯度座標，自動優先抓取 `!3d...!4d...` 精確景點標記 Pin 點（避開 `@` 視角相機中心），0 網路請求、0 延遲。
   - **層級二 (現有行程比對)**：輸入現有行程名稱時自動列出快速選取標籤。
