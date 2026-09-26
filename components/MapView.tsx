@@ -120,9 +120,7 @@ const OpenFreeMapLayer: React.FC<{ styleUrl?: string; defaultStyle?: string }> =
     return () => observer.disconnect();
   }, []);
 
-  const activeStyle = isDark 
-    ? 'https://tiles.openfreemap.org/styles/dark' 
-    : (styleUrl || defaultStyle);
+  const activeStyle = styleUrl || defaultStyle;
 
   useEffect(() => {
     let layer: any = null;
