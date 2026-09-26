@@ -185,7 +185,27 @@
         color: #f5f5f7;
       }
 
-      /* === Leaflet Overrides === */
+      /* === Leaflet Overrides & Dark Mode Basemap === */
+      .leaflet-container {
+        background-color: #f2f2f7 !important;
+        font-family: inherit;
+      }
+      .dark .leaflet-container {
+        background-color: #1c1c1e !important;
+      }
+      .leaflet-tile {
+        transition: filter 0.3s ease;
+      }
+      .dark .leaflet-tile {
+        filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.15) saturate(1.1);
+      }
+      .dark .leaflet-control-attribution {
+        background: rgba(28, 28, 30, 0.8) !important;
+        color: #94a3b8 !important;
+      }
+      .dark .leaflet-control-attribution a {
+        color: #60a5fa !important;
+      }
       .custom-leaflet-marker { background: transparent; border: none; }
       .leaflet-popup-content-wrapper {
         border-radius: var(--radius-lg) !important;

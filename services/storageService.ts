@@ -14,7 +14,20 @@ const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder-key";
 
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase: SupabaseClient = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      lock: async (_name, _acquireTimeout, fn) => {
+        return await fn();
+      },
+    },
+  }
+);
 
 const isValidUUID = (id: string) => {
   const uuidRegex =
@@ -394,6 +407,7 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
     if (error || !data) return null;
     return transformTripRow(data);
   } catch (err) {
+    console.warn("[Storage] getTripById error:", err);
     return null;
   }
 };
