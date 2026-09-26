@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { Itinerary } from "../../components/Itinerary";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { Trip, User } from "../../types";
@@ -53,18 +53,20 @@ describe("Itinerary Component Smoke Test", () => {
     ]
   };
 
-  it("renders itinerary days and places without crashing", () => {
+  it("renders itinerary days and places without crashing", async () => {
     const handleUpdate = vi.fn();
 
-    render(
-      <LocalizationProvider>
-        <Itinerary
-          trip={mockTrip}
-          currentUser={mockUser}
-          onUpdate={handleUpdate}
-        />
-      </LocalizationProvider>
-    );
+    await act(async () => {
+      render(
+        <LocalizationProvider>
+          <Itinerary
+            trip={mockTrip}
+            currentUser={mockUser}
+            onUpdate={handleUpdate}
+          />
+        </LocalizationProvider>
+      );
+    });
 
     // Should display Day 1 tab or date indicator
     expect(screen.getAllByText(/Day 1/i).length).toBeGreaterThan(0);
@@ -74,7 +76,7 @@ describe("Itinerary Component Smoke Test", () => {
     expect(screen.getByText("09:00")).toBeInTheDocument();
   });
 
-  it("renders empty day view gracefully", () => {
+  it("renders empty day view gracefully", async () => {
     const emptyTrip: Trip = {
       ...mockTrip,
       itinerary: [
@@ -85,15 +87,17 @@ describe("Itinerary Component Smoke Test", () => {
       ]
     };
 
-    render(
-      <LocalizationProvider>
-        <Itinerary
-          trip={emptyTrip}
-          currentUser={mockUser}
-          onUpdate={vi.fn()}
-        />
-      </LocalizationProvider>
-    );
+    await act(async () => {
+      render(
+        <LocalizationProvider>
+          <Itinerary
+            trip={emptyTrip}
+            currentUser={mockUser}
+            onUpdate={vi.fn()}
+          />
+        </LocalizationProvider>
+      );
+    });
 
     expect(screen.getAllByText(/Day 1/i).length).toBeGreaterThan(0);
   });
