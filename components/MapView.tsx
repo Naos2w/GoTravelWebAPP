@@ -2,7 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { setWorkerUrl } from 'maplibre-gl';
+// @ts-ignore
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
+
+// Tell MapLibre GL where to find the worker bundle in Vite
+if (typeof window !== 'undefined') {
+  setWorkerUrl(maplibreWorkerUrl);
+}
 import { ItineraryItem } from '../types';
 import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
@@ -96,11 +104,13 @@ const MapResizer = () => {
   return null;
 };
 
-const OpenFreeMapLayer: React.FC<{ defaultStyle?: string }> = ({
+const OpenFreeMapLayer: React.FC<{ styleUrl?: string; defaultStyle?: string }> = ({
+  styleUrl,
   defaultStyle = 'https://tiles.openfreemap.org/styles/bright'
 }) => {
   const map = useMap();
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -112,16 +122,31 @@ const OpenFreeMapLayer: React.FC<{ defaultStyle?: string }> = ({
 
   const activeStyle = isDark 
     ? 'https://tiles.openfreemap.org/styles/dark' 
-    : defaultStyle;
+    : (styleUrl || defaultStyle);
 
   useEffect(() => {
     let layer: any = null;
     try {
       layer = maplibreGL({
         style: activeStyle,
-      }).addTo(map);
+      });
+
+      layer.addTo(map);
+
+      // Listen for runtime errors from MapLibre
+      const glMap = typeof layer.getMaplibreMap === 'function' ? layer.getMaplibreMap() : null;
+      if (glMap) {
+        glMap.on('error', (err: any) => {
+          const msg = err?.error?.message || String(err);
+          if (msg.includes('Worker') || msg.includes('WebGL') || msg.includes('failed to load')) {
+            console.warn('MapLibre GL worker/rendering error detected, switching to OSM fallback:', msg);
+            setHasError(true);
+          }
+        });
+      }
     } catch (e) {
-      console.warn('OpenFreeMap layer initialization error:', e);
+      console.warn('OpenFreeMap layer initialization error, switching to OSM fallback:', e);
+      setHasError(true);
     }
 
     return () => {
@@ -132,6 +157,17 @@ const OpenFreeMapLayer: React.FC<{ defaultStyle?: string }> = ({
       }
     };
   }, [map, activeStyle]);
+
+  if (hasError) {
+    return (
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        className="dark:invert dark:contrast-90 dark:hue-rotate-180 dark:brightness-95 transition-all duration-300"
+        maxZoom={19}
+      />
+    );
+  }
 
   return null;
 };
