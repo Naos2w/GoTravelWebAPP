@@ -182,6 +182,7 @@ export const translations = {
     show: "顯示",
     hide: "隱藏",
     segmentLeg: "航段",
+    tripNotFoundDesc: "請確認分享連結是否正確，或是您是否有權限存取此行程。",
   },
   en: {
     appName: "Go Travel",
@@ -362,6 +363,7 @@ export const translations = {
     show: "Show",
     hide: "Hide",
     segmentLeg: "Leg",
+    tripNotFoundDesc: "Please check if the share link is valid or if you have permission to view it.",
   },
 };
 

@@ -611,6 +611,10 @@ const App: React.FC = () => {
 
           if (isOwner || isAllowed) {
             setCurrentTripId(urlTripId);
+            setTrips((prev) => {
+              const exists = prev.some((t) => t.id === trip.id);
+              return exists ? prev : [trip, ...prev];
+            });
             setView("detail");
           } else {
             setNotification({
@@ -620,6 +624,10 @@ const App: React.FC = () => {
             setView("list");
           }
         } else {
+          setNotification({
+            message: translations[language].tripNotFound || "Trip not found",
+            type: "error",
+          });
           setView("list");
         }
       } catch (e) {
@@ -643,17 +651,87 @@ const App: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
+    let authHandled = false;
 
-    // Supabase v2 onAuthStateChange triggers INITIAL_SESSION automatically on mount,
-    // which avoids race conditions with a redundant getSession() call.
+    // Safety timeout: Guarantee that isLoading will never remain stuck on true under any circumstances
+    const safetyTimer = window.setTimeout(() => {
+      if (isMounted) {
+        setIsLoading((loading) => {
+          if (loading) {
+            console.warn("[Auth] Initial loading safety timeout reached (6s). Forcing spinner release.");
+            return false;
+          }
+          return false;
+        });
+      }
+    }, 6000);
+
+    // Step 1: Immediately query getSession() to avoid onAuthStateChange delay or dropped INITIAL_SESSION in StrictMode
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session }, error }) => {
+        if (!isMounted) return;
+        if (error) console.warn("[Auth] getSession error:", error);
+
+        if (session?.user) {
+          authHandled = true;
+          await handleAuthUser(session.user);
+        } else if (!window.location.hash.includes("access_token")) {
+          // Unauthenticated session
+          authHandled = true;
+          const params = new URLSearchParams(window.location.search);
+          const urlTripId = params.get("tripId");
+          if (urlTripId) {
+            try {
+              const trip = await getTripById(urlTripId);
+              if (isMounted) {
+                if (trip) {
+                  setTrips([trip]);
+                  setCurrentTripId(urlTripId);
+                  setView("detail");
+                } else {
+                  setNotification({
+                    message: translations[language].tripNotFound || "Trip not found",
+                    type: "error",
+                  });
+                  setView("landing");
+                }
+              }
+            } catch {
+              if (isMounted) setView("landing");
+            } finally {
+              if (isMounted) setIsLoading(false);
+            }
+            return;
+          }
+
+          if (isMounted) {
+            setIsLoading(false);
+            setView("landing");
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("[Auth] getSession unexpected failure:", err);
+        if (isMounted) setIsLoading(false);
+      });
+
+    // Step 2: Subscribe to auth state changes for ongoing lifecycle (e.g. login, logout, token refresh)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
+      if (event === "INITIAL_SESSION" && authHandled) {
+        // Already handled by direct getSession() call
+        setIsLoading(false);
+        return;
+      }
+
       if (session?.user) {
         // Check against Ref to prevent redundant state resets during TOKEN_REFRESHED
         if (userRef.current && userRef.current.id === session.user.id) {
+          setIsLoading(false);
           return;
         }
         await handleAuthUser(session.user);
@@ -698,6 +776,7 @@ const App: React.FC = () => {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
@@ -1956,6 +2035,29 @@ const App: React.FC = () => {
                 })}
               </div>
             </div>
+          </div>
+        )}
+
+        {view === "detail" && !currentTrip && !isLoading && (
+          <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4 shadow-sm">
+              <AlertCircle size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
+              {t("tripNotFound")}
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
+              {t("tripNotFoundDesc")}
+            </p>
+            <button
+              onClick={() => {
+                setView(user ? "list" : "landing");
+                setCurrentTripId(null);
+              }}
+              className="bg-primary text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            >
+              {t("backHome")}
+            </button>
           </div>
         )}
 

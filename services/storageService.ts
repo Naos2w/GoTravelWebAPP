@@ -361,13 +361,19 @@ export const getTrips = async (
       ? `,allowed_emails.cs.{${userEmail.toLowerCase()}}`
       : "";
 
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("trips")
       .select(
         `*, checklist_items (*), itinerary_items (*), expenses (*), flights (*), trip_collaborators (*)`
       )
       .or(`user_id.eq.${userId}${emailFilter}`)
       .order("start_date", { ascending: false });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Database query timeout (getTrips)")), 8000)
+    );
+
+    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
 
     if (error) throw error;
 
@@ -383,7 +389,7 @@ export const getTrips = async (
 export const getTripById = async (tripId: string): Promise<Trip | null> => {
   if (!tripId || !isValidUUID(tripId)) return null;
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("trips")
       .select(
         `*, checklist_items (*), itinerary_items (*), expenses (*), flights (*), trip_collaborators (*)`
@@ -391,9 +397,16 @@ export const getTripById = async (tripId: string): Promise<Trip | null> => {
       .eq("id", tripId)
       .maybeSingle();
 
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Database query timeout (getTripById)")), 8000)
+    );
+
+    const { data, error } = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
     if (error || !data) return null;
     return transformTripRow(data);
   } catch (err) {
+    console.warn("[Storage] getTripById timed out or failed:", err);
     return null;
   }
 };

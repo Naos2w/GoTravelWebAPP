@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 因 CARTO 官方政策變更，未帶 API Key 之請求全面回傳 `API KEY REQUIRED` 浮水印。已全面遷移至 100% 免 Key 開源圖磚。
 - **徹底解決 WebGL 轉接層造成的卡頓 (Lag) 與全黑問題**：
   - 捨棄重型 WebGL 向量雙向同步轉接層，回歸原生 GPU 渲染，徹底解決拖曳掉幀、WebWorker 報錯與深色模式底色漆黑問題。
+- **修復 URL 帶 `tripId` 重新整理時「一直轉圈圈顯示同步中」卡死問題**：
+  - **根本原因**：
+    1. React StrictMode 開發模式二次掛載與 Supabase 事件競爭，導致 `onAuthStateChange` 未及時觸發，`isLoading` 停滯為 `true`。
+    2. Token 刷新或重複事件時，因 Ref 比對命中直接 `return`，遺漏呼叫 `setIsLoading(false)`。
+    3. `handleAuthUser` 成功讀取後未立即將 `trip` 注入 `trips` 狀態陣列，造成詳情視圖缺少 `currentTrip`。
+    4. Supabase 多表關聯查詢缺乏逾時熔斷，遇網路卡頓或連線池冷啟動時無限等待。
+  - **解決方案**：
+    1. 掛載時直接以 `supabase.auth.getSession()` 主動驗證，解決事件被 React 生命週期吞噬的風險。
+    2. 新增全域 6 秒防護逾時（Safety Timeout），任何極端網路狀況皆保證解除全螢幕 Spinner。
+    3. 在 `getTripById` 與 `getTrips` 加入 8 秒 `Promise.race` 逾時熔斷，防止資料庫查詢掛起。
+    4. 在驗證行程後第一時間快取至 `trips` 狀態，並新增行程不存在時的友善提示卡片。
 
 #### Removed
 - **徹底淘汰 Google Places API (`places.googleapis.com`)**：
