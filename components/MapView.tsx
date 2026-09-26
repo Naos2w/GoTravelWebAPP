@@ -521,11 +521,12 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
-        {/* Using a Premium, Clean Basemap (CartoDB Positron) */}
+        {/* OpenStreetMap Standard Basemap (100% Free & No API Key Required) */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          className="dark:invert dark:contrast-100 dark:hue-rotate-180 dark:brightness-90 transition-all duration-300"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="dark:invert dark:contrast-90 dark:hue-rotate-180 dark:brightness-95 transition-all duration-300"
+          maxZoom={19}
         />
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
