@@ -1616,7 +1616,7 @@ const App: React.FC = () => {
         )}
 
         {view === "detail" && currentTrip && (
-          <div className="min-h-screen flex flex-col pb-24 md:pb-0">
+          <div className="min-h-screen flex flex-col pb-28 sm:pb-32 md:pb-0">
             <nav className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/[0.06] dark:border-white/[0.06] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -2028,8 +2028,12 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl border-t border-black/[0.06] dark:border-white/[0.06] z-50 pb-safe">
-              <div className="flex justify-around items-center px-2 py-1">
+            {/* Instagram / Dynamic Island Floating Bottom Navigation Dock */}
+            <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
+              <nav 
+                aria-label="Mobile Navigation"
+                className="pointer-events-auto bg-white/85 dark:bg-[#1C1C1E]/85 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.12] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.7)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+              >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isDisabled = isPricePending && tab.id !== "flights";
@@ -2038,27 +2042,40 @@ const App: React.FC = () => {
                       key={tab.id}
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
-                      className={`relative flex flex-col items-center justify-center py-2 px-4 rounded-2xl gap-1 transition-all duration-200 ${
-                        isActive
-                          ? "text-primary"
-                          : "text-slate-400 dark:text-slate-500"
-                      } ${isDisabled ? "opacity-30" : ""}`}
+                      aria-label={tab.label}
+                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
+                        isDisabled ? "opacity-35 cursor-not-allowed active:scale-100" : ""
+                      }`}
                     >
-                      {isDisabled ? (
-                        <Lock size={20} />
-                      ) : (
-                        <tab.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-                      )}
-                      {isActive && (
-                        <span className="text-[9px] font-bold">{tab.label}</span>
-                      )}
-                      {tab.alert && (
-                        <span className="absolute top-1.5 right-3 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
-                      )}
+                      <div
+                        className={`relative flex items-center justify-center w-11 h-7 rounded-full transition-all duration-300 ${
+                          isActive
+                            ? "bg-primary/15 dark:bg-primary/25 text-primary scale-105 shadow-sm"
+                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                        }`}
+                      >
+                        {isDisabled ? (
+                          <Lock size={17} />
+                        ) : (
+                          <tab.icon size={19} strokeWidth={isActive ? 2.5 : 1.8} />
+                        )}
+                        {tab.alert && (
+                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#1C1C1E] animate-pulse" />
+                        )}
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
+                          isActive
+                            ? "text-primary font-black scale-100"
+                            : "text-slate-400 dark:text-slate-500 scale-95"
+                        }`}
+                      >
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
-              </div>
+              </nav>
             </div>
           </div>
         )}
@@ -2087,7 +2104,7 @@ const App: React.FC = () => {
         )}
 
         {view === "list" && (
-          <div className="p-6 sm:p-10 max-w-7xl mx-auto min-h-screen">
+          <div className="p-4 sm:p-10 pb-28 max-w-7xl mx-auto min-h-screen relative">
             <header className="flex justify-between items-center mb-12">
               <div className="flex items-center gap-2.5">
                 <div className="text-lg font-bold text-primary tracking-tight">
@@ -2171,6 +2188,17 @@ const App: React.FC = () => {
                 onSubmit={handleCreateTripSubmit}
               />
             )}
+            {/* Mobile Floating Action Button (FAB) for New Trip */}
+            <div className="sm:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40">
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(true)}
+                aria-label={t("newTrip")}
+                className="w-14 h-14 rounded-full bg-primary text-white shadow-2xl shadow-primary/40 flex items-center justify-center active:scale-90 transition-transform duration-200 cursor-pointer"
+              >
+                <Plus size={24} strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
         )}
 

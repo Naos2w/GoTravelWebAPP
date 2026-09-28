@@ -4,7 +4,7 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, ChevronLeft, Edit2, List
+  Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
@@ -88,6 +88,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [nameError, setNameError] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [isMobileCardsCollapsed, setIsMobileCardsCollapsed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -99,6 +100,17 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   const scrollAnchorRef = useRef<string | null>(null);
   const editRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Auto-scroll mobile bottom cards when highlighted item changes
+  useEffect(() => {
+    if (highlightedId && viewMode === 'map' && !isMobileCardsCollapsed) {
+      const el = cardRefs.current[highlightedId];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [highlightedId, viewMode, isMobileCardsCollapsed]);
 
   const TRANSPORT_OPTIONS: { type: TransportType; label: string; icon: any; color: string }[] = [
     { type: 'Public', label: t('transportPublic'), icon: TrainFront, color: 'text-indigo-600 dark:text-indigo-400' },
@@ -653,7 +665,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100vh-160px)] overflow-hidden animate-in fade-in duration-500">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100dvh-175px)] overflow-hidden animate-in fade-in duration-500">
       {/* Day Selector — horizontal strip on mobile, vertical column on desktop */}
       <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
@@ -692,7 +704,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
         <div className="flex-1 flex gap-3 overflow-hidden">
 
           {/* Map — always visible in map mode; hidden on mobile in list mode */}
-          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300
+          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300 relative
             ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
             {/* TODO: [Optimized] Wrap MapView in Suspense for lazy loading */}
             <Suspense fallback={
@@ -705,67 +717,114 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 onAddSearchResult={handleAddSearchResult}
                 activeItemId={highlightedId}
                 onMarkerClick={(id) => { setHighlightedId(id); }}
+                hasBottomCards={viewMode === 'map' && !isMobileCardsCollapsed}
               />
             </Suspense>
+
+            {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Instagram / Apple Maps Style) ── */}
+            {viewMode === 'map' && (() => {
+              // Use exact same filter as MapView so numbers match map markers 1:1
+              const validItems = displayItems.filter(i =>
+                i.lat != null && i.lng != null &&
+                !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
+                i.type !== 'Transport'
+              );
+
+              if (validItems.length === 0) return null;
+
+              return (
+                <div className="lg:hidden absolute bottom-3 inset-x-0 z-[1000] pointer-events-none flex flex-col gap-1.5 px-3">
+                  {/* Header toggle pill */}
+                  <div className="flex justify-end pointer-events-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileCardsCollapsed(!isMobileCardsCollapsed)}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl shadow-md border border-black/[0.06] dark:border-white/[0.1] text-[11px] font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
+                    >
+                      <MapPin size={12} className="text-primary" />
+                      <span>{validItems.length} {isEn ? 'Stops' : '個景點'}</span>
+                      {isMobileCardsCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                    </button>
+                  </div>
+
+                  {/* Horizontal scroll cards */}
+                  {!isMobileCardsCollapsed && (
+                    <div className="pointer-events-auto flex gap-2.5 overflow-x-auto no-scrollbar py-1 px-1 snap-x snap-mandatory animate-in fade-in slide-in-from-bottom-3 duration-300">
+                      {validItems.map((item, mapIdx) => {
+                        const isHighlighted = highlightedId === item.id;
+                        const originalIdx = displayItems.findIndex(i => i.id === item.id);
+                        const nextOriginal = displayItems[originalIdx + 1];
+                        const hasTransport = nextOriginal?.type === 'Transport';
+                        const transportOpt = hasTransport
+                          ? TRANSPORT_OPTIONS.find(o => o.type === nextOriginal.transportType)
+                          : null;
+
+                        return (
+                          <div
+                            key={item.id}
+                            ref={el => { cardRefs.current[item.id] = el; }}
+                            onClick={() => setHighlightedId(item.id)}
+                            className={`snap-center shrink-0 w-[240px] p-3 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] ${
+                              isHighlighted
+                                ? 'bg-white/95 dark:bg-slate-800/95 border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
+                                : 'bg-white/85 dark:bg-slate-900/85 border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1.5 mb-1">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                isHighlighted ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
+                              }`}>
+                                STOP {mapIdx + 1}
+                              </span>
+                              <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                                <Clock size={11} />
+                                <span>{item.time || '--:--'}</span>
+                              </div>
+                              <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${Number(item.lat)},${Number(item.lng)}&travelmode=driving`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
+                                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700/80 hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
+                              >
+                                <Navigation size={12} />
+                              </a>
+                            </div>
+
+                            <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">
+                              {item.placeName}
+                            </h4>
+
+                            {item.note && (
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                {item.note}
+                              </p>
+                            )}
+
+                            {/* Transport snippet to next stop */}
+                            {hasTransport && mapIdx < validItems.length - 1 && (
+                              <div className="mt-1.5 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-[10px] text-slate-400">
+                                <span className="flex items-center gap-1">
+                                  {transportOpt && <transportOpt.icon size={11} className={transportOpt.color} />}
+                                  <span>{transportOpt?.label || t('moving')}</span>
+                                </span>
+                                {nextOriginal.note && (
+                                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+                                    {nextOriginal.note}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
-
-          {/* ── Mobile map mode: compact right timeline strip ── */}
-          {viewMode === 'map' && (() => {
-            // Use exact same filter as MapView so numbers match map markers 1:1
-            const validItems = displayItems.filter(i =>
-              i.lat != null && i.lng != null &&
-              !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
-              i.type !== 'Transport'
-            );
-
-            return (
-              <div className="lg:hidden w-[72px] shrink-0 flex flex-col gap-1.5 overflow-y-auto no-scrollbar py-1">
-                {validItems.map((item, mapIdx) => {
-                  const isHighlighted = highlightedId === item.id;
-                  // Check if there's a transport between this stop and the next in the original list
-                  const originalIdx = displayItems.findIndex(i => i.id === item.id);
-                  const nextOriginal = displayItems[originalIdx + 1];
-                  const hasTransport = nextOriginal?.type === 'Transport';
-                  const transportOpt = hasTransport
-                    ? TRANSPORT_OPTIONS.find(o => o.type === nextOriginal.transportType)
-                    : null;
-
-                  return (
-                    <React.Fragment key={item.id}>
-                      <button
-                        onClick={() => setHighlightedId(item.id)}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-2xl border transition-all active:scale-95 ${
-                          isHighlighted
-                            ? 'bg-primary border-primary shadow-lg shadow-primary/20'
-                            : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 shadow-ios'
-                        }`}
-                      >
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                          isHighlighted ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                        }`}>
-                          {mapIdx + 1}
-                        </div>
-                        <div className={`text-[9px] font-mono font-black leading-tight text-center ${
-                          isHighlighted ? 'text-white' : 'text-slate-500 dark:text-slate-400'
-                        }`}>
-                          {item.time.replace(':', '\n')}
-                        </div>
-                      </button>
-
-                      {/* Show transport connector between this stop and the next */}
-                      {hasTransport && mapIdx < validItems.length - 1 && (
-                        <div className="flex flex-col items-center gap-0.5 opacity-40 py-0.5">
-                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
-                          {transportOpt && <transportOpt.icon size={10} className={transportOpt.color} />}
-                          <div className="w-0.5 h-2 bg-slate-300 dark:bg-slate-600 rounded-full" />
-                        </div>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            );
-          })()}
 
           {/* ── Full list panel (list mode on mobile, always on desktop) ── */}
           <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden
