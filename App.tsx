@@ -50,6 +50,8 @@ import { NotificationToast } from "./components/NotificationToast";
 import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
 import { LoginModal, LoginReason } from "./components/LoginModal";
+import { DeleteTripModal } from "./components/DeleteTripModal";
+import { TripCard, getTripTiming } from "./components/TripCard";
 import { APP_VERSION } from "./services/version";
 
 // TODO: [Optimized] Lazy load heavy components for better bundle code-splitting
@@ -91,6 +93,9 @@ import {
   X as CloseIcon,
   Bell,
   Clock as PendingIcon,
+  Search,
+  Compass,
+  Filter,
 } from "lucide-react";
 import {
   PieChart,
@@ -169,6 +174,10 @@ const App: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [pendingTripId, setPendingTripId] = useState<string | null>(null);
   const [loginReason, setLoginReason] = useState<LoginReason>(null);
+  const [tripSearchQuery, setTripSearchQuery] = useState("");
+  const [tripFilter, setTripFilter] = useState<"all" | "upcoming" | "past">("all");
+  const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
+  const [isDeletingTrip, setIsDeletingTrip] = useState(false);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -1244,23 +1253,52 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteTrip = async () => {
-    if (!user || !currentTrip) return;
-    if (!window.confirm(t("confirmDelete"))) return;
+  const handleConfirmDeleteTrip = async () => {
+    const targetTrip = tripToDelete || currentTrip;
+    if (!user || !targetTrip) return;
+    const isOwner = targetTrip.user_id === user.id;
+    setIsDeletingTrip(true);
     try {
-      // Broadcast first so others can see it before access is cut
-      activeChannelRef.current?.send({
-        type: 'broadcast',
-        event: 'TRIP_DELETED',
-        payload: { id: currentTrip.id }
-      });
+      if (isOwner) {
+        // Broadcast first so others can see it before access is cut
+        activeChannelRef.current?.send({
+          type: 'broadcast',
+          event: 'TRIP_DELETED',
+          payload: { id: targetTrip.id }
+        });
 
-      await deleteTrip(currentTrip.id, user.id);
-      setTrips((prev) => prev.filter((t) => t.id !== currentTrip.id));
-      setCurrentTripId(null);
-      setView("list");
+        await deleteTrip(targetTrip.id, user.id);
+        setNotification({
+          message: t("tripDeletedSuccess"),
+          type: "info",
+        });
+      } else {
+        await leaveTrip(targetTrip.id, user.id);
+        setNotification({
+          message: t("tripLeaveSuccess"),
+          type: "info",
+        });
+      }
+
+      setTrips((prev) => prev.filter((t) => t.id !== targetTrip.id));
+      if (currentTripId === targetTrip.id) {
+        setCurrentTripId(null);
+        setView("list");
+      }
+      setTripToDelete(null);
     } catch (err) {
-      alert("Failed to delete trip.");
+      setNotification({
+        message: isOwner ? t("deleteFailed") : t("leaveFailed"),
+        type: "error",
+      });
+    } finally {
+      setIsDeletingTrip(false);
+    }
+  };
+
+  const handleDeleteTrip = () => {
+    if (currentTrip) {
+      setTripToDelete(currentTrip);
     }
   };
 
@@ -1386,6 +1424,47 @@ const App: React.FC = () => {
     // Normally owner is in allowed_emails, but if not, ensure count is at least 1
     return Math.max(1, allEmails.size);
   }, [currentTrip]);
+
+  // Filtered trips and status metrics for "Your Trips"
+  const { filteredTrips, tripCounts } = useMemo(() => {
+    let all = 0;
+    let upcoming = 0;
+    let past = 0;
+
+    trips.forEach((trip) => {
+      all++;
+      const timing = getTripTiming(trip.startDate, trip.endDate);
+      if (timing.status === "past") {
+        past++;
+      } else {
+        upcoming++;
+      }
+    });
+
+    const query = tripSearchQuery.trim().toLowerCase();
+    const result = trips.filter((trip) => {
+      // 1. Filter by status tab
+      if (tripFilter !== "all") {
+        const timing = getTripTiming(trip.startDate, trip.endDate);
+        if (tripFilter === "upcoming" && timing.status === "past") return false;
+        if (tripFilter === "past" && timing.status !== "past") return false;
+      }
+
+      // 2. Search query by name or destination
+      if (query) {
+        const matchName = trip.name?.toLowerCase().includes(query);
+        const matchDest = trip.destination?.toLowerCase().includes(query);
+        if (!matchName && !matchDest) return false;
+      }
+
+      return true;
+    });
+
+    return {
+      filteredTrips: result,
+      tripCounts: { all, upcoming, past },
+    };
+  }, [trips, tripSearchQuery, tripFilter]);
 
   const GlobalNav = () => (
     <div className="flex items-center gap-1">
@@ -2249,56 +2328,196 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            <div className="flex justify-between items-end mb-10">
-              <div>
-                <h2 className="text-4xl font-bold tracking-tight mb-1 text-slate-900 dark:text-white">
-                  {t("yourTrips")}
-                </h2>
-                <p className="text-slate-400 font-medium text-sm">
-                  {trips.length} {language === 'zh' ? '個旅程' : 'adventures'}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="bg-primary text-white px-6 py-3 rounded-[18px] flex items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200"
-              >
-                <Plus size={18} /> {t("newTrip")}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {trips.map((trip) => (
-                <div
-                  key={trip.id}
-                  onClick={() => {
-                    setCurrentTripId(trip.id);
-                    setView("detail");
-                  }}
-                  className="group bg-white dark:bg-[#2c2c2e] rounded-[32px] shadow-ios overflow-hidden cursor-pointer transition-all duration-300 ease-spring hover:-translate-y-2 hover:shadow-ios-lg active:scale-[0.98]"
+            {/* Header section with Title, Subtitle, Search/Filter Toolbar & New Trip CTA */}
+            <div className="flex flex-col gap-6 mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+                    {t("yourTrips")}
+                  </h2>
+                  <p className="text-slate-400 font-semibold text-xs sm:text-sm mt-1">
+                    {trips.length > 0 ? (
+                      language === "zh" ? (
+                        `${trips.length} 個旅程 • ${tripCounts.upcoming} 個即將到來`
+                      ) : (
+                        `${trips.length} trips • ${tripCounts.upcoming} upcoming`
+                      )
+                    ) : (
+                      language === "zh" ? "尚無已建立的旅程" : "No trips created yet"
+                    )}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(true)}
+                  className="hidden sm:inline-flex bg-primary hover:bg-primary/95 text-white px-5 py-3 rounded-2xl items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
                 >
-                  <div
-                    className={`h-52 relative overflow-hidden bg-gradient-to-br ${getGradient(
-                      trip.destination
-                    )} flex flex-col justify-end p-8 transition-transform duration-500 group-hover:scale-105`}
-                  >
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-                    <div className="relative">
-                      <h3 className="text-white text-2xl font-bold truncate mb-0.5">
-                        {trip.name}
-                      </h3>
-                      <p className="text-white/70 text-[10px] font-semibold uppercase tracking-widest">
-                        {trip.startDate} – {trip.endDate}
-                      </p>
-                    </div>
+                  <Plus size={18} /> {t("newTrip")}
+                </button>
+              </div>
+
+              {/* Search & Filter Toolbar (shown when trips exist) */}
+              {trips.length > 0 && (
+                <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-1">
+                  {/* Search Bar */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search
+                      size={16}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                    />
+                    <input
+                      type="text"
+                      value={tripSearchQuery}
+                      onChange={(e) => setTripSearchQuery(e.target.value)}
+                      placeholder={t("searchTripsPlaceholder")}
+                      className="w-full pl-10 pr-9 py-2.5 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700/70 rounded-2xl text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all"
+                    />
+                    {tripSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setTripSearchQuery("")}
+                        aria-label={t("clearFilter")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer"
+                      >
+                        <CloseIcon size={14} />
+                      </button>
+                    )}
                   </div>
-                  <div className="px-7 py-5 flex justify-between items-center">
-                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">{trip.destination}</span>
-                    <span className="text-sm font-bold text-primary">
-                      NT$ {calculateTripTotal(trip).toLocaleString()}
-                    </span>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 self-start md:self-auto overflow-x-auto max-w-full">
+                    <button
+                      type="button"
+                      onClick={() => setTripFilter("all")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        tripFilter === "all"
+                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      }`}
+                    >
+                      <span>{t("filterAll")}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          tripFilter === "all"
+                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {tripCounts.all}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTripFilter("upcoming")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        tripFilter === "upcoming"
+                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      }`}
+                    >
+                      <span>{t("filterUpcoming")}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          tripFilter === "upcoming"
+                            ? "bg-primary/10 text-primary"
+                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {tripCounts.upcoming}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTripFilter("past")}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        tripFilter === "past"
+                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                      }`}
+                    >
+                      <span>{t("filterPast")}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          tripFilter === "past"
+                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {tripCounts.past}
+                      </span>
+                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
+
+            {/* Zero State: No trips at all */}
+            {trips.length === 0 && (
+              <div className="py-16 sm:py-24 px-6 text-center max-w-lg mx-auto flex flex-col items-center animate-in fade-in zoom-in-95 duration-300">
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-primary/20 via-primary/10 to-transparent flex items-center justify-center text-primary mb-6 shadow-sm ring-8 ring-primary/5">
+                  <Compass size={44} className="stroke-[1.75]" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
+                  {t("emptyTripsTitle")}
+                </h3>
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-sm mb-8 leading-relaxed">
+                  {t("emptyTripsDesc")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(true)}
+                  className="bg-primary hover:bg-primary/95 text-white px-8 py-4 rounded-2xl font-bold text-sm shadow-xl shadow-primary/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus size={18} /> {t("createFirstTrip")}
+                </button>
+              </div>
+            )}
+
+            {/* Filter Empty State: Search or filter has 0 results */}
+            {trips.length > 0 && filteredTrips.length === 0 && (
+              <div className="py-20 text-center flex flex-col items-center justify-center animate-in fade-in duration-200">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                  <Search size={28} />
+                </div>
+                <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">
+                  {t("noTripsFound")}
+                </h4>
+                <p className="text-xs text-slate-400 mb-6 max-w-xs">
+                  {t("noTripsFoundDesc")}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTripSearchQuery("");
+                    setTripFilter("all");
+                  }}
+                  className="text-xs font-bold text-primary hover:underline cursor-pointer"
+                >
+                  {t("clearFilter")}
+                </button>
+              </div>
+            )}
+
+            {/* Trips Grid */}
+            {filteredTrips.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
+                {filteredTrips.map((trip) => (
+                  <TripCard
+                    key={trip.id}
+                    trip={trip}
+                    currentUserId={user?.id}
+                    onSelect={(id) => {
+                      setCurrentTripId(id);
+                      setView("detail");
+                    }}
+                    onDeleteClick={(target) => setTripToDelete(target)}
+                    calculateTripTotal={calculateTripTotal}
+                    getGradient={getGradient}
+                  />
+                ))}
+              </div>
+            )}
             {showCreateForm && (
               <TripForm
                 onClose={() => setShowCreateForm(false)}
@@ -2318,6 +2537,15 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        <DeleteTripModal
+          isOpen={Boolean(tripToDelete)}
+          trip={tripToDelete}
+          currentUserId={user?.id}
+          onClose={() => setTripToDelete(null)}
+          onConfirm={handleConfirmDeleteTrip}
+          isDeleting={isDeletingTrip}
+        />
 
         <LoginModal
           isOpen={isLoginModalOpen}
