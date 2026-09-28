@@ -172,6 +172,26 @@ const App: React.FC = () => {
   const refreshTimeoutRef = useRef<number | null>(null);
   const joinLockRef = useRef<string | null>(null);
   const activeChannelRef = useRef<RealtimeChannel | null>(null);
+  const userRef = useRef<User | null>(user);
+  userRef.current = user;
+  const currentTripIdRef = useRef<string | null>(currentTripId);
+  currentTripIdRef.current = currentTripId;
+
+  // Preserve user object reference across background token refreshes to avoid breaking subscriptions
+  const setSafeUser = (newUser: User | null) => {
+    setUser((prev) => {
+      if (!newUser) return null;
+      if (
+        prev &&
+        prev.id === newUser.id &&
+        prev.email === newUser.email &&
+        prev.name === newUser.name
+      ) {
+        return prev;
+      }
+      return newUser;
+    });
+  };
 
   const currentTrip = trips.find((t) => t.id === currentTripId);
 
@@ -596,14 +616,18 @@ const App: React.FC = () => {
 
   const handleAuthUser = async (supabaseUser: any) => {
     const parsedUser = parseSupabaseUser(supabaseUser);
-    setUser(parsedUser);
+    setSafeUser(parsedUser);
 
     // Read the URL param directly here, or restore from sessionStorage deep link
     const urlParams = new URLSearchParams(window.location.search);
     const urlTripId = urlParams.get("tripId") || consumeRedirectTripId();
 
     if (urlTripId) {
-      setIsLoading(true);
+      // Do not flash full-screen loading spinner if the user is already actively viewing this trip
+      const isAlreadyViewing = currentTripIdRef.current === urlTripId;
+      if (!isAlreadyViewing) {
+        setIsLoading(true);
+      }
       try {
         const trip = await getTripById(urlTripId);
         if (trip) {
@@ -661,12 +685,6 @@ const App: React.FC = () => {
       setIsLoading(false);
     }
   };
-
-  // Use a ref to track the latest user state.
-  const userRef = useRef<User | null>(null);
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
 
   useEffect(() => {
     let isMounted = true;
@@ -737,9 +755,16 @@ const App: React.FC = () => {
       if (event === "INITIAL_SESSION") return;
 
       if (event === "SIGNED_IN" && session?.user) {
+        // If user is already authenticated with the same ID (e.g. window focus / background session check),
+        // safely update user reference without tearing down UI or flashing full-screen spinner!
+        if (userRef.current?.id === session.user.id) {
+          setSafeUser(parseSupabaseUser(session.user));
+          return;
+        }
+
         await handleAuthUser(session.user);
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
-        setUser(parseSupabaseUser(session.user));
+        setSafeUser(parseSupabaseUser(session.user));
       } else if (event === "SIGNED_OUT") {
         window.history.replaceState(null, "", window.location.pathname);
         if (currentTripId) {
