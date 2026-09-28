@@ -618,6 +618,47 @@ export const deleteChecklistItem = async (id: string, tripId: string): Promise<v
   if (error) throw error;
 };
 
+export const updateChecklistItem = async (
+  id: string,
+  tripId: string,
+  updates: Partial<Pick<ChecklistItem, "isCompleted" | "text" | "category">>
+): Promise<void> => {
+  const payload: any = {};
+  if (updates.isCompleted !== undefined) payload.is_completed = updates.isCompleted;
+  if (updates.text !== undefined) payload.text = updates.text;
+  if (updates.category !== undefined) payload.category = updates.category;
+
+  const { error } = await supabase
+    .from("checklist_items")
+    .update(payload)
+    .eq("id", id)
+    .eq("trip_id", tripId);
+  if (error) {
+    console.error("Failed to update checklist item:", error);
+    throw error;
+  }
+};
+
+export const addChecklistItem = async (
+  item: ChecklistItem,
+  tripId: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from("checklist_items")
+    .insert({
+      id: item.id,
+      trip_id: tripId,
+      user_id: item.user_id,
+      text: item.text,
+      category: item.category,
+      is_completed: item.isCompleted || false,
+    });
+  if (error) {
+    console.error("Failed to insert checklist item:", error);
+    throw error;
+  }
+};
+
 export const deleteItineraryItem = async (id: string, tripId: string): Promise<void> => {
   const { error } = await supabase
     .from("itinerary_items")

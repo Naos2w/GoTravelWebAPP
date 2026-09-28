@@ -8,7 +8,7 @@ import React, {
   Suspense,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
-import { Trip, Currency, Theme, Language, User } from "./types";
+import { Trip, Currency, Theme, Language, User, ChecklistItem } from "./types";
 import {
   getTrips,
   getTripById,
@@ -23,6 +23,8 @@ import {
   createFullTrip,
   deleteExpense,
   deleteItineraryItem,
+  updateChecklistItem,
+  addChecklistItem,
   supabase,
 } from "./services/storageService";
 import {
@@ -172,6 +174,26 @@ const App: React.FC = () => {
   const refreshTimeoutRef = useRef<number | null>(null);
   const joinLockRef = useRef<string | null>(null);
   const activeChannelRef = useRef<RealtimeChannel | null>(null);
+  const userRef = useRef<User | null>(user);
+  userRef.current = user;
+  const currentTripIdRef = useRef<string | null>(currentTripId);
+  currentTripIdRef.current = currentTripId;
+
+  // Preserve user object reference across background token refreshes to avoid breaking subscriptions
+  const setSafeUser = (newUser: User | null) => {
+    setUser((prev) => {
+      if (!newUser) return null;
+      if (
+        prev &&
+        prev.id === newUser.id &&
+        prev.email === newUser.email &&
+        prev.name === newUser.name
+      ) {
+        return prev;
+      }
+      return newUser;
+    });
+  };
 
   const currentTrip = trips.find((t) => t.id === currentTripId);
 
@@ -223,12 +245,20 @@ const App: React.FC = () => {
   }, [currentTripId, user, currentTrip]);
 
   // Real-time synchronization for active trip with Permission Check
-  // Move refreshActiveTrip outside to be accessible
+  // Monotonic sequence ref to prevent out-of-order asynchronous responses from reverting newer local updates
+  const latestRefreshSeqRef = useRef<number>(0);
+
   const refreshActiveTrip = async () => {
     if (!currentTripId || !user) return;
+    const seq = ++latestRefreshSeqRef.current;
 
     try {
         const updatedTrip = await getTripById(currentTripId);
+
+        // If a newer refresh started while this one was in-flight, discard stale result!
+        if (seq !== latestRefreshSeqRef.current) {
+          return;
+        }
 
         // 1. Check if trip still exists
         if (!updatedTrip) {
@@ -309,7 +339,7 @@ const App: React.FC = () => {
            refreshActiveTrip();
         }
       )
-      // Checklist Items: Split for DELETE support
+      // Checklist Items: Granular state sync to eliminate 6-table full refetch race conditions
       .on(
         "postgres_changes",
         {
@@ -318,7 +348,27 @@ const App: React.FC = () => {
           table: "checklist_items",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                if ((t.checklist || []).some((item) => item.id === newRow.id)) return t;
+                const newItem: ChecklistItem = {
+                  id: newRow.id,
+                  user_id: newRow.user_id,
+                  text: newRow.text,
+                  category: newRow.category,
+                  isCompleted: newRow.is_completed,
+                };
+                return { ...t, checklist: [...(t.checklist || []), newItem] };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -328,7 +378,29 @@ const App: React.FC = () => {
           table: "checklist_items",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.id) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                const newChecklist = (t.checklist || []).map((item) =>
+                  item.id === updatedRow.id
+                    ? {
+                        ...item,
+                        isCompleted: updatedRow.is_completed,
+                        text: updatedRow.text ?? item.text,
+                        category: updatedRow.category ?? item.category,
+                      }
+                    : item
+                );
+                return { ...t, checklist: newChecklist };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -336,9 +408,23 @@ const App: React.FC = () => {
           event: "DELETE",
           schema: "public",
           table: "checklist_items",
-          // Unfiltered DELETE to catch removals
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                return {
+                  ...t,
+                  checklist: (t.checklist || []).filter((item) => item.id !== deletedId),
+                };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       // Itinerary Items: Split for DELETE support
       .on(
@@ -596,14 +682,18 @@ const App: React.FC = () => {
 
   const handleAuthUser = async (supabaseUser: any) => {
     const parsedUser = parseSupabaseUser(supabaseUser);
-    setUser(parsedUser);
+    setSafeUser(parsedUser);
 
     // Read the URL param directly here, or restore from sessionStorage deep link
     const urlParams = new URLSearchParams(window.location.search);
     const urlTripId = urlParams.get("tripId") || consumeRedirectTripId();
 
     if (urlTripId) {
-      setIsLoading(true);
+      // Do not flash full-screen loading spinner if the user is already actively viewing this trip
+      const isAlreadyViewing = currentTripIdRef.current === urlTripId;
+      if (!isAlreadyViewing) {
+        setIsLoading(true);
+      }
       try {
         const trip = await getTripById(urlTripId);
         if (trip) {
@@ -661,12 +751,6 @@ const App: React.FC = () => {
       setIsLoading(false);
     }
   };
-
-  // Use a ref to track the latest user state.
-  const userRef = useRef<User | null>(null);
-  useEffect(() => {
-    userRef.current = user;
-  }, [user]);
 
   useEffect(() => {
     let isMounted = true;
@@ -737,9 +821,16 @@ const App: React.FC = () => {
       if (event === "INITIAL_SESSION") return;
 
       if (event === "SIGNED_IN" && session?.user) {
+        // If user is already authenticated with the same ID (e.g. window focus / background session check),
+        // safely update user reference without tearing down UI or flashing full-screen spinner!
+        if (userRef.current?.id === session.user.id) {
+          setSafeUser(parseSupabaseUser(session.user));
+          return;
+        }
+
         await handleAuthUser(session.user);
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
-        setUser(parseSupabaseUser(session.user));
+        setSafeUser(parseSupabaseUser(session.user));
       } else if (event === "SIGNED_OUT") {
         window.history.replaceState(null, "", window.location.pathname);
         if (currentTripId) {
@@ -933,10 +1024,36 @@ const App: React.FC = () => {
        return;
     }
 
+    // Handle checklist updates & additions directly with targeted row mutations
+    if (action === "UPDATE_CHECKLIST_ITEM" && payload) {
+       updateChecklistItem(payload.id, updatedTrip.id, { isCompleted: payload.isCompleted })
+          .catch(err => {
+              console.error("[App] Update checklist item failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to update checklist item",
+                type: "error",
+              });
+          });
+       return;
+    }
+
+    if (action === "ADD_CHECKLIST_ITEM" && payload) {
+       addChecklistItem(payload, updatedTrip.id)
+          .catch(err => {
+              console.error("[App] Add checklist item failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to add checklist item",
+                type: "error",
+              });
+          });
+       return;
+    }
+
     // Immediate Save for explicit user actions (Add/Edit) to avoid "Waiting" feel
     const immediateActions = [
-      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM",
-      "ADD_CHECKLIST_ITEM", "UPDATE_CHECKLIST_ITEM"
+      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM"
     ];
     const delay = action && immediateActions.includes(action) ? 0 : 2000;
 
@@ -1616,7 +1733,7 @@ const App: React.FC = () => {
         )}
 
         {view === "detail" && currentTrip && (
-          <div className="min-h-screen flex flex-col pb-24 md:pb-0">
+          <div className="min-h-screen flex flex-col pb-28 sm:pb-32 md:pb-0">
             <nav className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/[0.06] dark:border-white/[0.06] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 min-w-0">
@@ -2028,8 +2145,12 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl border-t border-black/[0.06] dark:border-white/[0.06] z-50 pb-safe">
-              <div className="flex justify-around items-center px-2 py-1">
+            {/* Instagram / Dynamic Island Floating Bottom Navigation Dock */}
+            <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
+              <nav 
+                aria-label="Mobile Navigation"
+                className="pointer-events-auto bg-white/85 dark:bg-[#1C1C1E]/85 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.12] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.7)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+              >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isDisabled = isPricePending && tab.id !== "flights";
@@ -2038,27 +2159,40 @@ const App: React.FC = () => {
                       key={tab.id}
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
-                      className={`relative flex flex-col items-center justify-center py-2 px-4 rounded-2xl gap-1 transition-all duration-200 ${
-                        isActive
-                          ? "text-primary"
-                          : "text-slate-400 dark:text-slate-500"
-                      } ${isDisabled ? "opacity-30" : ""}`}
+                      aria-label={tab.label}
+                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
+                        isDisabled ? "opacity-35 cursor-not-allowed active:scale-100" : ""
+                      }`}
                     >
-                      {isDisabled ? (
-                        <Lock size={20} />
-                      ) : (
-                        <tab.icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-                      )}
-                      {isActive && (
-                        <span className="text-[9px] font-bold">{tab.label}</span>
-                      )}
-                      {tab.alert && (
-                        <span className="absolute top-1.5 right-3 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
-                      )}
+                      <div
+                        className={`relative flex items-center justify-center w-11 h-7 rounded-full transition-all duration-300 ${
+                          isActive
+                            ? "bg-primary/15 dark:bg-primary/25 text-primary scale-105 shadow-sm"
+                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                        }`}
+                      >
+                        {isDisabled ? (
+                          <Lock size={17} />
+                        ) : (
+                          <tab.icon size={19} strokeWidth={isActive ? 2.5 : 1.8} />
+                        )}
+                        {tab.alert && (
+                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#1C1C1E] animate-pulse" />
+                        )}
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
+                          isActive
+                            ? "text-primary font-black scale-100"
+                            : "text-slate-400 dark:text-slate-500 scale-95"
+                        }`}
+                      >
+                        {tab.label}
+                      </span>
                     </button>
                   );
                 })}
-              </div>
+              </nav>
             </div>
           </div>
         )}
@@ -2087,7 +2221,7 @@ const App: React.FC = () => {
         )}
 
         {view === "list" && (
-          <div className="p-6 sm:p-10 max-w-7xl mx-auto min-h-screen">
+          <div className="p-4 sm:p-10 pb-28 max-w-7xl mx-auto min-h-screen relative">
             <header className="flex justify-between items-center mb-12">
               <div className="flex items-center gap-2.5">
                 <div className="text-lg font-bold text-primary tracking-tight">
@@ -2171,6 +2305,17 @@ const App: React.FC = () => {
                 onSubmit={handleCreateTripSubmit}
               />
             )}
+            {/* Mobile Floating Action Button (FAB) for New Trip */}
+            <div className="sm:hidden fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-5 z-40">
+              <button
+                type="button"
+                onClick={() => setShowCreateForm(true)}
+                aria-label={t("newTrip")}
+                className="w-14 h-14 rounded-full bg-primary text-white shadow-2xl shadow-primary/40 flex items-center justify-center active:scale-90 transition-transform duration-200 cursor-pointer"
+              >
+                <Plus size={24} strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
         )}
 

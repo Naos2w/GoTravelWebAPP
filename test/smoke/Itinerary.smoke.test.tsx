@@ -101,4 +101,28 @@ describe("Itinerary Component Smoke Test", () => {
 
     expect(screen.getAllByText(/Day 1/i).length).toBeGreaterThan(0);
   });
+
+  it("renders floating bottom cards in map mode without crashing", async () => {
+    await act(async () => {
+      render(
+        <LocalizationProvider>
+          <Itinerary
+            trip={mockTrip}
+            currentUser={mockUser}
+            onUpdate={vi.fn()}
+          />
+        </LocalizationProvider>
+      );
+    });
+
+    // Toggle to map mode via map button
+    const mapBtn = screen.getByRole("button", { name: /地圖|Map/i });
+    await act(async () => {
+      mapBtn.click();
+    });
+
+    // Should display STOP 1 badge and stop counter
+    expect(screen.getByText("STOP 1")).toBeInTheDocument();
+    expect(screen.getByText(/1 個景點|1 Stops/i)).toBeInTheDocument();
+  });
 });

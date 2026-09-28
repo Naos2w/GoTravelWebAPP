@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { Checklist } from "../../components/Checklist";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { Trip, User } from "../../types";
@@ -68,5 +68,41 @@ describe("Checklist Component Smoke Test", () => {
     );
 
     expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
+  });
+
+  it("rapidly toggling items maintains user's latest state and resists stale prop overrides", () => {
+    const onUpdateMock = vi.fn();
+    const { rerender } = render(
+      <LocalizationProvider>
+        <Checklist
+          trip={mockTrip}
+          currentUser={mockUser}
+          onUpdate={onUpdateMock}
+        />
+      </LocalizationProvider>
+    );
+
+    // Find the checkbox button for Passport & Rail Pass
+    const itemText = screen.getByText("Passport & Rail Pass");
+    const container = itemText.closest("div")!;
+    const checkBtn = container.querySelector("button")!;
+    fireEvent.click(checkBtn);
+
+    // Text should immediately have line-through style and checkbox becomes completed
+    expect(itemText).toHaveClass("line-through");
+
+    // Simulate stale server echo arriving from props (still isCompleted: false)
+    rerender(
+      <LocalizationProvider>
+        <Checklist
+          trip={mockTrip}
+          currentUser={mockUser}
+          onUpdate={onUpdateMock}
+        />
+      </LocalizationProvider>
+    );
+
+    // Anti-revert lock should protect the state, remaining completed and strike-through
+    expect(screen.getByText("Passport & Rail Pass")).toHaveClass("line-through");
   });
 });

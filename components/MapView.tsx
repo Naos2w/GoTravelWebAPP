@@ -16,6 +16,7 @@ interface Props {
   onAddSearchResult?: (placeName: string, lat: number, lng: number) => void;
   activeItemId?: string | null;
   onMarkerClick?: (id: string) => void;
+  hasBottomCards?: boolean;
 }
 
 const createCustomIcon = (index: number, type: string) => {
@@ -187,7 +188,7 @@ const fetchOSRM = (
     });
 };
 
-export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick }) => {
+export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards }) => {
   const { language } = useTranslation();
   const isEn = language?.startsWith('en');
 
@@ -495,7 +496,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       ) : (
       <>
         {/* Travel Mode Selector Overlay */}
-        <div className="absolute bottom-4 left-4 z-[1000] pointer-events-auto flex items-center gap-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-lg rounded-2xl p-1 border border-slate-100 dark:border-slate-700">
+        <div className={`absolute ${hasBottomCards ? 'bottom-[148px] sm:bottom-4' : 'bottom-4'} left-3 sm:left-4 z-[1000] pointer-events-auto flex items-center gap-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-lg rounded-2xl p-1 border border-slate-100 dark:border-slate-700 transition-all duration-300`}>
           <button
             type="button"
             onClick={() => setRoutingModeOverride('auto')}

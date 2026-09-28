@@ -33,10 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `LoginModal.smoke.test.tsx`：驗證登入階段已逾時 (`session_expired`) 與需登入存取行程 (`trip_access`) 之視覺標籤與關閉事件。
     - `NotificationToast.smoke.test.tsx`：驗證訊息格式渲染與 4000ms 自動定時銷毀。
   - **測試指令**：
-    - `npm test`：執行完整測試套件（**18 測試檔案、80 項測試全數通過**）。
+    - `npm test`：執行完整測試套件（**18 測試檔案、82 項測試全數通過**）。
     - `npm run test:unit`：專注執行 9 個單元測試套件（58 項測試）。
-    - `npm run test:smoke`：專注執行 9 個元件冒煙測試套件（22 項測試）。
+    - `npm run test:smoke`：專注執行 9 個元件冒煙測試套件（24 項測試）。
     - `npm run test:watch`：即時熱重載測試模式。
+- **📱 Instagram / Dynamic Island 風格手機版懸浮 UI (Mobile Floating UI)**：
+  - **底部主導航懸浮膠囊島嶼 (`Floating Bottom Dock`)**：手機版將原貼底平鋪選單重構為現代懸浮膠囊島嶼，採用超強毛玻璃 (`backdrop-blur-2xl`)、柔和擴散陰影與全域安全區域邊距 (`safe-area-inset-bottom`)，配合 Instagram 觸控縮放動畫 (`active:scale-90`) 與半透明標籤膠囊高亮。
+  - **地圖景點底部懸浮卡片輪播 (`Floating Bottom Carousel`)**：地圖模式徹底淘汰右側 72px 狹窄直欄，地圖全螢幕展開，下方呈現 Instagram / Apple Maps 風格水平滑動懸浮卡片，支援點擊卡片地圖平滑飛行 (`flyTo`)、點擊標記卡片居中連動、一鍵開啟 Google Maps 導航，並可隨時點擊膠囊按鈕一鍵收合/展開。卡片固定高度 (`h-[104px]`) 並對備註自動單行截斷與提示，搭配動態調升交通工具選項至 `bottom-[148px]`，徹底杜絕備註文字導致圖卡高度超出並遮擋交通工具選項的問題。
+  - **旅程列表行動端懸浮按鈕 (`Floating Action Button - FAB`)**：手機版旅程列表於右下角拇指熱區新增圓形浮動按鈕，一鍵開啟建立旅程視窗。
+- **⚡ 即時同步與防競態條件修復 (Realtime Sync & Anti-Race Condition)**：
+  - **修復清單快速勾選/取消時動作被伺服器還原之問題**：
+    - 將清單項目狀態切換由全旅程覆寫改為專屬單列變更 (`updateChecklistItem` / `addChecklistItem`)，節省 98% 資料庫寫入開銷。
+    - 於 `Checklist.tsx` 引入 `pendingTogglesRef` 樂觀保護鎖與 150ms 項目防抖，徹底防止後端伺服器延遲回波 (Stale Echo) 覆蓋最新點擊。
+    - 於 `App.tsx` 整合細粒度 Realtime Row 更新與單調請求序號防護 (`latestRefreshSeqRef`)，杜絕網路非同步響應亂序覆蓋。
 - **升級 GitHub Actions 自動化 CI 檢查流程 (`.github/workflows/ci.yml`)**：
   - 修正觸發分支，完整支援預設分支 `master`、`main` 與 `develop` 之 Push 與 Pull Request 監聽。
   - 獨立視覺化步驟：TypeScript 型別檢查 (`npm run type-check`)、單元測試 (`npm run test:unit`)、冒煙測試 (`npm run test:smoke`) 與生產環境打包 (`npm run build`)，確保任何提交與 PR 皆能自動防禦回歸。
