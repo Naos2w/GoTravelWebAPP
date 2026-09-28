@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `npm run test:watch`：即時熱重載測試模式。
 - **📱 Instagram / Dynamic Island 風格手機版懸浮 UI (Mobile Floating UI)**：
   - **底部主導航懸浮膠囊島嶼 (`Floating Bottom Dock`)**：手機版將原貼底平鋪選單重構為現代懸浮膠囊島嶼，採用超強毛玻璃 (`backdrop-blur-2xl`)、柔和擴散陰影與全域安全區域邊距 (`safe-area-inset-bottom`)，配合 Instagram 觸控縮放動畫 (`active:scale-90`) 與半透明標籤膠囊高亮。
-  - **地圖景點底部懸浮卡片輪播 (`Floating Bottom Carousel`)**：地圖模式徹底淘汰右側 72px 狹窄直欄，地圖全螢幕展開，下方呈現 Instagram / Apple Maps 風格水平滑動懸浮卡片，支援點擊卡片地圖平滑飛行 (`flyTo`)、點擊標記卡片居中連動、一鍵開啟 Google Maps 導航，並可隨時點擊膠囊按鈕一鍵收合/展開。
+  - **地圖景點底部懸浮卡片輪播 (`Floating Bottom Carousel`)**：地圖模式徹底淘汰右側 72px 狹窄直欄，地圖全螢幕展開，下方呈現 Instagram / Apple Maps 風格水平滑動懸浮卡片，支援點擊卡片地圖平滑飛行 (`flyTo`)、點擊標記卡片居中連動、一鍵開啟 Google Maps 導航，並可隨時點擊膠囊按鈕一鍵收合/展開。卡片固定高度 (`h-[104px]`) 並對備註自動單行截斷與提示，搭配動態調升交通工具選項至 `bottom-[148px]`，徹底杜絕備註文字導致圖卡高度超出並遮擋交通工具選項的問題。
   - **旅程列表行動端懸浮按鈕 (`Floating Action Button - FAB`)**：手機版旅程列表於右下角拇指熱區新增圓形浮動按鈕，一鍵開啟建立旅程視窗。
 - **升級 GitHub Actions 自動化 CI 檢查流程 (`.github/workflows/ci.yml`)**：
   - 修正觸發分支，完整支援預設分支 `master`、`main` 與 `develop` 之 Push 與 Pull Request 監聽。

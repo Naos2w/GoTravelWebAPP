@@ -764,58 +764,61 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             key={item.id}
                             ref={el => { cardRefs.current[item.id] = el; }}
                             onClick={() => setHighlightedId(item.id)}
-                            className={`snap-center shrink-0 w-[240px] p-3 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] ${
+                            className={`snap-center shrink-0 w-[240px] h-[104px] p-2.5 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] flex flex-col justify-between ${
                               isHighlighted
                                 ? 'bg-white/95 dark:bg-slate-800/95 border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
                                 : 'bg-white/85 dark:bg-slate-900/85 border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-slate-800'
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-1.5 mb-1">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                isHighlighted ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
-                              }`}>
-                                STOP {mapIdx + 1}
-                              </span>
-                              <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
-                                <Clock size={11} />
-                                <span>{item.time || '--:--'}</span>
+                            <div className="min-w-0">
+                              <div className="flex items-center justify-between gap-1.5 mb-1">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                  isHighlighted ? 'bg-primary text-white' : 'bg-primary/10 text-primary'
+                                }`}>
+                                  STOP {mapIdx + 1}
+                                </span>
+                                <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-500 dark:text-slate-400">
+                                  <Clock size={11} />
+                                  <span>{item.time || '--:--'}</span>
+                                </div>
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${Number(item.lat)},${Number(item.lng)}&travelmode=driving`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
+                                  className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700/80 hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
+                                >
+                                  <Navigation size={12} />
+                                </a>
                               </div>
-                              <a
-                                href={`https://www.google.com/maps/dir/?api=1&destination=${Number(item.lat)},${Number(item.lng)}&travelmode=driving`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
-                                className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700/80 hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
-                              >
-                                <Navigation size={12} />
-                              </a>
+
+                              <h4 title={item.placeName} className="text-xs font-black text-slate-900 dark:text-white truncate">
+                                {item.placeName}
+                              </h4>
+
+                              {item.note && (
+                                <p title={item.note} className="text-[10px] text-slate-400 dark:text-slate-400 truncate mt-0.5 flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-amber-500 shrink-0" />
+                                  <span className="truncate">{item.note}</span>
+                                </p>
+                              )}
                             </div>
 
-                            <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">
-                              {item.placeName}
-                            </h4>
-
-                            {item.note && (
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                                {item.note}
-                              </p>
-                            )}
-
                             {/* Transport snippet to next stop */}
-                            {hasTransport && mapIdx < validItems.length - 1 && (
-                              <div className="mt-1.5 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-[10px] text-slate-400">
-                                <span className="flex items-center gap-1">
+                            {hasTransport && mapIdx < validItems.length - 1 ? (
+                              <div className="pt-1 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-[10px] text-slate-400">
+                                <span className="flex items-center gap-1 truncate max-w-[140px]">
                                   {transportOpt && <transportOpt.icon size={11} className={transportOpt.color} />}
-                                  <span>{transportOpt?.label || t('moving')}</span>
+                                  <span className="truncate">{transportOpt?.label || t('moving')}</span>
                                 </span>
                                 {nextOriginal.note && (
-                                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+                                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400 shrink-0 ml-1">
                                     {nextOriginal.note}
                                   </span>
                                 )}
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         );
                       })}
