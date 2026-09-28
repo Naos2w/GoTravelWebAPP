@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Trip, ChecklistItem, User } from '../types';
 import { 
   Check, Plus, Trash2, FileText, Zap, 
@@ -58,24 +58,81 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   };
 
   // Optimistic UI state
-  const [optimisticChecklist, setOptimisticChecklist] = useState<ChecklistItem[]>(trip.checklist);
+  const [optimisticChecklist, setOptimisticChecklist] = useState<ChecklistItem[]>(trip.checklist || []);
 
+  // Track pending toggle operations per item to prevent race conditions and stale server echoes
+  const pendingTogglesRef = useRef<Map<string, { value: boolean; timestamp: number }>>(new Map());
+  const debounceTimeoutsRef = useRef<Map<string, number>>(new Map());
+
+  // Merge external trip.checklist with optimistic state while respecting pending user interactions
   useEffect(() => {
-    setOptimisticChecklist(trip.checklist);
+    if (!trip.checklist) return;
+
+    setOptimisticChecklist((currentList) => {
+      const now = Date.now();
+      return trip.checklist.map((serverItem) => {
+        const pending = pendingTogglesRef.current.get(serverItem.id);
+        // If the user recently toggled this item within 2.5 seconds:
+        if (pending && now - pending.timestamp < 2500) {
+          // If server data matches user's pending intention, server caught up: clear lock
+          if (serverItem.isCompleted === pending.value) {
+            pendingTogglesRef.current.delete(serverItem.id);
+            return serverItem;
+          }
+          // Server data is stale or intermediate, preserve user's intended value:
+          return { ...serverItem, isCompleted: pending.value };
+        }
+        return serverItem;
+      });
+    });
   }, [trip.checklist]);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      debounceTimeoutsRef.current.forEach((t) => window.clearTimeout(t));
+      debounceTimeoutsRef.current.clear();
+    };
+  }, []);
 
   // Filter items that belong to the current user (using optimistic state)
   const myItems = optimisticChecklist.filter(i => currentUser && i.user_id === currentUser.id);
 
   const toggleItem = (itemId: string) => {
-    // 1. Optimistic update immediately
-    const updatedList = optimisticChecklist.map(item => 
-      item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
+    const currentItem = optimisticChecklist.find((i) => i.id === itemId);
+    if (!currentItem) return;
+
+    const nextCompleted = !currentItem.isCompleted;
+
+    // 1. Mark as pending with current timestamp to protect against stale server echoes
+    pendingTogglesRef.current.set(itemId, {
+      value: nextCompleted,
+      timestamp: Date.now(),
+    });
+
+    // 2. Optimistic update immediately in UI
+    const updatedList = optimisticChecklist.map((item) =>
+      item.id === itemId ? { ...item, isCompleted: nextCompleted } : item
     );
     setOptimisticChecklist(updatedList);
 
-    // 2. Persist to server (Immediate)
-    onUpdate({ ...trip, checklist: updatedList }, "UPDATE_CHECKLIST_ITEM", null);
+    // 3. Debounce rapid clicks for this specific item (150ms)
+    // If the user rapidly clicks back and forth, only the final state is sent to the database!
+    const existingTimeout = debounceTimeoutsRef.current.get(itemId);
+    if (existingTimeout) {
+      window.clearTimeout(existingTimeout);
+    }
+
+    const timer = window.setTimeout(() => {
+      debounceTimeoutsRef.current.delete(itemId);
+      onUpdate(
+        { ...trip, checklist: updatedList },
+        "UPDATE_CHECKLIST_ITEM",
+        { id: itemId, isCompleted: nextCompleted }
+      );
+    }, 150);
+
+    debounceTimeoutsRef.current.set(itemId, timer);
   };
 
   const addItem = () => {
@@ -92,7 +149,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     setOptimisticChecklist(updatedList);
     
     // Sync with server (Immediate)
-    onUpdate({ ...trip, checklist: updatedList }, "ADD_CHECKLIST_ITEM", null);
+    onUpdate({ ...trip, checklist: updatedList }, "ADD_CHECKLIST_ITEM", newItem);
     
     setNewItemText('');
     setIsFormOpen(false);

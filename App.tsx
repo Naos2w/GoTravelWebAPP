@@ -8,7 +8,7 @@ import React, {
   Suspense,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
-import { Trip, Currency, Theme, Language, User } from "./types";
+import { Trip, Currency, Theme, Language, User, ChecklistItem } from "./types";
 import {
   getTrips,
   getTripById,
@@ -23,6 +23,8 @@ import {
   createFullTrip,
   deleteExpense,
   deleteItineraryItem,
+  updateChecklistItem,
+  addChecklistItem,
   supabase,
 } from "./services/storageService";
 import {
@@ -243,12 +245,20 @@ const App: React.FC = () => {
   }, [currentTripId, user, currentTrip]);
 
   // Real-time synchronization for active trip with Permission Check
-  // Move refreshActiveTrip outside to be accessible
+  // Monotonic sequence ref to prevent out-of-order asynchronous responses from reverting newer local updates
+  const latestRefreshSeqRef = useRef<number>(0);
+
   const refreshActiveTrip = async () => {
     if (!currentTripId || !user) return;
+    const seq = ++latestRefreshSeqRef.current;
 
     try {
         const updatedTrip = await getTripById(currentTripId);
+
+        // If a newer refresh started while this one was in-flight, discard stale result!
+        if (seq !== latestRefreshSeqRef.current) {
+          return;
+        }
 
         // 1. Check if trip still exists
         if (!updatedTrip) {
@@ -329,7 +339,7 @@ const App: React.FC = () => {
            refreshActiveTrip();
         }
       )
-      // Checklist Items: Split for DELETE support
+      // Checklist Items: Granular state sync to eliminate 6-table full refetch race conditions
       .on(
         "postgres_changes",
         {
@@ -338,7 +348,27 @@ const App: React.FC = () => {
           table: "checklist_items",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                if ((t.checklist || []).some((item) => item.id === newRow.id)) return t;
+                const newItem: ChecklistItem = {
+                  id: newRow.id,
+                  user_id: newRow.user_id,
+                  text: newRow.text,
+                  category: newRow.category,
+                  isCompleted: newRow.is_completed,
+                };
+                return { ...t, checklist: [...(t.checklist || []), newItem] };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -348,7 +378,29 @@ const App: React.FC = () => {
           table: "checklist_items",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.id) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                const newChecklist = (t.checklist || []).map((item) =>
+                  item.id === updatedRow.id
+                    ? {
+                        ...item,
+                        isCompleted: updatedRow.is_completed,
+                        text: updatedRow.text ?? item.text,
+                        category: updatedRow.category ?? item.category,
+                      }
+                    : item
+                );
+                return { ...t, checklist: newChecklist };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -356,9 +408,23 @@ const App: React.FC = () => {
           event: "DELETE",
           schema: "public",
           table: "checklist_items",
-          // Unfiltered DELETE to catch removals
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            setTrips((prevTrips) =>
+              prevTrips.map((t) => {
+                if (t.id !== currentTripId) return t;
+                return {
+                  ...t,
+                  checklist: (t.checklist || []).filter((item) => item.id !== deletedId),
+                };
+              })
+            );
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       // Itinerary Items: Split for DELETE support
       .on(
@@ -958,10 +1024,36 @@ const App: React.FC = () => {
        return;
     }
 
+    // Handle checklist updates & additions directly with targeted row mutations
+    if (action === "UPDATE_CHECKLIST_ITEM" && payload) {
+       updateChecklistItem(payload.id, updatedTrip.id, { isCompleted: payload.isCompleted })
+          .catch(err => {
+              console.error("[App] Update checklist item failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to update checklist item",
+                type: "error",
+              });
+          });
+       return;
+    }
+
+    if (action === "ADD_CHECKLIST_ITEM" && payload) {
+       addChecklistItem(payload, updatedTrip.id)
+          .catch(err => {
+              console.error("[App] Add checklist item failed:", err);
+              setTrips(previousTrips);
+              setNotification({
+                message: translations[language].errorTitle || "Sync error: Failed to add checklist item",
+                type: "error",
+              });
+          });
+       return;
+    }
+
     // Immediate Save for explicit user actions (Add/Edit) to avoid "Waiting" feel
     const immediateActions = [
-      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM",
-      "ADD_CHECKLIST_ITEM", "UPDATE_CHECKLIST_ITEM"
+      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM"
     ];
     const delay = action && immediateActions.includes(action) ? 0 : 2000;
 

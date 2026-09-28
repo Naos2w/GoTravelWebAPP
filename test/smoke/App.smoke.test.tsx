@@ -26,6 +26,8 @@ vi.mock("../../services/storageService", () => {
     },
     getTrips: vi.fn().mockResolvedValue([]),
     getTripById: vi.fn().mockResolvedValue(null),
+    updateChecklistItem: vi.fn().mockResolvedValue(undefined),
+    addChecklistItem: vi.fn().mockResolvedValue(undefined),
     isSupabaseConfigured: vi.fn().mockReturnValue(true),
   };
 });
