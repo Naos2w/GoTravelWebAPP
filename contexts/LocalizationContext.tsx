@@ -224,6 +224,9 @@ export const translations = {
     statusToday: "今天出發",
     deleting: "處理中...",
     actionIrreversible: "永久刪除無法復原",
+    done: "完成",
+    manage: "管理",
+    manageTripsHint: "點擊卡片右上角圖示刪除或退出旅程",
   },
   en: {
     appName: "Go Travel",
@@ -446,6 +449,9 @@ export const translations = {
     statusToday: "Starts today",
     deleting: "Deleting...",
     actionIrreversible: "Irreversible action",
+    done: "Done",
+    manage: "Manage",
+    manageTripsHint: "Tap the badge on any card to delete or leave",
   },
 };
 

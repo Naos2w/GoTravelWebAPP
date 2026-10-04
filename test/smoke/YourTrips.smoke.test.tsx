@@ -76,7 +76,7 @@ describe("Your Trips UI & Deletion Smoke Tests", () => {
       expect(screen.getByText(/擁有者|Owner/)).toBeInTheDocument();
     });
 
-    it("stops propagation when clicking delete button without triggering card selection", () => {
+    it("hides delete button when isEditMode is false, and triggers onSelect on card click", () => {
       const onSelect = vi.fn();
       const onDeleteClick = vi.fn();
 
@@ -85,6 +85,31 @@ describe("Your Trips UI & Deletion Smoke Tests", () => {
           <TripCard
             trip={mockTrip}
             currentUserId="user-owner"
+            isEditMode={false}
+            onSelect={onSelect}
+            onDeleteClick={onDeleteClick}
+            calculateTripTotal={() => 0}
+            getGradient={() => "from-blue-500 to-cyan-400"}
+          />
+        </LocalizationProvider>
+      );
+
+      expect(screen.queryByTestId("trip-delete-btn")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText("Tokyo Getaway"));
+      expect(onSelect).toHaveBeenCalledWith(mockTrip.id);
+      expect(onDeleteClick).not.toHaveBeenCalled();
+    });
+
+    it("reveals delete button when isEditMode is true, and clicking it triggers onDeleteClick", () => {
+      const onSelect = vi.fn();
+      const onDeleteClick = vi.fn();
+
+      render(
+        <LocalizationProvider>
+          <TripCard
+            trip={mockTrip}
+            currentUserId="user-owner"
+            isEditMode={true}
             onSelect={onSelect}
             onDeleteClick={onDeleteClick}
             calculateTripTotal={() => 0}
@@ -94,13 +119,13 @@ describe("Your Trips UI & Deletion Smoke Tests", () => {
       );
 
       const deleteBtn = screen.getByTestId("trip-delete-btn");
+      expect(deleteBtn).toBeInTheDocument();
       fireEvent.click(deleteBtn);
 
       expect(onDeleteClick).toHaveBeenCalledWith(mockTrip);
-      expect(onSelect).not.toHaveBeenCalled();
     });
 
-    it("shows leave trip button when user is a collaborator", () => {
+    it("shows leave trip button in edit mode when user is a collaborator", () => {
       const onSelect = vi.fn();
       const onDeleteClick = vi.fn();
 
@@ -109,6 +134,7 @@ describe("Your Trips UI & Deletion Smoke Tests", () => {
           <TripCard
             trip={mockTrip}
             currentUserId="user-guest"
+            isEditMode={true}
             onSelect={onSelect}
             onDeleteClick={onDeleteClick}
             calculateTripTotal={() => 0}

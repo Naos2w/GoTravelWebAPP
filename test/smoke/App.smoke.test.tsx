@@ -174,8 +174,19 @@ describe("App Component (Smoke Test)", () => {
       expect(screen.getByText("Osaka Food Tour")).toBeInTheDocument();
     });
 
-    // Click delete button on the trip card
+    // In normal mode, delete button is hidden
+    expect(screen.queryByTestId("trip-delete-btn")).not.toBeInTheDocument();
+
+    // Click the Edit Mode button in header to reveal delete icons
+    const toggleEditBtn = screen.getByTestId("toggle-edit-mode-btn");
+    act(() => {
+      toggleEditBtn.click();
+    });
+
+    // Delete button on the trip card should now be visible
     const deleteBtn = screen.getByTestId("trip-delete-btn");
+    expect(deleteBtn).toBeInTheDocument();
+
     act(() => {
       deleteBtn.click();
     });

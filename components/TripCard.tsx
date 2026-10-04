@@ -14,6 +14,7 @@ import { useTranslation } from "../contexts/LocalizationContext";
 interface TripCardProps {
   trip: Trip;
   currentUserId?: string;
+  isEditMode?: boolean;
   onSelect: (tripId: string) => void;
   onDeleteClick: (trip: Trip) => void;
   calculateTripTotal: (trip: Trip) => number;
@@ -86,6 +87,7 @@ export const getTripPlacesCount = (trip: Trip): number => {
 export const TripCard: React.FC<TripCardProps> = ({
   trip,
   currentUserId,
+  isEditMode = false,
   onSelect,
   onDeleteClick,
   calculateTripTotal,
@@ -126,16 +128,30 @@ export const TripCard: React.FC<TripCardProps> = ({
 
   return (
     <div
-      onClick={() => onSelect(trip.id)}
+      onClick={() => {
+        if (isEditMode) {
+          onDeleteClick(trip);
+        } else {
+          onSelect(trip.id);
+        }
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelect(trip.id);
+          if (isEditMode) {
+            onDeleteClick(trip);
+          } else {
+            onSelect(trip.id);
+          }
         }
       }}
-      className="group relative bg-white dark:bg-[#202024] rounded-[32px] border border-slate-200/70 dark:border-white/10 shadow-ios overflow-hidden cursor-pointer transition-all duration-300 ease-spring hover:-translate-y-1.5 hover:shadow-ios-lg active:scale-[0.99] flex flex-col justify-between"
+      className={`group relative bg-white dark:bg-[#202024] rounded-[32px] border ${
+        isEditMode
+          ? "border-rose-400/60 dark:border-rose-500/50 ring-2 ring-rose-500/20"
+          : "border-slate-200/70 dark:border-white/10"
+      } shadow-ios overflow-hidden cursor-pointer transition-all duration-300 ease-spring hover:-translate-y-1.5 hover:shadow-ios-lg active:scale-[0.99] flex flex-col justify-between`}
     >
       {/* Top Banner with Gradient */}
       <div
@@ -160,19 +176,25 @@ export const TripCard: React.FC<TripCardProps> = ({
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteClick(trip);
-            }}
-            title={isOwner ? t("deleteTrip") : t("leaveTrip")}
-            aria-label={isOwner ? t("deleteTrip") : t("leaveTrip")}
-            data-testid={isOwner ? "trip-delete-btn" : "trip-leave-btn"}
-            className="w-9 h-9 rounded-full bg-black/40 hover:bg-rose-600 text-white/85 hover:text-white backdrop-blur-md border border-white/25 flex items-center justify-center transition-all duration-200 shadow-sm hover:scale-110 active:scale-90 cursor-pointer"
-          >
-            {isOwner ? <Trash2 size={16} /> : <LogOut size={16} />}
-          </button>
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteClick(trip);
+              }}
+              title={isOwner ? t("deleteTrip") : t("leaveTrip")}
+              aria-label={isOwner ? t("deleteTrip") : t("leaveTrip")}
+              data-testid={isOwner ? "trip-delete-btn" : "trip-leave-btn"}
+              className={`w-9 h-9 rounded-full ${
+                isOwner
+                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/40"
+                  : "bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-600/40"
+              } flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer animate-in zoom-in-75 fade-in ring-2 ring-white/90 dark:ring-[#202024]`}
+            >
+              {isOwner ? <Trash2 size={16} /> : <LogOut size={16} />}
+            </button>
+          )}
         </div>
 
         {/* Bottom Destination & Trip Info */}

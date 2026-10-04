@@ -178,6 +178,14 @@ const App: React.FC = () => {
   const [tripFilter, setTripFilter] = useState<"all" | "upcoming" | "past">("all");
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [isDeletingTrip, setIsDeletingTrip] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Automatically reset edit mode if all trips are deleted or if leaving list view
+  useEffect(() => {
+    if ((trips.length === 0 || view !== "list") && isEditMode) {
+      setIsEditMode(false);
+    }
+  }, [trips.length, view, isEditMode]);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -2348,14 +2356,58 @@ const App: React.FC = () => {
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowCreateForm(true)}
-                  className="hidden sm:inline-flex bg-primary hover:bg-primary/95 text-white px-5 py-3 rounded-2xl items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
-                >
-                  <Plus size={18} /> {t("newTrip")}
-                </button>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  {trips.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditMode((prev) => !prev)}
+                      data-testid="toggle-edit-mode-btn"
+                      className={`px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer border ${
+                        isEditMode
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-sm"
+                          : "bg-white/80 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border-slate-200/70 dark:border-slate-700/70"
+                      }`}
+                    >
+                      {isEditMode ? (
+                        <>
+                          <Check size={16} />
+                          <span>{t("done")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Edit2 size={16} />
+                          <span>{t("edit")}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateForm(true)}
+                    className="hidden sm:inline-flex bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-2xl items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer shrink-0"
+                  >
+                    <Plus size={18} /> {t("newTrip")}
+                  </button>
+                </div>
               </div>
+
+              {/* Edit Mode Notice Banner */}
+              {isEditMode && trips.length > 0 && (
+                <div className="p-3.5 bg-rose-50/80 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 rounded-2xl text-xs font-semibold text-rose-600 dark:text-rose-400 flex items-center justify-between animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <Trash2 size={15} />
+                    <span>{t("manageTripsHint")}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditMode(false)}
+                    className="text-xs font-bold underline hover:opacity-80 cursor-pointer"
+                  >
+                    {t("done")}
+                  </button>
+                </div>
+              )}
 
               {/* Search & Filter Toolbar (shown when trips exist) */}
               {trips.length > 0 && (
@@ -2507,6 +2559,7 @@ const App: React.FC = () => {
                     key={trip.id}
                     trip={trip}
                     currentUserId={user?.id}
+                    isEditMode={isEditMode}
                     onSelect={(id) => {
                       setCurrentTripId(id);
                       setView("detail");
