@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.4.0] - 2026-10-04
+
+### 🧳 旅程總覽管理全面優化與管理模式 (Your Trips UI/UX & Trip Management)
+
+#### Added
+- **iOS 風格「編輯 / 完成」批量管理模式 (`isEditMode`)**：
+  - 頂部導航列新增「編輯 / 完成」(`toggle-edit-mode-btn`) 切換開關。
+  - 平時瀏覽保持極簡美感，不顯示刪除圖示避免誤觸；按下「編輯」時彈出管理橫幅與卡片刪除/退出氣泡標籤 (`animate-in zoom-in-75`)，按下「完成」即刻還原。
+- **現代化刪除 / 退出確認視窗 (`components/DeleteTripModal.tsx`)**：
+  - 徹底移除瀏覽器原生 `window.confirm`，改用全自訂毛玻璃模態視窗。
+  - 智慧區分行程**擁有者 (Owner)** 與**協作者 (Collaborator)**：
+    - 擁有者：顯示危險警示紅框、不可復原提示，確認後永久刪除旅程並推播 Realtime 通知。
+    - 協作者：顯示退出確認，安全退出協作並不影響其他成員行程。
+  - 支援 `Escape` 鍵快捷關閉、點擊遮罩外側關閉、動作進行時旋轉 Loading 指示器。
+  - 同步整合於儀表板（Overview）右上角刪除按鈕。
+- **旅程搜尋與狀態篩選機制**：
+  - **即時搜尋框**：支援輸入旅程名稱或目的地關鍵字即時過濾。
+  - **狀態篩選膠囊 (Filter Pills)**：提供「全部 (All)」、「即將到來 (Upcoming)」、「已結束 (Past)」三段式篩選標籤。
+  - **空狀態優化**：針對尚未建立行程與搜尋無結果分別提供引導插圖、提示文字與「清除搜尋」按鈕。
+- **動態狀態徽章與時間計算**：
+  - 進行中旅程顯示翡翠綠呼吸燈動畫 (`animate-pulse`)。
+  - 即將到來旅程精確倒數天數（如「3 天後出發」、「明天出發」）。
+  - 已結束旅程顯示優雅淡灰色標籤。
+- **自動化測試套件擴充**：
+  - 新增 `test/smoke/YourTrips.smoke.test.tsx` 冒煙測試（9 項測試涵蓋編輯模式切換、搜尋、篩選、刪除視窗觸發與確認）。
+  - 更新 `test/smoke/App.smoke.test.tsx` 整合測試與 `test/unit/version.test.ts` 版本驗證。
+
+---
+
 ## [v1.3.0] - 2026-09-26
 
 ### 🗺️ 地圖與搜尋引擎全面升級 (Map & Search Engine Modernization)

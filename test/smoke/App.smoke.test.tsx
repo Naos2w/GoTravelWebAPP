@@ -26,6 +26,8 @@ vi.mock("../../services/storageService", () => {
     },
     getTrips: vi.fn().mockResolvedValue([]),
     getTripById: vi.fn().mockResolvedValue(null),
+    deleteTrip: vi.fn().mockResolvedValue(undefined),
+    leaveTrip: vi.fn().mockResolvedValue(undefined),
     updateChecklistItem: vi.fn().mockResolvedValue(undefined),
     addChecklistItem: vi.fn().mockResolvedValue(undefined),
     isSupabaseConfigured: vi.fn().mockReturnValue(true),
@@ -136,5 +138,76 @@ describe("App Component (Smoke Test)", () => {
     // Must NOT flash full screen syncing spinner
     expect(screen.queryByText(/同步中\.\.\.|Syncing\.\.\./i)).not.toBeInTheDocument();
     expect(screen.getByText("Kyoto Adventure")).toBeInTheDocument();
+  });
+
+  it("allows deleting a trip from the Your Trips list view using DeleteTripModal", async () => {
+    const { supabase, getTrips, deleteTrip } = await import("../../services/storageService");
+    const mockUser = {
+      id: "user-123",
+      email: "test@example.com",
+      user_metadata: { full_name: "Test Traveler" },
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: { user: mockUser } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([
+      {
+        id: "trip-to-delete",
+        user_id: "user-123",
+        name: "Osaka Food Tour",
+        destination: "Osaka, Japan",
+        startDate: "2026-12-10",
+        endDate: "2026-12-15",
+        expenses: [],
+        flights: [],
+        checklist: [],
+        itinerary: [],
+      },
+    ]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Osaka Food Tour")).toBeInTheDocument();
+    });
+
+    // In normal mode, delete button is hidden
+    expect(screen.queryByTestId("trip-delete-btn")).not.toBeInTheDocument();
+
+    // Click the Edit Mode button in header to reveal delete icons
+    const toggleEditBtn = screen.getByTestId("toggle-edit-mode-btn");
+    act(() => {
+      toggleEditBtn.click();
+    });
+
+    // Delete button on the trip card should now be visible
+    const deleteBtn = screen.getByTestId("trip-delete-btn");
+    expect(deleteBtn).toBeInTheDocument();
+
+    act(() => {
+      deleteBtn.click();
+    });
+
+    // DeleteTripModal should open with warning
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/刪除此旅程|Delete Trip/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Osaka Food Tour/).length).toBeGreaterThan(0);
+    });
+
+    // Find and click the confirm button inside the modal
+    const modalConfirmBtn = screen.getByTestId("confirm-trip-action-btn");
+
+    await act(async () => {
+      modalConfirmBtn.click();
+    });
+
+    await waitFor(() => {
+      expect(deleteTrip).toHaveBeenCalledWith("trip-to-delete", "user-123");
+      expect(screen.queryByText("Osaka Food Tour")).not.toBeInTheDocument();
+    });
   });
 });
