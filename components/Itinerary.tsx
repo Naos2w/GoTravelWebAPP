@@ -665,16 +665,28 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100dvh-175px)] overflow-hidden animate-in fade-in duration-500">
-      {/* Day Selector — horizontal strip on mobile, vertical column on desktop */}
-      <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-[calc(100dvh-175px)] overflow-hidden animate-in fade-in duration-500">
+      {/* Day Selector — iOS Segmented control on mobile, sleek glass column on desktop */}
+      <div className="lg:w-32 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
           const d = new Date(day.date + 'T00:00:00');
           return (
-            <button key={idx} onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); }} className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3.5 rounded-2xl text-center transition-all duration-300 border ${isSelected ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg border-slate-900 dark:border-white' : 'bg-white dark:bg-slate-800 text-slate-500 border-gray-100 dark:border-slate-800 hover:bg-slate-50 shadow-sm'}`}>
-              <div className="text-[9px] font-black uppercase mb-0.5">Day {idx + 1}</div>
-              <div className="font-bold text-xs sm:text-sm leading-tight">{d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}</div>
+            <button 
+              key={idx} 
+              onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); }} 
+              className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3 rounded-2xl text-center transition-all duration-300 cursor-pointer active:scale-95 border ${
+                isSelected 
+                  ? 'bg-primary text-white shadow-md shadow-primary/25 border-primary font-black' 
+                  : 'bg-white/80 dark:bg-[#2C2C2E]/80 text-slate-600 dark:text-slate-300 border-black/[0.04] dark:border-white/[0.06] hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'
+              }`}
+            >
+              <div className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+                Day {idx + 1}
+              </div>
+              <div className="font-bold text-xs sm:text-sm leading-tight font-mono">
+                {d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+              </div>
             </button>
           );
         })}
@@ -683,20 +695,43 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       {/* Main content area */}
       <div className="flex-1 flex flex-col gap-3 overflow-hidden">
 
-        {/* ── Header bar: always visible, contains Day title + toggle ── */}
+        {/* ── Header bar: Day title + View mode switcher ── */}
         <div className="shrink-0 flex justify-between items-center px-1">
-          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Day {selectedDayIndex + 1}</h2>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+              Day {selectedDayIndex + 1}
+            </h2>
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-mono">
+              {currentDay.date}
+            </span>
+          </div>
           {!isGuest ? (
-            <div className="flex bg-slate-100/60 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 gap-0.5 lg:hidden">
-              <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+            <div className="flex bg-slate-100 dark:bg-white/[0.08] p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] gap-0.5 lg:hidden">
+              <button 
+                onClick={() => setViewMode('list')} 
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'list' 
+                    ? 'bg-white dark:bg-[#3A3A3C] text-slate-900 dark:text-white shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
                 <List size={13}/> {isEn ? 'List' : '列表'}
               </button>
-              <button onClick={() => setViewMode('map')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+              <button 
+                onClick={() => setViewMode('map')} 
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'map' 
+                    ? 'bg-white dark:bg-[#3A3A3C] text-slate-900 dark:text-white shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
                 <Map size={13}/> {isEn ? 'Map' : '地圖'}
               </button>
             </div>
           ) : (
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1 lg:hidden"><Lock size={10} />{t('readOnly')}</div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center gap-1 lg:hidden">
+              <Lock size={11} />{t('readOnly')}
+            </div>
           )}
         </div>
 
@@ -704,9 +739,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
         <div className="flex-1 flex gap-3 overflow-hidden">
 
           {/* Map — always visible in map mode; hidden on mobile in list mode */}
-          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300 relative
+          <div className={`rounded-[28px] sm:rounded-[36px] shadow-sm overflow-hidden border border-black/[0.06] dark:border-white/[0.08] transition-all duration-300 relative
             ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
-            {/* TODO: [Optimized] Wrap MapView in Suspense for lazy loading */}
             <Suspense fallback={
               <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50">
                 <Loader2 className="animate-spin text-primary w-8 h-8" />
@@ -721,9 +755,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               />
             </Suspense>
 
-            {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Instagram / Apple Maps Style) ── */}
+            {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Apple Maps Style) ── */}
             {viewMode === 'map' && (() => {
-              // Use exact same filter as MapView so numbers match map markers 1:1
               const validItems = displayItems.filter(i =>
                 i.lat != null && i.lng != null &&
                 !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
@@ -734,16 +767,16 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
               return (
                 <div className="lg:hidden absolute bottom-3 inset-x-0 z-[1000] pointer-events-none flex flex-col gap-1.5 px-3">
-                  {/* Header toggle pill */}
+                  {/* Apple Maps Grabber Handle & Header Toggle */}
                   <div className="flex justify-end pointer-events-auto">
                     <button
                       type="button"
                       onClick={() => setIsMobileCardsCollapsed(!isMobileCardsCollapsed)}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl shadow-md border border-black/[0.06] dark:border-white/[0.1] text-[11px] font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.1] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
                     >
-                      <MapPin size={12} className="text-primary" />
+                      <MapPin size={13} className="text-primary" />
                       <span>{validItems.length} {isEn ? 'Stops' : '個景點'}</span>
-                      {isMobileCardsCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      {isMobileCardsCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </button>
                   </div>
 

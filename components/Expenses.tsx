@@ -4,22 +4,20 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { 
   Plus, DollarSign, TrendingUp, Plane, Trash2, 
   Coffee, Home, Car, 
-  Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon, Calendar, ArrowUpDown, Clock, Check, ChevronDown
+  Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon, Calendar, ArrowUpDown, Clock, Check, ChevronDown,
+  CreditCard, Wallet, Sparkles
 } from 'lucide-react';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { supabase } from '../services/storageService';
 import { CATEGORY_UI, getCategoryName } from './ExpenseCategories';
 
-// TODO: [Refactored] Pass currentUser as a prop to avoid duplicate auth fetch
 interface Props {
   trip: Trip;
   currentUser: User;
   onUpdate: (trip: Trip, action?: string, payload?: any) => void;
   isGuest?: boolean;
 }
-
-
 
 type SortType = 'date-desc' | 'date-asc' | 'created-desc' | 'created-asc' | 'amount-desc' | 'amount-asc';
 
@@ -28,7 +26,6 @@ interface SelectOption<T = string> {
   label: string;
 }
 
-// TODO: [Type Safety] Introduce interface definitions and convert CustomFilterSelect to generic type to avoid using 'any'
 interface CustomFilterSelectProps<T = string> {
   value: T;
   onChange: (val: T) => void;
@@ -69,27 +66,27 @@ const CustomFilterSelect = <T extends string>({
     <div className={`relative ${wrapperClass} shrink-0`} ref={selectRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center transition-colors pointer group outline-none ${
+        className={`flex items-center transition-all cursor-pointer group outline-none ${
           variant === 'filter' 
-            ? `gap-1.5 p-2 px-3 rounded-[14px] shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 ${isOpen ? 'bg-slate-200 dark:bg-slate-600 shadow-inner' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/50 dark:border-slate-700/50 hover:shadow-sm'}`
-            : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-black bg-slate-50 dark:bg-slate-900 border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800' : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800')}`
+            ? `gap-1.5 py-1.5 px-3 rounded-xl shrink-0 text-xs font-bold text-slate-700 dark:text-slate-200 ${isOpen ? 'bg-slate-200 dark:bg-slate-700 shadow-inner' : 'bg-slate-100/80 dark:bg-white/[0.06] hover:bg-slate-200/80 dark:hover:bg-white/[0.1] border border-black/[0.04] dark:border-white/[0.06]'}`
+            : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-bold bg-slate-50 dark:bg-slate-900 border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800')}`
         }`}
       >
-        <Icon size={variant === 'filter' ? 12 : 16} className={`${isOpen || (variant === 'filter' && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
-        <span className={`${variant === 'filter' ? 'hidden sm:block truncate sm:max-w-[90px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
-        <ChevronDown size={variant === 'filter' ? 10 : 14} className={`${variant === 'filter' ? 'hidden sm:block' : ''} text-slate-400 opacity-50 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <Icon size={variant === 'filter' ? 13 : 16} className={`${isOpen || (variant === 'filter' && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
+        <span className={`${variant === 'filter' ? 'hidden sm:block truncate sm:max-w-[100px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
+        <ChevronDown size={variant === 'filter' ? 11 : 14} className={`${variant === 'filter' ? 'hidden sm:block' : ''} text-slate-400 opacity-60 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute top-full mt-2 w-max min-w-[140px] max-w-[220px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-100 dark:border-slate-800/80 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 custom-thin-scrollbar p-1.5">
+        <div className="absolute top-full right-0 mt-2 w-max min-w-[150px] max-w-[240px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-[#2C2C2E]/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 p-1.5">
           {options.map((opt) => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-between group ${value === opt.value ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[0.98]' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+              className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${value === opt.value ? 'bg-primary text-white shadow-sm' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
             >
-              <span className="truncate pr-4">{opt.label}</span>
-              {value === opt.value && <Check size={12} className="shrink-0" />}
+              <span className="truncate pr-3">{opt.label}</span>
+              {value === opt.value && <Check size={13} className="shrink-0" />}
             </button>
           ))}
         </div>
@@ -100,7 +97,6 @@ const CustomFilterSelect = <T extends string>({
 
 export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
-  const formAnchorRef = useRef<HTMLDivElement>(null);
   
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Expense['category']>('Food');
@@ -116,7 +112,6 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const [sortOrder, setSortOrder] = useState<SortType>('date-desc');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
-  // Helper to translate categories
   const getCatName = (cat: string) => getCategoryName(cat, t);
 
   const members = useMemo(() => {
@@ -139,7 +134,13 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     return dates;
   }, [trip.startDate, trip.endDate]);
 
-  const rates: Record<Currency, number> = { [Currency.TWD]: 1, [Currency.USD]: 31.5, [Currency.JPY]: 0.21, [Currency.EUR]: 34.2, [Currency.KRW]: 0.024 };
+  const rates: Record<Currency, number> = { 
+    [Currency.TWD]: 1, 
+    [Currency.USD]: 31.5, 
+    [Currency.JPY]: 0.21, 
+    [Currency.EUR]: 34.2, 
+    [Currency.KRW]: 0.024 
+  };
 
   const saveExpense = () => {
     const newErrors: Record<string, boolean> = {};
@@ -178,7 +179,13 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     resetForm();
   };
 
-  const resetForm = () => { setAmount(''); setNote(''); setEditingExpenseId(null); setIsFormOpen(false); setErrors({}); };
+  const resetForm = () => { 
+    setAmount(''); 
+    setNote(''); 
+    setEditingExpenseId(null); 
+    setIsFormOpen(false); 
+    setErrors({}); 
+  };
 
   const startEdit = (expense: Expense) => {
     if (expense.user_id !== currentUser?.id && trip.user_id !== currentUser?.id) return;
@@ -193,21 +200,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   };
 
   const deleteExpense = (id: string) => {
-    console.log("[Expenses] Attempting to delete:", id);
     const exp = trip.expenses.find(e => e.id === id);
-    
-    if (!exp) {
-        console.error("[Expenses] Expense not found in trip prop:", id);
-    }
-
     if (exp?.user_id !== currentUser?.id && trip.user_id !== currentUser?.id) {
-        console.warn("[Expenses] Permission denied for delete:", id);
         return;
     }
-
-    console.log("[Expenses] Optimistic delete triggered for:", id);
-    
-    // Optimistic update
     onUpdate({ ...trip, expenses: trip.expenses.filter(e => e.id !== id) }, "DELETE_EXPENSE", id);
   };
 
@@ -215,23 +211,21 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const expensesOnlyTotal = trip.expenses.reduce((sum, e) => sum + (e.amount * (e.exchangeRate || 1)), 0);
   const totalTWD = flightsTotal + expensesOnlyTotal;
 
-  // Transform flights into read-only expense items for the list display
-  // Use distinct 'Flight' category
   const flightExpenses: Expense[] = useMemo(() => {
     return (trip.flights || []).map(f => ({
-      id: `flight-${f.id}`, // Unique ID to prevent collision
+      id: `flight-${f.id}`,
       user_id: f.user_id,
       user_name: f.traveler_name,
       amount: f.price,
       currency: f.currency,
       category: 'Flight',
-      date: trip.startDate, // Default to trip start date
-      createdAt: new Date().toISOString(), // Just for sorting
+      date: trip.startDate,
+      createdAt: new Date().toISOString(),
       note: f.inbound?.flightNumber 
         ? `${t('flight')}: ${f.outbound.flightNumber} ⇄ ${f.inbound.flightNumber}` 
         : `${t('flight')}: ${f.outbound.flightNumber}`,
       exchangeRate: rates[f.currency] || 1,
-      isFlight: true // Helper flag
+      isFlight: true
     } as any));
   }, [trip.flights, trip.startDate, t]);
 
@@ -265,8 +259,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const chartData = useMemo(() => {
     const dataMap: Record<string, number> = {};
     trip.expenses.forEach(e => {
-      const twdVal = e.amount * (e.exchangeRate || 1);
-      dataMap[e.category] = (dataMap[e.category] || 0) + twdVal;
+      const val = e.amount * (e.exchangeRate || 1);
+      dataMap[e.category] = (dataMap[e.category] || 0) + val;
     });
     if (flightsTotal > 0) {
       dataMap['Flight'] = (dataMap['Flight'] || 0) + flightsTotal;
@@ -278,201 +272,317 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     }));
   }, [trip.expenses, flightsTotal, getCatName]);
 
-  const inputClass = (isError: boolean) => `bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 rounded-2xl border-2 transition-all outline-none ${isError ? 'border-red-500 focus:border-red-500 ring-2 ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:border-primary focus:ring-2 focus:ring-primary/20'}`;
+  const inputClass = (isError: boolean) => 
+    `bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 rounded-2xl border transition-all outline-none ${
+      isError 
+        ? 'border-red-500 ring-2 ring-red-500/20' 
+        : 'border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/20'
+    }`;
 
-  // Filter out 'Flight' from manual entry options
   const manualCategories = Object.keys(CATEGORY_UI).filter(c => c !== 'Flight');
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto pb-16">
+      {/* Left Column: Apple Wallet Hero Card & Category Breakdown */}
       <div className="space-y-6 lg:col-span-1">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 relative overflow-hidden">
-           <div className="relative z-10">
-             <div className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mb-2">{t('totalCost')}</div>
-             <div className="text-4xl font-black tracking-tighter">NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-             <div className="text-[10px] text-slate-400 mt-4 flex items-center gap-1 font-bold"><Plane size={12} /> {t('includesFlight')}</div>
-           </div>
-           <TrendingUp className="absolute right-[-10%] bottom-[-10%] text-slate-100 dark:text-white/5 w-40 h-40" />
+        {/* Apple Wallet Frosted Titanium / Gradient Card */}
+        <div className="relative overflow-hidden rounded-[36px] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-7 sm:p-8 shadow-2xl border border-white/10 group">
+          {/* Card Specular Reflection / Glow Effect */}
+          <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold text-white/70 uppercase tracking-widest">
+                <CreditCard size={16} className="text-primary" />
+                <span>{t('totalCost')}</span>
+              </div>
+              <div className="w-8 h-6 rounded-md border border-white/20 bg-white/10 flex items-center justify-center">
+                <div className="w-3 h-3 rounded-full bg-amber-400/80" />
+              </div>
+            </div>
+
+            <div className="my-4">
+              <div className="text-3xl sm:text-4xl font-black tracking-tight text-white font-mono">
+                NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-xs text-white/60 mt-1 flex items-center gap-1.5 font-medium">
+                <Plane size={13} className="text-primary" />
+                <span>{t('includesFlight')} (NT$ {Math.round(flightsTotal).toLocaleString()})</span>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/70 font-medium">
+              <span>當地累積消費</span>
+              <span className="font-bold text-white font-mono">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[32px] shadow-ios border border-gray-100 dark:border-slate-700 md:h-[320px] h-auto">
-          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{t('breakdown')}</h3>
-          <div className="md:h-full max-h-[200px] md:max-h-none overflow-y-auto custom-thin-scrollbar pr-2 pb-4 [&::-webkit-scrollbar]:w-1">
-            {chartData.length > 0 ? (
-              <>
-                 {/* Desktop Pie Chart */}
-                 <div className="hidden md:block h-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={chartData} cx="50%" cy="50%" innerRadius={70} outerRadius={90} paddingAngle={5} dataKey="value">
-                        {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CATEGORY_UI[entry.category]?.hexColor || '#94a3b8'} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                 </div>
+        {/* Category Breakdown (Apple Health / Wallet Activity style) */}
+        <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl p-7 rounded-[36px] shadow-ios border border-black/[0.04] dark:border-white/[0.06]">
+          <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+            <Sparkles size={14} className="text-primary" />
+            <span>{t('breakdown')}</span>
+          </h3>
 
-                 {/* Mobile Bar View */}
-                 <div className="md:hidden space-y-4 pb-2">
-                    {[...chartData].sort((a,b) => b.value - a.value).map((entry, index) => {
-                       const percent = totalTWD > 0 ? (entry.value / totalTWD) * 100 : 0;
-                       const ui = CATEGORY_UI[entry.category] || CATEGORY_UI.Other;
-                       // Using inline style for width 
-                       return (
-                         <div key={index}>
-                           <div className="flex justify-between items-end mb-1">
-                             <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ui.hexColor }}></div>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{entry.name}</span>
-                             </div>
-                             <span className="text-xs font-black text-slate-900 dark:text-white">{Math.round(percent)}%</span>
-                           </div>
-                           <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden w-full">
-                              <div className="h-full rounded-full" style={{ width: `${percent}%`, backgroundColor: ui.hexColor }} />
-                           </div>
-                           <div className="text-right text-[10px] font-bold text-slate-400 mt-1">NT$ {Math.round(entry.value).toLocaleString()}</div>
-                         </div>
-                       )
-                    })}
-                 </div>
-              </>
-            ) : <div className="h-full flex items-center justify-center text-slate-300 font-bold">{t('noExpenses')}</div>}
+          <div className="space-y-4">
+            {chartData.length > 0 ? (
+              [...chartData].sort((a,b) => b.value - a.value).map((entry, index) => {
+                const percent = totalTWD > 0 ? (entry.value / totalTWD) * 100 : 0;
+                const ui = CATEGORY_UI[entry.category] || CATEGORY_UI.Other;
+                return (
+                  <div key={index} className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ui.hexColor }} />
+                        <span>{entry.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+                          NT$ {Math.round(entry.value).toLocaleString()}
+                        </span>
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {Math.round(percent)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden w-full">
+                      <div 
+                        className="h-full rounded-full transition-all duration-700 ease-out" 
+                        style={{ width: `${percent}%`, backgroundColor: ui.hexColor }} 
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-10 text-center text-xs text-slate-400 font-medium">
+                {t('noExpenses')}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-[40px] shadow-ios border border-gray-100 dark:border-slate-700 overflow-hidden flex flex-col h-[750px]">
-        <div className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-gray-100 dark:border-slate-700">
-           <button onClick={() => setIsFormOpen(true)} className={`w-full py-6 flex items-center justify-center gap-2 text-slate-500 font-black uppercase text-xs tracking-widest transition-all ${isFormOpen ? 'hidden' : 'flex'}`}>
-              <Plus size={18} /> {t('addEntry')}
-           </button>
-           {isFormOpen && (
-             <div className="p-8 space-y-4">
-                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="relative md:col-span-1">
-                      <span className="absolute left-4 inset-y-0 flex items-center text-[11px] font-black text-slate-400 z-10">{currency}</span>
-                      <input type="number" value={amount} onChange={e => {setAmount(e.target.value); setErrors({...errors, amount: false})}} className={`w-full pl-14 pr-4 py-3 font-black text-sm shadow-sm ${inputClass(errors.amount)}`} placeholder="0" />
-                    </div>
-                    <CustomFilterSelect 
-                      variant="form"
-                      icon={DollarSign}
-                      value={currency} 
-                      onChange={(val: any) => setCurrency(val as Currency)} 
-                      options={Object.values(Currency).map(c => ({ value: c, label: c }))} 
-                      wrapperClass="md:col-span-1"
-                    />
-                    <CustomFilterSelect 
-                      variant="form"
-                      icon={Tag}
-                      value={category} 
-                      onChange={(val: any) => setCategory(val)} 
-                      options={manualCategories.map(c => ({ value: c, label: getCatName(c) }))} 
-                      wrapperClass="md:col-span-1"
-                    />
-                    <CustomFilterSelect 
-                      variant="form"
-                      icon={Calendar}
-                      value={selectedDate} 
-                      onChange={(val: any) => setSelectedDate(val)} 
-                      options={dateOptions.map(d => ({ value: d, label: d }))} 
-                      wrapperClass="md:col-span-1"
-                    />
-                 </div>
-                 <div className="relative">
-                   <input value={note} onChange={e => {setNote(e.target.value); setErrors({...errors, note: false})}} className={`w-full px-5 py-4 font-bold text-sm shadow-sm ${inputClass(errors.note)}`} placeholder={t('descRequired') + "..."} />
-                 </div>
-                <div className="flex gap-3">
-                   <button onClick={saveExpense} className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3 rounded-xl font-black">{t('save')}</button>
-                   <button onClick={resetForm} className="px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-500 rounded-xl font-black">{t('cancel')}</button>
+      {/* Right Column: Inset Grouped Expense List & Form */}
+      <div className="lg:col-span-2 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl rounded-[36px] shadow-ios border border-black/[0.04] dark:border-white/[0.06] overflow-hidden flex flex-col min-h-[600px]">
+        {/* Add Entry Accordion Button / Form */}
+        <div className="bg-slate-50/70 dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06]">
+          <div className={`${isFormOpen ? 'hidden' : 'block'}`}>
+            <button 
+              onClick={() => setIsFormOpen(true)} 
+              className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary transition-all font-black text-xs uppercase tracking-widest cursor-pointer group"
+            >
+              <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Plus size={14} strokeWidth={3} />
+              </div>
+              <span>{t('addEntry')}</span>
+            </button>
+          </div>
+
+          {isFormOpen && (
+            <div className="p-6 sm:p-7 space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                  {editingExpenseId ? "編輯記帳" : t('addEntry')}
+                </h3>
+                <button 
+                  onClick={resetForm}
+                  className="w-7 h-7 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400"
+                >
+                  <Trash2 size={14} className="hidden" />
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="relative">
+                  <span className="absolute left-4 inset-y-0 flex items-center text-xs font-mono font-bold text-slate-400 pointer-events-none">
+                    {currency}
+                  </span>
+                  <input 
+                    type="number" 
+                    value={amount} 
+                    onChange={e => { setAmount(e.target.value); setErrors({...errors, amount: false}); }} 
+                    className={`w-full pl-14 pr-4 py-3 font-mono font-bold text-sm shadow-sm ${inputClass(errors.amount)}`} 
+                    placeholder="0" 
+                  />
                 </div>
-             </div>
-           )}
+                <CustomFilterSelect 
+                  variant="form"
+                  icon={DollarSign}
+                  value={currency} 
+                  onChange={(val: any) => setCurrency(val as Currency)} 
+                  options={Object.values(Currency).map(c => ({ value: c, label: c }))} 
+                />
+                <CustomFilterSelect 
+                  variant="form"
+                  icon={Tag}
+                  value={category} 
+                  onChange={(val: any) => setCategory(val)} 
+                  options={manualCategories.map(c => ({ value: c, label: getCatName(c) }))} 
+                />
+                <CustomFilterSelect 
+                  variant="form"
+                  icon={Calendar}
+                  value={selectedDate} 
+                  onChange={(val: any) => setSelectedDate(val)} 
+                  options={dateOptions.map(d => ({ value: d, label: d }))} 
+                />
+              </div>
+
+              <div className="relative">
+                <input 
+                  value={note} 
+                  onChange={e => { setNote(e.target.value); setErrors({...errors, note: false}); }} 
+                  className={`w-full px-5 py-3 font-medium text-sm shadow-sm ${inputClass(errors.note)}`} 
+                  placeholder={t('descRequired') + "..."} 
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={saveExpense} 
+                  className="flex-1 bg-primary text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md shadow-primary/25 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer"
+                >
+                  {t('save')}
+                </button>
+                <button 
+                  onClick={resetForm} 
+                  className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="border-b border-gray-100 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm sticky top-0 z-20 w-full select-none">
-           <div className="px-6 py-4 flex flex-wrap items-center justify-end gap-2">
-              <CustomFilterSelect 
-                icon={Tag} 
-                value={filterCategory} 
-                onChange={setFilterCategory} 
-                options={[
-                  { value: 'All', label: t('filterAll') },
-                  ...Object.keys(CATEGORY_UI).map(cat => ({ value: cat, label: getCatName(cat) }))
-                ]} 
-              />
-              <CustomFilterSelect 
-                icon={Calendar} 
-                value={filterDate} 
-                onChange={setFilterDate} 
-                options={[
-                  { value: 'All', label: t('filterAllDates') },
-                  ...dateOptions.map(d => ({ value: d, label: d }))
-                ]} 
-              />
-              <CustomFilterSelect 
-                icon={UserIcon} 
-                value={filterUser} 
-                onChange={setFilterUser} 
-                options={[
-                  { value: 'All', label: `${t('filterUser')}: ${t('filterAll')}` },
-                  ...members.map(m => ({ value: m.id, label: m.name }))
-                ]} 
-              />
-              <CustomFilterSelect 
-                icon={ArrowUpDown} 
-                value={sortOrder} 
-                onChange={(val) => setSortOrder(val)} 
-                options={[
-                  { value: 'date-desc', label: t('sortDateDesc') },
-                  { value: 'date-asc', label: t('sortDateAsc') },
-                  { value: 'created-desc', label: t('sortCreatedDesc') },
-                  { value: 'amount-desc', label: t('sortAmountDesc') },
-                  { value: 'amount-asc', label: t('sortAmountAsc') }
-                ]} 
-              />
-           </div>
+        {/* Filter Toolbar */}
+        <div className="border-b border-black/[0.04] dark:border-white/[0.06] bg-slate-50/40 dark:bg-white/[0.02] px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            共 {processedExpenses.length} 筆消費
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <CustomFilterSelect 
+              icon={Tag} 
+              value={filterCategory} 
+              onChange={setFilterCategory} 
+              options={[
+                { value: 'All', label: t('filterAll') },
+                ...Object.keys(CATEGORY_UI).map(cat => ({ value: cat, label: getCatName(cat) }))
+              ]} 
+            />
+            <CustomFilterSelect 
+              icon={Calendar} 
+              value={filterDate} 
+              onChange={setFilterDate} 
+              options={[
+                { value: 'All', label: t('filterAllDates') },
+                ...dateOptions.map(d => ({ value: d, label: d }))
+              ]} 
+            />
+            <CustomFilterSelect 
+              icon={UserIcon} 
+              value={filterUser} 
+              onChange={setFilterUser} 
+              options={[
+                { value: 'All', label: `${t('filterUser')}: ${t('filterAll')}` },
+                ...members.map(m => ({ value: m.id, label: m.name }))
+              ]} 
+            />
+            <CustomFilterSelect 
+              icon={ArrowUpDown} 
+              value={sortOrder} 
+              onChange={(val) => setSortOrder(val)} 
+              options={[
+                { value: 'date-desc', label: t('sortDateDesc') },
+                { value: 'date-asc', label: t('sortDateAsc') },
+                { value: 'created-desc', label: t('sortCreatedDesc') },
+                { value: 'amount-desc', label: t('sortAmountDesc') },
+                { value: 'amount-asc', label: t('sortAmountAsc') }
+              ]} 
+            />
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-           {processedExpenses.map((item: any) => {
-             const config = CATEGORY_UI[item.category] || CATEGORY_UI.Other;
-             const Icon = config.icon;
-             const isFlightItem = !!item.isFlight;
+        {/* Inset Grouped Transaction List */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 custom-scrollbar">
+          {processedExpenses.map((item: any) => {
+            const config = CATEGORY_UI[item.category] || CATEGORY_UI.Other;
+            const Icon = config.icon;
+            const isFlightItem = !!item.isFlight;
 
-             return (
-               <div key={item.id} className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-5 bg-white dark:bg-slate-800/50 rounded-[28px] border border-slate-100 dark:border-slate-700 transition-all gap-4 sm:gap-0">
-                  <div className="flex items-center gap-4 min-w-0 w-full sm:flex-1">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-2xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shrink-0`}>
-                      <Icon size={18} className="sm:w-5 sm:h-5" />
+            return (
+              <div 
+                key={item.id} 
+                className="group flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-[#2C2C2E]/60 border border-black/[0.04] dark:border-white/[0.06] hover:border-primary/30 shadow-sm transition-all duration-200"
+              >
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className={`w-10 h-10 rounded-xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shrink-0 shadow-sm`}>
+                    <Icon size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
+                      {item.note}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-black text-sm sm:text-base text-slate-800 dark:text-white truncate">{item.note}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                         <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1"><UserIcon size={10}/> {item.user_name}</div>
-                         <div className="w-1 h-1 bg-slate-200 rounded-full"/>
-                         <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.date}</div>
-                      </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <UserIcon size={10} /> {item.user_name}
+                      </span>
+                      <span className="w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                      <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                        {item.date}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 sm:pl-4 w-full sm:w-auto border-t sm:border-t-0 border-slate-50 dark:border-slate-700/50 pt-3 sm:pt-0">
-                    <div className="text-left sm:text-right">
-                      <div className="font-black text-base sm:text-lg text-slate-800 dark:text-white">{item.currency} {item.amount.toLocaleString()}</div>
-                      {item.currency !== Currency.TWD && <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">≈ NT$ {Math.round(item.amount * item.exchangeRate).toLocaleString()}</div>}
+                </div>
+
+                <div className="flex items-center gap-4 shrink-0 pl-3">
+                  <div className="text-right">
+                    <div className="font-mono font-bold text-sm sm:text-base text-slate-800 dark:text-white">
+                      {item.currency} {item.amount.toLocaleString()}
                     </div>
-                    {!isFlightItem && (item.user_id === currentUser?.id || trip.user_id === currentUser?.id) ? (
-                      <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all">
-                        <button onClick={() => startEdit(item)} className="p-2 text-slate-400 hover:text-primary"><Edit2 size={16}/></button>
-                        <button onClick={() => deleteExpense(item.id)} className="p-2 text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
+                    {item.currency !== Currency.TWD && (
+                      <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                        ≈ NT$ {Math.round(item.amount * item.exchangeRate).toLocaleString()}
                       </div>
-                    ) : (
-                      <div className="p-2 text-slate-300"><Lock size={16}/></div>
                     )}
                   </div>
-               </div>
-             );
-           })}
+
+                  {!isFlightItem && (item.user_id === currentUser?.id || trip.user_id === currentUser?.id) ? (
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => startEdit(item)} 
+                        className="p-1.5 text-slate-400 hover:text-primary rounded-lg transition-colors cursor-pointer"
+                        aria-label="Edit expense"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button 
+                        onClick={() => deleteExpense(item.id)} 
+                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
+                        aria-label="Delete expense"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-1.5 text-slate-300 dark:text-slate-600">
+                      <Lock size={14} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {processedExpenses.length === 0 && (
+            <div className="py-16 text-center text-slate-400 text-xs font-medium">
+              {t('noExpenses')}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -51,6 +51,7 @@ import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
 import { LoginModal, LoginReason } from "./components/LoginModal";
 import { DeleteTripModal } from "./components/DeleteTripModal";
+import { ExportModal } from "./components/ExportModal";
 import { TripCard, getTripTiming } from "./components/TripCard";
 import { APP_VERSION } from "./services/version";
 
@@ -96,6 +97,7 @@ import {
   Search,
   Compass,
   Filter,
+  FileText,
 } from "lucide-react";
 import {
   PieChart,
@@ -171,6 +173,7 @@ const App: React.FC = () => {
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [pendingTripId, setPendingTripId] = useState<string | null>(null);
   const [loginReason, setLoginReason] = useState<LoginReason>(null);
@@ -1887,14 +1890,23 @@ const App: React.FC = () => {
                     onClick={() =>
                       !isGuest ? setIsShareModalOpen(true) : null
                     }
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all cursor-pointer ${
                       isGuest
                         ? "opacity-30 cursor-not-allowed text-slate-400"
                         : "text-slate-400 hover:text-primary hover:bg-primary/10"
                     }`}
                     disabled={isGuest}
+                    title={t("shareTrip")}
                   >
                     <Share2 size={18} />
+                  </button>
+                  <button
+                    onClick={() => setIsExportModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/[0.08] hover:bg-primary/10 hover:text-primary text-slate-700 dark:text-slate-200 transition-all text-xs font-bold cursor-pointer active:scale-95"
+                    title="匯出至 iOS 備忘錄 / Apple 日曆"
+                  >
+                    <FileText size={14} className="text-amber-500" />
+                    <span className="hidden sm:inline">匯出</span>
                   </button>
                   <GlobalNav />
                   <UserHeaderProfile />
@@ -2223,6 +2235,14 @@ const App: React.FC = () => {
                   );
                   setNotification({ message: t("copied"), type: "success" });
                 }}
+              />
+            )}
+            {isExportModalOpen && currentTrip && (
+              <ExportModal
+                trip={currentTrip}
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onNotify={(message, type) => setNotification({ message, type })}
               />
             )}
             {isEditingBudget && !isGuest && (
