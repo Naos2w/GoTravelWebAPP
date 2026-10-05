@@ -168,8 +168,8 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+      <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] w-full max-w-lg rounded-[36px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="p-6 border-b border-slate-100 dark:border-white/[0.08] flex justify-between items-center">
           <h3 className="font-black text-xl text-slate-800 dark:text-white">
             {step.includes("outbound")
               ? t("searchOut")
@@ -179,7 +179,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
           </h3>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full text-slate-400"
+            className="p-2 hover:bg-slate-50 dark:hover:bg-white/[0.08] rounded-full text-slate-400"
           >
             <X size={20} />
           </button>
@@ -188,11 +188,11 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
           {step === "outbound-search" || step === "inbound-search" ? (
             <div className="space-y-6">
               {step === "outbound-search" && outboundSegments.length > 0 && (
-                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-white/[0.04] p-4 rounded-2xl border border-slate-100 dark:border-white/[0.08]">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("outboundSelected")}</div>
                   <div className="space-y-2">
                     {outboundSegments.map((seg, idx) => (
-                      <div key={idx} className="bg-white dark:bg-slate-850 p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-slate-800">
+                      <div key={idx} className="bg-white dark:bg-white/[0.06] p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-white/[0.08]">
                         <div>
                           <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
                           <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
@@ -221,11 +221,11 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
               )}
 
               {step === "inbound-search" && inboundSegments.length > 0 && (
-                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <div className="space-y-2 mb-4 bg-slate-50 dark:bg-white/[0.04] p-4 rounded-2xl border border-slate-100 dark:border-white/[0.08]">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t("inboundSelected")}</div>
                   <div className="space-y-2">
                     {inboundSegments.map((seg, idx) => (
-                      <div key={idx} className="bg-white dark:bg-slate-850 p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-slate-800">
+                      <div key={idx} className="bg-white dark:bg-white/[0.06] p-3 rounded-xl flex justify-between items-center text-xs font-bold border border-slate-100 dark:border-white/[0.08]">
                         <div>
                           <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
                           <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
@@ -261,7 +261,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                   <input
                     value={origin}
                     onChange={(e) => setOrigin(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold outline-none"
+                    className="w-full bg-slate-50 dark:bg-white/[0.05] dark:text-white p-3 rounded-xl border border-slate-100 dark:border-white/[0.08] font-bold outline-none"
                   />
                 </div>
                 <div className="space-y-1">
@@ -271,7 +271,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                   <input
                     value={destination}
                     onChange={(e) => setDestination(e.target.value.toUpperCase())}
-                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold outline-none"
+                    className="w-full bg-slate-50 dark:bg-white/[0.05] dark:text-white p-3 rounded-xl border border-slate-100 dark:border-white/[0.08] font-bold outline-none"
                   />
                 </div>
               </div>
@@ -302,7 +302,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                         ? setOutFlightNo(e.target.value.toUpperCase())
                         : setInFlightNo(e.target.value.toUpperCase())
                     }
-                    className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white p-3 rounded-xl border-none font-bold font-mono outline-none"
+                    className="w-full bg-slate-50 dark:bg-white/[0.05] dark:text-white p-3 rounded-xl border border-slate-100 dark:border-white/[0.08] font-bold font-mono outline-none"
                     placeholder={step === "outbound-search" ? "BR198" : "BR197"}
                   />
                 </div>
@@ -361,7 +361,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
                         setStep("inbound-search");
                       }
                     }}
-                    className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-transparent hover:border-primary cursor-pointer transition-all"
+                    className="p-4 bg-slate-50 dark:bg-white/[0.05] rounded-2xl border border-black/[0.04] dark:border-white/[0.08] hover:border-primary dark:hover:border-primary cursor-pointer transition-all"
                   >
                     <div className="flex justify-between items-center font-black text-sm dark:text-white">
                       <div className="flex flex-col">
@@ -461,14 +461,14 @@ const BaggageEditor: React.FC<BaggageEditorProps> = ({
   };
 
   const inputClass = (isError: boolean) =>
-    `w-full pl-3 pr-8 py-2.5 bg-white dark:bg-slate-800 rounded-xl text-xs font-bold border transition-all outline-none ${
+    `w-full pl-3 pr-8 py-2.5 bg-white dark:bg-white/[0.06] rounded-xl text-xs font-bold border transition-all outline-none ${
       isError
         ? "border-red-500 ring-2 ring-red-500/20 animate-pulse-soft"
-        : "border-transparent focus:ring-2 focus:ring-primary/20"
+        : "border-slate-200/50 dark:border-white/[0.08] focus:ring-2 focus:ring-primary/20"
     }`;
 
   return (
-    <div className="p-5 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-4">
+    <div className="p-5 bg-slate-50 dark:bg-white/[0.04] rounded-3xl border border-slate-100 dark:border-white/[0.08] space-y-4">
       <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
         {label}
       </div>
@@ -476,7 +476,7 @@ const BaggageEditor: React.FC<BaggageEditorProps> = ({
         {/* Carry On */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-2 w-24 shrink-0 text-xs font-black text-slate-600 dark:text-slate-300">
-            <div className="p-1.5 bg-white dark:bg-slate-800 rounded-lg">
+            <div className="p-1.5 bg-white dark:bg-white/[0.08] rounded-lg">
               <ShoppingBag size={14} />
             </div>
             {t("carryOn")}
@@ -531,12 +531,12 @@ const BaggageEditor: React.FC<BaggageEditorProps> = ({
           </div>
         </div>
 
-        <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50"></div>
+        <div className="w-full h-px bg-slate-200 dark:bg-white/[0.08]"></div>
 
         {/* Checked */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-2 w-24 shrink-0 text-xs font-black text-slate-600 dark:text-slate-300">
-            <div className="p-1.5 bg-white dark:bg-slate-800 rounded-lg">
+            <div className="p-1.5 bg-white dark:bg-white/[0.08] rounded-lg">
               <Briefcase size={14} />
             </div>
             {t("checked")}
@@ -670,7 +670,7 @@ export const FlightManager: React.FC<Props> = ({
                 cabinClass={cabinClass}
               />
               {idx < segment.segments.length - 1 && (
-                <div className="flex items-center justify-center gap-2 py-2 text-xs font-black text-slate-400 bg-slate-50 dark:bg-slate-900 rounded-2xl mx-8 border border-slate-100/50 dark:border-slate-800">
+                <div className="flex items-center justify-center gap-2 py-2 text-xs font-black text-slate-400 bg-slate-50 dark:bg-white/[0.04] rounded-2xl mx-8 border border-slate-100/50 dark:border-white/[0.08]">
                   <Plane size={12} className="text-slate-300 rotate-90 shrink-0" />
                   <span>
                     {t("layoverAt")} {seg.arrivalAirport} ({calculateLayoverDuration(seg, segment.segments[idx + 1])})
@@ -888,7 +888,7 @@ export const FlightManager: React.FC<Props> = ({
           return (
             <div 
               key={idx} 
-              className="p-5 rounded-3xl border border-slate-100 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/10 space-y-4"
+              className="p-5 rounded-3xl border border-slate-100 dark:border-white/[0.08] bg-slate-50/30 dark:bg-white/[0.03] space-y-4"
             >
               {isSubSegment && (
                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -906,7 +906,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "airline", e.target.value);
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -918,7 +918,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "flightNumber", e.target.value.toUpperCase());
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
               </div>
@@ -933,7 +933,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "departureAirport", e.target.value.toUpperCase());
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -945,7 +945,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "arrivalAirport", e.target.value.toUpperCase());
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
               </div>
@@ -962,7 +962,7 @@ export const FlightManager: React.FC<Props> = ({
                       const isoVal = e.target.value ? e.target.value + ":00" : "";
                       updateSegmentField(type, segmentKey, "departureTime", isoVal);
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -976,7 +976,7 @@ export const FlightManager: React.FC<Props> = ({
                       const isoVal = e.target.value ? e.target.value + ":00" : "";
                       updateSegmentField(type, segmentKey, "arrivalTime", isoVal);
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
               </div>
@@ -991,7 +991,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "terminal", e.target.value);
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1003,7 +1003,7 @@ export const FlightManager: React.FC<Props> = ({
                     onChange={(e) => {
                       updateSegmentField(type, segmentKey, "gate", e.target.value);
                     }}
-                    className="w-full h-[44px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border border-transparent focus:border-primary/20 font-bold text-xs outline-none transition-all"
+                    className="w-full h-[44px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-transparent dark:border-white/[0.08] focus:border-primary/20 font-bold text-xs outline-none transition-all"
                   />
                 </div>
               </div>
@@ -1269,7 +1269,7 @@ export const FlightManager: React.FC<Props> = ({
             {canSync && (
               <button
                 onClick={handleSyncWithOwner}
-                className="p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 bg-white dark:bg-slate-800 text-primary border border-primary/20 hover:bg-primary/5 transition-all shadow-lg"
+                className="p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 bg-white dark:bg-white/[0.06] text-primary border border-primary/20 hover:bg-primary/5 transition-all shadow-lg"
                 title={t("syncWithOwner")}
               >
                 <RefreshCw size={18} />{" "}
@@ -1280,7 +1280,7 @@ export const FlightManager: React.FC<Props> = ({
               onClick={handleStartAdd}
               className={`p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${
                 hasMyFlight
-                  ? "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200"
+                  ? "bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 hover:bg-slate-200"
                   : "bg-primary text-white hover:opacity-90 shadow-primary/20"
               }`}
               title={hasMyFlight ? t("addSegment") : t("addMyFlight")}
@@ -1295,7 +1295,7 @@ export const FlightManager: React.FC<Props> = ({
       </div>
 
       {editingFlightId && tempFlightData ? (
-        <div className="space-y-6 animate-in fade-in duration-500 bg-white dark:bg-slate-800 p-6 sm:p-8 rounded-[40px] border border-slate-100 dark:border-slate-700 shadow-ios relative overflow-hidden">
+        <div className="space-y-6 animate-in fade-in duration-500 ios27-card p-6 sm:p-8 rounded-[36px] shadow-ios relative overflow-hidden">
           <div className="flex justify-between items-center mb-6 pt-4">
             <h3 className="font-black text-lg text-slate-900 dark:text-white">
               {t("edit")}
@@ -1335,7 +1335,7 @@ export const FlightManager: React.FC<Props> = ({
                       traveler_name: e.target.value,
                     })
                   }
-                  className="w-full h-[48px] bg-slate-50 dark:bg-slate-900 dark:text-white px-3 rounded-xl border-2 border-transparent focus:border-primary/20 font-bold text-sm outline-none transition-all"
+                  className="w-full h-[48px] bg-slate-50 dark:bg-white/[0.05] dark:text-white px-3 rounded-xl border border-slate-200/50 dark:border-white/[0.08] focus:border-primary/20 font-bold text-sm outline-none transition-all"
                 />
               </div>
 
@@ -1352,10 +1352,10 @@ export const FlightManager: React.FC<Props> = ({
                     )}
                   </label>
                   <div
-                    className={`flex w-full h-[48px] items-stretch rounded-2xl bg-slate-50 dark:bg-slate-900 transition-all border-2 ${
+                    className={`flex w-full h-[48px] items-stretch rounded-2xl bg-slate-50 dark:bg-white/[0.05] transition-all border ${
                       priceError
                         ? "border-red-500 bg-red-50/10 ring-4 ring-red-500/10"
-                        : "border-transparent focus-within:border-primary/20"
+                        : "border-slate-200/50 dark:border-white/[0.08] focus-within:border-primary/20"
                     }`}
                   >
                     <select
@@ -1393,7 +1393,7 @@ export const FlightManager: React.FC<Props> = ({
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center h-[15px]">
                     {t("cabin")}
                   </label>
-                  <div className="relative flex items-center w-full h-[48px] bg-slate-50 dark:bg-slate-900 rounded-2xl border-2 border-transparent focus-within:border-primary/20 transition-all">
+                  <div className="relative flex items-center w-full h-[48px] bg-slate-50 dark:bg-white/[0.05] rounded-2xl border border-slate-200/50 dark:border-white/[0.08] focus-within:border-primary/20 transition-all">
                     <select
                       value={tempFlightData.cabinClass}
                       onChange={(e) =>
@@ -1468,11 +1468,11 @@ export const FlightManager: React.FC<Props> = ({
           </div>
 
           {/* Manual Flight Details Editor */}
-          <div className="mt-8 border-t border-slate-100 dark:border-slate-700/50 pt-6">
+          <div className="mt-8 border-t border-slate-100 dark:border-white/[0.08] pt-6">
             <button
               type="button"
               onClick={() => setShowManualDetails(!showManualDetails)}
-              className="w-full flex justify-between items-center py-3 px-4 bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-900/80 rounded-2xl transition-all text-left"
+              className="w-full flex justify-between items-center py-3 px-4 bg-slate-50 dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-2xl transition-all text-left"
             >
               <div className="flex items-center gap-3">
                 <Plane size={18} className="text-primary" />
@@ -1553,7 +1553,7 @@ export const FlightManager: React.FC<Props> = ({
                   {flight.user_id === currentUser?.id && (
                     <button
                       onClick={() => startEdit(flight)}
-                      className="absolute top-4 right-4 p-3 bg-white/80 dark:bg-slate-700/80 backdrop-blur-md rounded-xl text-slate-500 hover:text-primary transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                      className="absolute top-4 right-4 p-3 bg-white/80 dark:bg-white/[0.12] border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-md rounded-xl text-slate-500 hover:text-primary transition-all shadow-sm opacity-0 group-hover:opacity-100"
                     >
                       <Edit2 size={18} />
                     </button>

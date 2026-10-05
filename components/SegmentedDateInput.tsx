@@ -43,7 +43,7 @@ export const SegmentedDateInput: React.FC<Props> = ({ value, onChange, hasError 
     onChange(e.target.value);
   }
 
-  const baseClass = `bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-2 outline-none transition-all text-left placeholder-slate-300 dark:placeholder-slate-600 dark:text-white w-full p-3 pr-12`;
+  const baseClass = `bg-gray-50 dark:bg-white/[0.05] rounded-xl font-black border-2 outline-none transition-all text-left placeholder-slate-300 dark:placeholder-slate-500 dark:text-white w-full p-3 pr-12`;
   const errorClass = hasError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20' : 'border-transparent focus:border-primary/20';
   const combinedClass = `${baseClass} ${errorClass}`;
 

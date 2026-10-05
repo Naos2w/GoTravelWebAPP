@@ -54,7 +54,7 @@ export const DeleteTripModal: React.FC<DeleteTripModalProps> = ({
         }
       }}
     >
-      <div className="bg-white dark:bg-[#1f1f23] w-full max-w-md rounded-[32px] p-6 sm:p-7 shadow-2xl border border-slate-200/80 dark:border-white/10 flex flex-col gap-6">
+      <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl w-full max-w-md rounded-[32px] p-6 sm:p-7 shadow-2xl border border-black/[0.08] dark:border-white/[0.14] flex flex-col gap-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div
@@ -83,14 +83,14 @@ export const DeleteTripModal: React.FC<DeleteTripModalProps> = ({
             onClick={onClose}
             disabled={isDeleting}
             aria-label="Close"
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors disabled:opacity-50 cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-full transition-colors disabled:opacity-50 cursor-pointer"
           >
             <CloseIcon size={20} />
           </button>
         </div>
 
         {/* Trip Card Mini Preview */}
-        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 flex flex-col gap-1.5">
+        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/60 dark:border-white/[0.08] flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
             <span>{trip.destination}</span>
             <span>
@@ -112,7 +112,7 @@ export const DeleteTripModal: React.FC<DeleteTripModalProps> = ({
             onClick={onClose}
             disabled={isDeleting}
             data-testid="cancel-trip-action-btn"
-            className="flex-1 px-5 py-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-sm"
+            className="flex-1 px-5 py-3.5 bg-slate-100 dark:bg-white/[0.08] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 font-bold rounded-2xl transition-all active:scale-95 disabled:opacity-50 cursor-pointer text-sm"
           >
             {t("cancel")}
           </button>

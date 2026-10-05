@@ -147,10 +147,10 @@ export const TripCard: React.FC<TripCardProps> = ({
           }
         }
       }}
-      className={`group relative bg-white dark:bg-[#202024] rounded-[32px] border ${
+      className={`group relative ios27-card rounded-[32px] border ${
         isEditMode
           ? "border-rose-400/60 dark:border-rose-500/50 ring-2 ring-rose-500/20"
-          : "border-slate-200/70 dark:border-white/10"
+          : "border-slate-200/70 dark:border-white/12"
       } shadow-ios overflow-hidden cursor-pointer transition-all duration-300 ease-spring hover:-translate-y-1.5 hover:shadow-ios-lg active:scale-[0.99] flex flex-col justify-between`}
     >
       {/* Top Banner with Gradient */}
@@ -190,7 +190,7 @@ export const TripCard: React.FC<TripCardProps> = ({
                 isOwner
                   ? "bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/40"
                   : "bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-600/40"
-              } flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer animate-in zoom-in-75 fade-in ring-2 ring-white/90 dark:ring-[#202024]`}
+              } flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer animate-in zoom-in-75 fade-in ring-2 ring-white/90 dark:ring-[#060709]`}
             >
               {isOwner ? <Trash2 size={16} /> : <LogOut size={16} />}
             </button>
@@ -216,7 +216,7 @@ export const TripCard: React.FC<TripCardProps> = ({
       </div>
 
       {/* Bottom Info Shelf */}
-      <div className="px-6 py-4 bg-slate-50/80 dark:bg-white/[0.02] flex items-center justify-between border-t border-slate-100 dark:border-white/5">
+      <div className="px-6 py-4 bg-slate-50/80 dark:bg-white/[0.03] flex items-center justify-between border-t border-slate-100 dark:border-white/[0.08]">
         <div>
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             {t("totalCost")}
@@ -242,7 +242,7 @@ export const TripCard: React.FC<TripCardProps> = ({
             )}
           </div>
 
-          <div className="w-8 h-8 rounded-full bg-slate-200/60 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 group-hover:translate-x-0.5 transition-all">
+          <div className="w-8 h-8 rounded-full bg-slate-200/60 dark:bg-white/10 flex items-center justify-center text-slate-400 dark:text-slate-200 group-hover:text-primary group-hover:bg-primary/10 group-hover:translate-x-0.5 transition-all">
             <ArrowRight size={15} />
           </div>
         </div>

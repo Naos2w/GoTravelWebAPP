@@ -36,20 +36,20 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
     if (!finalLabel) return null;
 
     return (
-      <div className="flex items-center gap-1 text-[9px] bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.06] text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap">
+      <div className="flex items-center gap-1 text-[9px] bg-slate-100 dark:bg-white/[0.08] px-2 py-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.1] text-slate-600 dark:text-slate-300 font-bold whitespace-nowrap">
         <Icon size={10} /> {finalLabel}
       </div>
     );
   };
 
   return (
-    <div className="w-full bg-white dark:bg-[#1C1C1E] rounded-[36px] shadow-ios border border-black/[0.06] dark:border-white/[0.08] overflow-hidden flex flex-col lg:flex-row transition-all duration-300 relative group">
+    <div className="w-full ios27-card rounded-[36px] overflow-hidden flex flex-col lg:flex-row transition-all duration-300 relative group">
       {/* Main Boarding Pass Section */}
       <div className="flex-1 p-6 sm:p-8 relative">
         {/* Top Airline Bar */}
         <div className="flex justify-between items-start mb-6 sm:mb-8 border-b border-black/[0.04] dark:border-white/[0.06] pb-5">
            <div className="flex items-center gap-3.5">
-             <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white dark:bg-[#2C2C2E] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl flex items-center justify-center p-2 shadow-sm overflow-hidden shrink-0">
+             <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] rounded-2xl flex items-center justify-center p-2 shadow-sm overflow-hidden shrink-0">
                 <img 
                   src={logoUrl || ''} 
                   alt={segment.airline} 
@@ -100,8 +100,8 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
            </div>
 
            <div className="flex-1 px-4 sm:px-8 flex flex-col items-center">
-              <div className="w-full border-t-2 border-dashed border-slate-200 dark:border-slate-700 relative h-0">
-                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white dark:bg-[#1C1C1E] border border-slate-200 dark:border-slate-700 flex items-center justify-center text-primary shadow-sm">
+              <div className="w-full border-t-2 border-dashed border-slate-200 dark:border-white/[0.12] relative h-0">
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white dark:bg-[#121318] border border-slate-200 dark:border-white/[0.14] flex items-center justify-center text-primary shadow-sm">
                    <Plane size={15} className="rotate-90" />
                  </div>
               </div>
@@ -144,20 +144,20 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
              </div>
            </div>
 
-           <div className="bg-white dark:bg-[#2C2C2E] p-2.5 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-sm">
+           <div className="bg-white dark:bg-white/[0.08] p-2.5 rounded-2xl border border-black/[0.06] dark:border-white/[0.12] shadow-sm">
              <QrCode className="text-slate-900 dark:text-white" size={28} />
            </div>
         </div>
       </div>
 
-      {/* Ticket Tear Perforation Holes (Apple Wallet PKPass style) */}
+      {/* Ticket Tear Perforation Holes (Apple Wallet PKPass style matching OLED Canvas) */}
       <div className="hidden lg:block relative w-0">
-        <div className="absolute top-0 -left-3 w-6 h-6 rounded-full bg-[#FBFBFD] dark:bg-[#1C1C1E] z-10 border-b border-black/[0.06] dark:border-white/[0.08]" />
-        <div className="absolute bottom-0 -left-3 w-6 h-6 rounded-full bg-[#FBFBFD] dark:bg-[#1C1C1E] z-10 border-t border-black/[0.06] dark:border-white/[0.08]" />
+        <div className="absolute top-0 -left-3 w-6 h-6 rounded-full bg-[#FBFBFD] dark:bg-[#060709] z-10 border-b border-black/[0.06] dark:border-white/[0.08]" />
+        <div className="absolute bottom-0 -left-3 w-6 h-6 rounded-full bg-[#FBFBFD] dark:bg-[#060709] z-10 border-t border-black/[0.06] dark:border-white/[0.08]" />
       </div>
 
       {/* Right Ticket Stub (PKPass Stub) */}
-      <div className="hidden lg:flex w-64 border-l border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-white/[0.02] p-8 flex-col justify-between relative">
+      <div className="hidden lg:flex w-64 border-l border-dashed border-slate-200 dark:border-white/[0.08] bg-slate-50/40 dark:bg-white/[0.02] p-8 flex-col justify-between relative">
          <div className="space-y-6">
             <div className="flex items-center justify-between">
               <span className="font-black text-xs text-slate-400 dark:text-slate-500 tracking-wider truncate">
@@ -208,7 +208,7 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
             </div>
          </div>
 
-         <div className="text-center pt-6 border-t border-slate-200 dark:border-slate-800/80">
+         <div className="text-center pt-6 border-t border-slate-200 dark:border-white/[0.08]">
             <div className="font-mono text-2xl font-black tracking-widest text-primary">
               {DateTimeUtils.formatTime24(segment.departureTime).replace(':','')}
             </div>

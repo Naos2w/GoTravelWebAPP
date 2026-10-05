@@ -94,7 +94,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-lg bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-t-[36px] sm:rounded-[36px] p-6 sm:p-8 shadow-2xl border border-black/[0.06] dark:border-white/[0.08] flex flex-col gap-6 animate-in slide-in-from-bottom-8 duration-300 max-h-[90vh] overflow-y-auto"
+        className="w-full sm:max-w-lg bg-white/95 dark:bg-[#121318]/95 backdrop-blur-3xl rounded-t-[36px] sm:rounded-[36px] p-6 sm:p-8 shadow-2xl border border-black/[0.06] dark:border-white/[0.14] flex flex-col gap-6 animate-in slide-in-from-bottom-8 duration-300 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* iOS Grabber Handle */}
@@ -206,7 +206,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         {/* Tip banner */}
-        <div className="p-4 rounded-2xl bg-slate-100/70 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 flex items-start gap-3">
+        <div className="p-4 rounded-2xl bg-slate-100/70 dark:bg-white/[0.04] border border-slate-200/60 dark:border-white/[0.08] flex items-start gap-3">
           <Info size={16} className="text-primary shrink-0 mt-0.5" />
           <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
             <span className="font-bold text-slate-900 dark:text-white">

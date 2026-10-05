@@ -17,11 +17,11 @@
               secondary: "#5856D6",
               background: {
                 light: "#F2F2F7",
-                dark: "#1C1C1E",
+                dark: "#060709",
               },
               surface: {
                 light: "#FFFFFF",
-                dark: "#2C2C2E",
+                dark: "#121318",
               },
               fill: {
                 primary: "#007AFF",
@@ -46,6 +46,8 @@
               "ios-md": "0 4px 14px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
               "ios-lg": "0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04)",
               "ios-xl": "0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05)",
+              "vision-glass": "0 16px 40px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.14)",
+              "vision-glow": "0 0 30px rgba(0,122,255,0.25), 0 16px 40px rgba(0,0,0,0.65)",
             },
             borderRadius: {
               "ios": "14px",
@@ -61,7 +63,7 @@
       };
     </script>
     <style>
-      /* === Apple Human Interface Guideline Design System === */
+      /* === Apple Human Interface Guideline & iOS 27 Liquid Glass System === */
       :root {
         color-scheme: light;
         --radius-xs: 10px;
@@ -78,9 +80,9 @@
         --shadow-xl: 0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05);
 
         --glass-light: rgba(255, 255, 255, 0.82);
-        --glass-dark: rgba(28, 28, 30, 0.82);
+        --glass-dark: rgba(255, 255, 255, 0.05);
         --glass-border-light: rgba(255, 255, 255, 0.6);
-        --glass-border-dark: rgba(255, 255, 255, 0.08);
+        --glass-border-dark: rgba(255, 255, 255, 0.12);
       }
       .dark {
         color-scheme: dark;
@@ -99,7 +101,7 @@
         transition: background-color 0.4s ease, color 0.4s ease;
       }
       .dark body {
-        background-color: #1c1c1e;
+        background-color: #060709;
         color: #f5f5f7;
       }
 
@@ -114,7 +116,7 @@
         border-radius: 99px;
       }
       .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.10);
       }
       .custom-thin-scrollbar::-webkit-scrollbar { height: 2px; }
       .custom-thin-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
@@ -147,7 +149,35 @@
       }
       .animate-dash { animation: dash 1s linear infinite; }
 
-      /* === Apple Frosted Glass === */
+      /* === iOS 27 Liquid Glass Cards & Materials === */
+      .ios27-card {
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(28px) saturate(190%);
+        -webkit-backdrop-filter: blur(28px) saturate(190%);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+      }
+      .dark .ios27-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(32px) saturate(200%);
+        -webkit-backdrop-filter: blur(32px) saturate(200%);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      }
+      .dark .ios27-card:hover {
+        border-color: rgba(255, 255, 255, 0.22);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+      }
+
+      .ios27-subcard {
+        background: rgba(0, 0, 0, 0.025);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+      }
+      .dark .ios27-subcard {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
       .glass {
         background: var(--glass-light);
         backdrop-filter: saturate(180%) blur(20px);
@@ -166,7 +196,8 @@
         padding: 2px;
       }
       .dark .apple-segment {
-        background: rgba(116,116,128,0.20);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
       .apple-segment-item {
         border-radius: calc(var(--radius-sm) - 2px);
@@ -181,8 +212,10 @@
         color: #1d1d1f;
       }
       .dark .apple-segment-item.active {
-        background: #3a3a3c;
-        color: #f5f5f7;
+        background: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
 
       /* === Leaflet Overrides & Dark Mode Basemap === */

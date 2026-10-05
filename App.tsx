@@ -1515,7 +1515,7 @@ const App: React.FC = () => {
         <img
           src={user.picture}
           referrerPolicy="no-referrer"
-          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 object-cover ring-2 ring-white dark:ring-slate-700 shadow-sm"
+          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/[0.08] object-cover ring-2 ring-white dark:ring-white/20 shadow-sm"
         />
         <div className="text-right hidden sm:block">
           <div className="text-xs font-bold truncate max-w-[100px] text-slate-900 dark:text-slate-100">
@@ -1541,8 +1541,8 @@ const App: React.FC = () => {
   const MobileHero = () => {
     return (
       <div className="md:hidden space-y-4 mb-6">
-        <div className="w-full rounded-[32px] p-8 shadow-ios border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16" />
+        <div className="w-full rounded-[32px] p-8 shadow-ios ios27-card relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
           <div className="relative z-10 flex flex-col gap-2">
             <div className="flex justify-between items-start mb-1">
               <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">
@@ -1569,7 +1569,7 @@ const App: React.FC = () => {
                 })
                 .flat()
                 .map((item, idx) => (
-                  <div key={idx} className={`text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${item.isReturn ? 'bg-slate-100 dark:bg-slate-700 text-slate-400' : 'bg-primary/10 text-primary'}`}>
+                  <div key={idx} className={`text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border transition-all ${item.isReturn ? 'bg-slate-100 dark:bg-white/[0.06] text-slate-400 dark:text-slate-300 border-slate-200/60 dark:border-white/10' : 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/20'}`}>
                      <Plane size={10} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
                   </div>
                 ))}
@@ -1577,7 +1577,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-[32px] p-6 shadow-ios border border-slate-100 dark:border-slate-700 space-y-6">
+        <div className="ios27-card rounded-[32px] p-6 shadow-ios space-y-6">
           <div>
             <div className="flex justify-between items-end mb-2">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -1587,7 +1587,7 @@ const App: React.FC = () => {
                 {displayDays > 0 ? displayDays : 0} {t("daysLeft")}
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full"
                 style={{ width: `${countdownPercent}%` }}
@@ -1612,10 +1612,10 @@ const App: React.FC = () => {
                 %)
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${
-                  spentTotal > budgetLimit ? "bg-red-500" : "bg-indigo-500"
+                  spentTotal > budgetLimit ? "bg-red-500" : "bg-primary"
                 }`}
                 style={{ width: `${budgetPercent}%` }}
               />
@@ -1630,9 +1630,9 @@ const App: React.FC = () => {
                 {packingPercent}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-green-500 rounded-full"
+                className="h-full bg-emerald-500 rounded-full"
                 style={{ width: `${packingPercent}%` }}
               />
             </div>
@@ -1658,13 +1658,13 @@ const App: React.FC = () => {
                       "_blank"
                     )
                   }
-                  className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-[0.98] transition-all"
+                  className="ios27-card rounded-2xl p-4 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       i === 0
-                        ? "bg-primary/10 text-primary"
-                        : "bg-slate-50 dark:bg-slate-700 text-slate-400"
+                        ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                        : "bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-slate-300"
                     }`}
                   >
                     <MapPin size={18} />
@@ -1677,7 +1677,7 @@ const App: React.FC = () => {
                       {item.placeName}
                     </div>
                   </div>
-                  <div className="text-slate-300">
+                  <div className="text-slate-300 dark:text-slate-500">
                     <Map size={16} />
                   </div>
                 </div>
@@ -1707,7 +1707,7 @@ const App: React.FC = () => {
         <div
           className={`min-h-screen transition-all duration-500 ${
             theme === "dark"
-              ? "dark bg-[#1C1C1E] text-slate-100"
+              ? "dark bg-[#060709] text-slate-100"
               : "bg-[#FBFBFD] text-slate-900"
           }`}
         >
@@ -1754,7 +1754,7 @@ const App: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setIsLoginModalOpen(true)}
-                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-4 sm:px-8 sm:py-5 rounded-[24px] font-bold text-base sm:text-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                  className="bg-slate-100 dark:bg-white/[0.08] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 px-6 py-4 sm:px-8 sm:py-5 rounded-[24px] font-bold text-base sm:text-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm border border-black/[0.04] dark:border-white/[0.08]"
                 >
                   <Mail size={20} />
                   <span>{t("emailLogin")}</span>
@@ -1810,7 +1810,7 @@ const App: React.FC = () => {
       <div
         className={`min-h-screen transition-all duration-500 ${
           theme === "dark"
-            ? "dark bg-[#1C1C1E] text-slate-100"
+            ? "dark bg-[#060709] text-slate-100"
             : "bg-[#FBFBFD] text-slate-900"
         }`}
       >
@@ -1824,7 +1824,7 @@ const App: React.FC = () => {
 
         {view === "detail" && currentTrip && (
           <div className="min-h-screen flex flex-col pb-28 sm:pb-32 md:pb-0">
-            <nav className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/[0.06] dark:border-white/[0.06] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
+            <nav className="bg-white/80 dark:bg-[#060709]/80 backdrop-blur-3xl border-b border-black/[0.06] dark:border-white/[0.08] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
@@ -1849,7 +1849,7 @@ const App: React.FC = () => {
                       <span className="text-[10px] font-semibold text-slate-400">
                         {currentTrip.destination}
                       </span>
-                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 rounded-full" />
+                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
                       <span className="hidden sm:flex text-[10px] font-semibold text-slate-400 items-center gap-0.5">
                         <Users size={9} /> {collaboratorCount}
                       </span>
@@ -1857,7 +1857,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="hidden md:flex bg-black/[0.06] dark:bg-white/[0.08] p-1 rounded-2xl gap-0.5">
+                  <div className="hidden md:flex bg-black/[0.06] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.03] dark:border-white/[0.08]">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
                       const isDisabled = isPricePending && tab.id !== "flights";
@@ -1868,9 +1868,9 @@ const App: React.FC = () => {
                             !isDisabled && setActiveTab(tab.id as any)
                           }
                           disabled={isDisabled}
-                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 ${
+                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
                             isActive
-                              ? "bg-white dark:bg-[#3a3a3c] text-slate-900 dark:text-white shadow-sm"
+                              ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                               : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                           } ${
                             isDisabled ? "opacity-40 cursor-not-allowed" : ""
@@ -1939,7 +1939,7 @@ const App: React.FC = () => {
                   <MobileHero />
                   <div className="hidden md:grid grid-cols-12 grid-rows-2 gap-6 h-[700px]">
                     <div
-                      className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group shadow-ios-lg p-12 flex flex-col justify-between border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}
+                      className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group ios27-card p-12 flex flex-col justify-between`}
                     >
                       <div>
                         <div className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4">
@@ -1970,10 +1970,10 @@ const App: React.FC = () => {
                             .map((item, i) => (
                             <div
                               key={i}
-                              className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:scale-105 ${
+                              className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 border transition-all hover:scale-105 ${
                                 item.isReturn
-                                 ? "bg-slate-100 dark:bg-slate-700 text-slate-400"
-                                 : "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg"
+                                 ? "bg-slate-100 dark:bg-white/[0.06] text-slate-400 dark:text-slate-300 border-slate-200/60 dark:border-white/10"
+                                 : "bg-primary/10 dark:bg-primary/20 text-primary border-primary/20 shadow-sm"
                               }`}
                             >
                               <Plane size={12} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
@@ -1982,9 +1982,9 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-6 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col relative group/budget">
+                    <div className="col-span-3 row-span-1 ios27-card rounded-[40px] p-6 flex flex-col relative group/budget">
                       <div className="flex justify-between items-start mb-4">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 p-2 rounded-xl">
+                        <div className="bg-primary/10 dark:bg-primary/20 text-primary p-2.5 rounded-2xl">
                           <Wallet size={20} />
                         </div>
                         {!isGuest && (
@@ -1993,7 +1993,7 @@ const App: React.FC = () => {
                               setTempBudget(budgetLimit.toString());
                               setIsEditingBudget(true);
                             }}
-                            className="p-2 text-slate-300 hover:text-indigo-500 rounded-lg transition-all"
+                            className="p-2 text-slate-300 hover:text-primary rounded-lg transition-all"
                           >
                             <Edit2 size={16} />
                           </button>
@@ -2009,45 +2009,45 @@ const App: React.FC = () => {
                             <span className="text-lg">%</span>
                           </span>
                         </div>
-                        <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 mb-2 overflow-hidden">
+                        <div className="w-full h-2 bg-slate-100 dark:bg-white/10 rounded-full mt-2 mb-2 overflow-hidden">
                           <div
                             className={`h-full ${
                               spentTotal > budgetLimit
                                 ? "bg-red-500"
-                                : "bg-indigo-500"
+                                : "bg-primary"
                             }`}
                             style={{
                               width: `${Math.min(budgetPercent, 100)}%`,
                             }}
                           />
                         </div>
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
                           <div>
-                            <div className="text-slate-300 dark:text-slate-600 mb-0.5">
+                            <div className="text-slate-300 dark:text-slate-500 mb-0.5">
                               {t("spent")}
                             </div>
                             <div
                               className={
                                 spentTotal > budgetLimit
                                   ? "text-red-500"
-                                  : "text-slate-700 dark:text-slate-300"
+                                  : "text-slate-700 dark:text-slate-200"
                               }
                             >
                               NT$ {(spentTotal / 1000).toFixed(1)}k
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-slate-300 dark:text-slate-600 mb-0.5">
+                            <div className="text-slate-300 dark:text-slate-500 mb-0.5">
                               {t("limit")}
                             </div>
-                            <div className="text-slate-700 dark:text-slate-300">
+                            <div className="text-slate-700 dark:text-slate-200">
                               NT$ {(budgetLimit / 1000).toFixed(1)}k
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-6 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col">
+                    <div className="col-span-3 row-span-1 ios27-card rounded-[40px] p-6 flex flex-col">
                       <div className="flex items-center gap-2 mb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         <PieChartIcon size={14} /> {t("breakdown")}
                       </div>
@@ -2079,7 +2079,7 @@ const App: React.FC = () => {
                         </ResponsiveContainer>
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-8 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col overflow-hidden">
+                    <div className="col-span-4 row-span-1 ios27-card rounded-[40px] p-8 flex flex-col overflow-hidden">
                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                         <MapPin size={14} /> {t("upcomingSchedule")}
                       </div>
@@ -2100,7 +2100,7 @@ const App: React.FC = () => {
                             <div className="flex flex-col items-center">
                               <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
                               {i !== upcomingItems.length - 1 && (
-                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-slate-700 my-1" />
+                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-white/10 my-1" />
                               )}
                             </div>
                             <div>
@@ -2114,13 +2114,13 @@ const App: React.FC = () => {
                           </div>
                         ))}
                         {upcomingItems.length === 0 && (
-                          <div className="text-slate-300 font-bold text-xs uppercase text-center py-8">
+                          <div className="text-slate-300 dark:text-slate-600 font-bold text-xs uppercase text-center py-8">
                             {t("noUpcoming")}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-8 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col">
+                    <div className="col-span-4 row-span-1 ios27-card rounded-[40px] p-8 flex flex-col">
                       <div className="flex justify-between items-center mb-6">
                         <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <CheckSquare size={14} /> {t("checklistSummary")}
@@ -2135,12 +2135,12 @@ const App: React.FC = () => {
                             key={stat.category}
                             className="flex items-center gap-3"
                           >
-                            <div className="w-20 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="w-20 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                               {stat.category}
                             </div>
-                            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-green-500 rounded-full"
+                                className="h-full bg-emerald-500 rounded-full"
                                 style={{
                                   width: `${
                                     (stat.completed / stat.total) * 100
@@ -2156,7 +2156,7 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     <div className="col-span-4 row-span-1 flex flex-col gap-6">
-                      <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[40px] p-8 shadow-ios flex flex-col justify-center relative overflow-hidden group">
+                      <div className="flex-1 ios27-card rounded-[40px] p-8 flex flex-col justify-center relative overflow-hidden group">
                         <div className="relative z-10">
                           <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
                             {t("countdown")}
@@ -2168,12 +2168,12 @@ const App: React.FC = () => {
                             {t("daysLeft")}
                           </div>
                         </div>
-                        <Clock className="absolute -right-4 -bottom-4 text-slate-100 dark:text-slate-700 w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
+                        <Clock className="absolute -right-4 -bottom-4 text-slate-100 dark:text-white/[0.04] w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
                       </div>
                       {isCreator && (
                         <button
                           onClick={handleDeleteTrip}
-                          className="h-16 flex items-center justify-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-white dark:bg-slate-800 border border-red-50 dark:border-red-900/30 hover:bg-red-50 rounded-3xl transition-all shadow-sm"
+                          className="h-16 flex items-center justify-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-white dark:bg-white/[0.04] border border-red-100 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-3xl transition-all shadow-sm active:scale-95 cursor-pointer"
                         >
                           <Trash2 size={16} /> {t("deleteTrip")}
                         </button>
@@ -2256,7 +2256,7 @@ const App: React.FC = () => {
             <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto bg-white/85 dark:bg-[#1C1C1E]/85 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.12] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.7)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+                className="pointer-events-auto bg-white/85 dark:bg-[#060709]/85 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.85)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
               >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -2284,7 +2284,7 @@ const App: React.FC = () => {
                           <tab.icon size={19} strokeWidth={isActive ? 2.5 : 1.8} />
                         )}
                         {tab.alert && (
-                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#1C1C1E] animate-pulse" />
+                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
                         )}
                       </div>
                       <span
@@ -2306,7 +2306,7 @@ const App: React.FC = () => {
 
         {view === "detail" && !currentTrip && !isLoading && (
           <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4 shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-400 mb-4 shadow-sm border border-slate-200/60 dark:border-white/10">
               <AlertCircle size={32} />
             </div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
@@ -2334,7 +2334,7 @@ const App: React.FC = () => {
                 <div className="text-lg font-bold text-primary tracking-tight">
                   {t("appName")}
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.08]">
                   v{APP_VERSION}
                 </span>
               </div>
@@ -2385,7 +2385,7 @@ const App: React.FC = () => {
                       className={`px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer border ${
                         isEditMode
                           ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-sm"
-                          : "bg-white/80 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border-slate-200/70 dark:border-slate-700/70"
+                          : "bg-white/80 hover:bg-slate-100 dark:bg-white/[0.06] dark:hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 border-slate-200/70 dark:border-white/10"
                       }`}
                     >
                       {isEditMode ? (
@@ -2443,7 +2443,7 @@ const App: React.FC = () => {
                       value={tripSearchQuery}
                       onChange={(e) => setTripSearchQuery(e.target.value)}
                       placeholder={t("searchTripsPlaceholder")}
-                      className="w-full pl-10 pr-9 py-2.5 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700/70 rounded-2xl text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all"
+                      className="w-full pl-10 pr-9 py-2.5 bg-slate-100/90 dark:bg-white/[0.04] border border-slate-200/70 dark:border-white/[0.10] rounded-2xl text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
                     />
                     {tripSearchQuery && (
                       <button
@@ -2458,13 +2458,13 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Filter Pills */}
-                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 self-start md:self-auto overflow-x-auto max-w-full">
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-white/[0.05] rounded-2xl border border-slate-200/60 dark:border-white/[0.08] self-start md:self-auto overflow-x-auto max-w-full">
                     <button
                       type="button"
                       onClick={() => setTripFilter("all")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "all"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2472,8 +2472,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "all"
-                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-slate-100 dark:bg-white/20 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.all}
@@ -2484,7 +2484,7 @@ const App: React.FC = () => {
                       onClick={() => setTripFilter("upcoming")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "upcoming"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2492,8 +2492,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "upcoming"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.upcoming}
@@ -2504,7 +2504,7 @@ const App: React.FC = () => {
                       onClick={() => setTripFilter("past")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "past"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2512,8 +2512,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "past"
-                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-slate-100 dark:bg-white/20 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.past}
@@ -2549,7 +2549,7 @@ const App: React.FC = () => {
             {/* Filter Empty State: Search or filter has 0 results */}
             {trips.length > 0 && filteredTrips.length === 0 && (
               <div className="py-20 text-center flex flex-col items-center justify-center animate-in fade-in duration-200">
-                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/[0.08] flex items-center justify-center text-slate-400 mb-4 border border-black/[0.04] dark:border-white/[0.08]">
                   <Search size={28} />
                 </div>
                 <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">

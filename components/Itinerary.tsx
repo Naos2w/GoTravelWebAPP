@@ -53,21 +53,21 @@ const TimePicker: React.FC<{
   }, []); // Run on mount
 
   return (
-    <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
+    <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">H</div>
         <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {hours.map(h => (
-            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
+            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-white/[0.1] text-slate-600 dark:text-slate-300'}`}>{h}</button>
           ))}
         </div>
       </div>
-      <div className="w-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+      <div className="w-px bg-slate-100 dark:bg-white/[0.1] my-1"></div>
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">M</div>
         <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {minutes.map(m => (
-            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
+            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-white/[0.1] text-slate-600 dark:text-slate-300'}`}>{m}</button>
           ))}
         </div>
       </div>
@@ -678,7 +678,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3 rounded-2xl text-center transition-all duration-300 cursor-pointer active:scale-95 border ${
                 isSelected 
                   ? 'bg-primary text-white shadow-md shadow-primary/25 border-primary font-black' 
-                  : 'bg-white/80 dark:bg-[#2C2C2E]/80 text-slate-600 dark:text-slate-300 border-black/[0.04] dark:border-white/[0.06] hover:bg-slate-100 dark:hover:bg-slate-700 shadow-sm'
+                  : 'ios27-card text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 shadow-sm'
               }`}
             >
               <div className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
@@ -706,12 +706,12 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             </span>
           </div>
           {!isGuest ? (
-            <div className="flex bg-slate-100 dark:bg-white/[0.08] p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] gap-0.5 lg:hidden">
+            <div className="flex bg-slate-100 dark:bg-white/[0.06] p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.08] gap-0.5 lg:hidden">
               <button 
                 onClick={() => setViewMode('list')} 
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'list' 
-                    ? 'bg-white dark:bg-[#3A3A3C] text-slate-900 dark:text-white shadow-sm' 
+                    ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20' 
                     : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                 }`}
               >
@@ -721,7 +721,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 onClick={() => setViewMode('map')} 
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
                   viewMode === 'map' 
-                    ? 'bg-white dark:bg-[#3A3A3C] text-slate-900 dark:text-white shadow-sm' 
+                    ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20' 
                     : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
                 }`}
               >
@@ -729,7 +729,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               </button>
             </div>
           ) : (
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center gap-1 lg:hidden">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-1.5 bg-slate-100 dark:bg-white/10 rounded-xl flex items-center gap-1 lg:hidden">
               <Lock size={11} />{t('readOnly')}
             </div>
           )}
@@ -742,7 +742,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           <div className={`rounded-[28px] sm:rounded-[36px] shadow-sm overflow-hidden border border-black/[0.06] dark:border-white/[0.08] transition-all duration-300 relative
             ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
             <Suspense fallback={
-              <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50">
+              <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-[#0c0d12]">
                 <Loader2 className="animate-spin text-primary w-8 h-8" />
               </div>
             }>
@@ -772,7 +772,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     <button
                       type="button"
                       onClick={() => setIsMobileCardsCollapsed(!isMobileCardsCollapsed)}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.1] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#121318]/90 ios27-card backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.12] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
                     >
                       <MapPin size={13} className="text-primary" />
                       <span>{validItems.length} {isEn ? 'Stops' : '個景點'}</span>
@@ -799,8 +799,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             onClick={() => setHighlightedId(item.id)}
                             className={`snap-center shrink-0 w-[240px] h-[104px] p-2.5 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] flex flex-col justify-between ${
                               isHighlighted
-                                ? 'bg-white/95 dark:bg-slate-800/95 border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
-                                : 'bg-white/85 dark:bg-slate-900/85 border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-slate-800'
+                                ? 'bg-white/95 dark:bg-[#161822] border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
+                                : 'bg-white/85 dark:bg-white/[0.05] border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-white/[0.08]'
                             }`}
                           >
                             <div className="min-w-0">
@@ -820,7 +820,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
-                                  className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700/80 hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
+                                  className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-white/[0.08] hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
                                 >
                                   <Navigation size={12} />
                                 </a>
@@ -863,7 +863,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           </div>
 
           {/* ── Full list panel (list mode on mobile, always on desktop) ── */}
-          <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden
+          <div className={`lg:w-[450px] shrink-0 ios27-card rounded-[24px] sm:rounded-[36px] flex flex-col overflow-hidden
             ${viewMode === 'map' ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'}`}>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
@@ -905,19 +905,19 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         <div className="absolute bottom-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
                     )}
                     {!isTransport && (
-                    <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-slate-900 z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-[#121318] z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-white/[0.15]'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${isFlight ? 'bg-blue-500' : item.type === 'Place' ? 'bg-primary' : 'bg-orange-500'}`} />
                     </div>
                   )}
-                  <div className={`absolute left-[-0.5px] top-8 bottom-0 w-0.5 ${isTransport ? 'border-l-2 border-dashed border-slate-100 dark:border-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'} last:hidden`} />
+                  <div className={`absolute left-[-0.5px] top-8 bottom-0 w-0.5 ${isTransport ? 'border-l-2 border-dashed border-slate-200 dark:border-white/[0.08]' : 'bg-slate-100 dark:bg-white/[0.06]'} last:hidden`} />
                   
                   {isTransport ? (
-                    <div className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all ${isHighlighted ? 'ring-2 ring-primary bg-primary/5 border-primary shadow-lg' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}>
+                    <div className={`group bg-slate-50 dark:bg-white/[0.03] rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all ${isHighlighted ? 'ring-2 ring-primary bg-primary/10 border-primary shadow-lg' : 'border-slate-200 dark:border-white/[0.08] hover:border-slate-400'}`}>
                        <div className="flex items-center gap-2 relative max-w-full px-12 sm:px-4 justify-center sm:justify-start w-full">
                           <button 
                             disabled={isGuest || isFlight} // Lock flight transport type switching
                             onClick={() => !isGuest && !isFlight && setShowTransportPickerId(item.id)}
-                            className={`flex items-center gap-2 p-1 rounded-lg transition-colors shrink-0 ${isGuest || isFlight ? 'cursor-default' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                            className={`flex items-center gap-2 p-1 rounded-lg transition-colors shrink-0 ${isGuest || isFlight ? 'cursor-default' : 'hover:bg-slate-100 dark:hover:bg-white/[0.08]'}`}
                           >
                             {transportOpt ? <transportOpt.icon size={13} className={transportOpt.color} /> : null}
                           </button>
@@ -931,18 +931,18 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                           </div>
                           
                           {showTransportPickerId === item.id && !isGuest && !isFlight && (
-                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 rounded-2xl shadow-xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
+                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] rounded-2xl shadow-xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
                                {TRANSPORT_OPTIONS.filter(o => o.type !== 'Flight').map(opt => (
                                  <button 
                                     key={opt.type} 
                                     onClick={() => { setShowTransportPickerId(null); handleChangeTransportType(item.id, opt.type); }} 
-                                    className={`p-2 rounded-xl transition-all shrink-0 ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-700 opacity-60 hover:opacity-100'}`}
+                                    className={`p-2 rounded-xl transition-all shrink-0 ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-white/[0.15]' : 'hover:bg-slate-100 dark:hover:bg-white/[0.08] opacity-60 hover:opacity-100'}`}
                                  >
                                    <opt.icon size={16} className={opt.color} />
                                  </button>
                                ))}
-                               <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
-                               <button onClick={(e) => { e.stopPropagation(); setShowTransportPickerId(null); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all">
+                               <div className="w-px h-6 bg-slate-100 dark:bg-white/[0.1] mx-1" />
+                               <button onClick={(e) => { e.stopPropagation(); setShowTransportPickerId(null); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl transition-all">
                                  <X size={16} />
                                </button>
                             </div>
@@ -951,13 +951,19 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                        
                        {!isGuest && !isFlight && (
                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 bg-white/80 dark:bg-slate-700 text-red-500/80 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600 active:scale-90"><Trash2 size={12}/></button>
+                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 bg-white/80 dark:bg-white/[0.08] text-red-500 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-white/[0.1] active:scale-90"><Trash2 size={12}/></button>
                          </div>
                        )}
                     </div>
                   ) : (
                     <div 
-                      className={`group bg-white dark:bg-slate-800/80 p-3 sm:p-3.5 rounded-2xl border transition-all relative shadow-ios sm:hover:shadow-ios ${isHighlighted ? 'ring-2 ring-primary border-primary bg-primary/5 shadow-2xl scale-[1.02] z-10' : isFlight ? 'ring-1 ring-blue-500/20 bg-blue-50/20 border-blue-100/50 dark:border-blue-900/30' : 'border-transparent'}`}
+                      className={`group p-3 sm:p-3.5 rounded-2xl border transition-all relative shadow-ios ${
+                        isHighlighted 
+                          ? 'ring-2 ring-primary border-primary bg-primary/10 shadow-2xl scale-[1.02] z-10' 
+                          : isFlight 
+                            ? 'ring-1 ring-blue-500/30 bg-blue-500/[0.08] border-blue-500/20' 
+                            : 'bg-white dark:bg-white/[0.04] border-black/[0.05] dark:border-white/[0.08] hover:border-black/[0.1] dark:hover:border-white/[0.14]'
+                      }`}
                     >
                       <div className="flex items-center gap-2 sm:gap-4">
                         <div className="shrink-0 w-10 sm:w-14">
@@ -970,7 +976,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                            onClick={() => {
                              setHighlightedId(item.id);
                            }}
-                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-white/[0.06]"
                         >
                            <div className="flex items-center gap-1.5 w-full justify-start">
                               {isFlight && <Plane size={11} className="text-blue-500 shrink-0" />}
@@ -986,7 +992,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         <div className="shrink-0 flex flex-col gap-1 w-[72px] sm:w-24 items-end pl-1 sm:pl-3">
                            {isFlight ? (
                               <div className="flex gap-1 w-full justify-end">
-                                  <div className="p-1.5 text-slate-300 dark:text-slate-600 flex items-center justify-center">
+                                  <div className="p-1.5 text-slate-300 dark:text-slate-500 flex items-center justify-center">
                                     <Lock size={13} />
                                   </div>
                               </div>
@@ -995,21 +1001,21 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                                <button 
                                  onClick={() => handleEditItem(item)}
                                  disabled={isGuest}
-                                 className={`hidden sm:flex w-full py-1.5 items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-slate-700/80 text-slate-500 hover:text-primary'}`}
+                                 className={`hidden sm:flex w-full py-1.5 items-center justify-center rounded-lg border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 hover:text-primary'}`}
                                >
                                  <Edit2 size={13} />
                                </button>
                                <div className="flex gap-1 w-full transition-opacity">
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank'); }} 
-                                    className="flex-1 py-1.5 flex items-center justify-center bg-slate-50 dark:bg-slate-700/80 text-slate-400 hover:text-primary rounded-lg border border-slate-100 dark:border-slate-700 active:scale-95 transition-all"
+                                    className="flex-1 py-1.5 flex items-center justify-center bg-slate-50 dark:bg-white/[0.06] text-slate-400 hover:text-primary rounded-lg border border-slate-200/80 dark:border-white/[0.08] active:scale-95 transition-all"
                                   >
                                     <Map size={13} />
                                   </button>
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} 
                                     disabled={isGuest}
-                                    className={`flex-1 py-1.5 flex items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-slate-700/80 text-red-400 hover:text-red-500'}`}
+                                    className={`flex-1 py-1.5 flex items-center justify-center rounded-lg border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-red-400 hover:text-red-500'}`}
                                   >
                                     <Trash2 size={13} />
                                   </button>
@@ -1024,21 +1030,21 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
                 {canInsertTransport && !isGuest && (
                   <div className="relative flex items-center justify-center py-2 group/btn">
-                    <div className="absolute left-[-0.5px] w-0.5 bg-slate-50 dark:bg-slate-800/50 h-full" />
+                    <div className="absolute left-[-0.5px] w-0.5 bg-slate-100 dark:bg-white/[0.06] h-full" />
                     {insertingAt === idx ? (
-                      <div ref={editRef} className="z-10 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
+                      <div ref={editRef} className="z-10 bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
                         {TRANSPORT_OPTIONS.filter(o => o.type !== 'Flight').map(opt => (
-                          <button key={opt.type} onClick={() => handleInsertTransport(idx, opt.type)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all active:scale-90 shrink-0">
+                          <button key={opt.type} onClick={() => handleInsertTransport(idx, opt.type)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-xl transition-all active:scale-90 shrink-0">
                             <opt.icon size={16} className={opt.color} />
                           </button>
                         ))}
-                        <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
-                        <button onClick={() => setInsertingAt(null)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all">
+                        <div className="w-px h-6 bg-slate-100 dark:bg-white/[0.1] mx-1" />
+                        <button onClick={() => setInsertingAt(null)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl transition-all">
                           <X size={16} />
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95">
+                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-[#161822] border border-slate-200 dark:border-white/[0.12] text-slate-400 dark:text-slate-400 hover:text-primary p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95">
                         <Plus size={14} /> <span className="hidden sm:inline font-black ml-1 uppercase">{t('selectTransport')}</span>
                       </button>
                     )}
@@ -1055,14 +1061,14 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
 
       {isFormOpen && editingItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-800 p-6 sm:p-10 rounded-[40px] shadow-2xl w-full max-w-lg border border-slate-100 dark:border-slate-700 overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl p-6 sm:p-10 rounded-[36px] shadow-2xl w-full max-w-lg border border-black/[0.08] dark:border-white/[0.14] overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
             
             <div className="relative z-10">
               <div className="flex justify-between items-center mb-6 sm:mb-8">
                 <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">{isAddingNew ? t('newActivity') : t('editActivity')}</h3>
-                <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors">
+                <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-full text-slate-400 transition-colors">
                   <X size={24} />
                 </button>
               </div>
@@ -1070,16 +1076,16 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               <div className="space-y-6 sm:space-y-8">
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('type')}</label>
-                  <div className="flex bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex bg-slate-50 dark:bg-white/[0.04] p-1.5 rounded-2xl border border-slate-100 dark:border-white/[0.08]">
                     <button 
                       onClick={() => setEditingItem({ ...editingItem, type: 'Place' })}
-                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Place' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Place' ? 'bg-white dark:bg-white/[0.15] text-primary shadow-sm' : 'text-slate-400'}`}
                     >
                       <MapPin size={13}/> {t('typePlace')}
                     </button>
                     <button 
                       onClick={() => setEditingItem({ ...editingItem, type: 'Food' })}
-                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Food' ? 'bg-white dark:bg-slate-700 text-orange-500 shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Food' ? 'bg-white dark:bg-white/[0.15] text-orange-500 shadow-sm' : 'text-slate-400'}`}
                     >
                       <Coffee size={13}/> {t('typeFood')}
                     </button>
@@ -1091,7 +1097,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('placeName')}</label>
                     {!isAddingNew ? (
                       // Read-only when editing existing item — name cannot be changed
-                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-400 border-2 border-transparent select-none cursor-default">
+                      <div className="w-full bg-slate-100 dark:bg-white/[0.04] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-300 border border-slate-200/50 dark:border-white/[0.06] select-none cursor-default">
                         {editingItem.placeName}
                       </div>
                     ) : (
@@ -1115,7 +1121,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                           setNameError(false);
                         }}
                         placeholder="..."
-                        className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
+                        className={`w-full bg-slate-50 dark:bg-white/[0.05] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-slate-100 dark:border-white/[0.08] focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
                       />
                     )}
                   </div>
@@ -1123,7 +1129,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('time')}</label>
                     <button 
                       onClick={() => setShowTimePicker(!showTimePicker)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-mono font-black text-center flex items-center justify-center gap-2 border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-white/[0.05] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-mono font-black text-center flex items-center justify-center gap-2 border border-slate-100 dark:border-white/[0.08] outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
                     >
                       <Clock size={15} className="text-slate-400" />
                       {editingItem.time}
@@ -1145,7 +1151,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     onChange={e => setEditingItem({ ...editingItem, note: e.target.value })}
                     rows={2}
                     placeholder="..."
-                    className="w-full bg-slate-50 dark:bg-slate-900 p-5 sm:p-6 rounded-[24px] sm:rounded-[32px] font-bold border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm resize-none"
+                    className="w-full bg-slate-50 dark:bg-white/[0.05] p-5 sm:p-6 rounded-[24px] sm:rounded-[32px] font-bold border border-slate-100 dark:border-white/[0.08] outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm resize-none"
                   />
                 </div>
 
@@ -1160,7 +1166,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                   </button>
                   <button 
                     onClick={() => setIsFormOpen(false)}
-                    className="order-2 sm:order-1 flex-1 py-4 sm:py-5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 transition-all active:scale-95"
+                    className="order-2 sm:order-1 flex-1 py-4 sm:py-5 bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 dark:hover:bg-white/[0.12] transition-all active:scale-95"
                   >
                     {t('cancel')}
                   </button>

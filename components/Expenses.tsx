@@ -68,8 +68,8 @@ const CustomFilterSelect = <T extends string>({
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center transition-all cursor-pointer group outline-none ${
           variant === 'filter' 
-            ? `gap-1.5 py-1.5 px-3 rounded-xl shrink-0 text-xs font-bold text-slate-700 dark:text-slate-200 ${isOpen ? 'bg-slate-200 dark:bg-slate-700 shadow-inner' : 'bg-slate-100/80 dark:bg-white/[0.06] hover:bg-slate-200/80 dark:hover:bg-white/[0.1] border border-black/[0.04] dark:border-white/[0.06]'}`
-            : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-bold bg-slate-50 dark:bg-slate-900 border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-slate-800' : 'border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800')}`
+            ? `gap-1.5 py-1.5 px-3 rounded-xl shrink-0 text-xs font-bold text-slate-700 dark:text-slate-200 ${isOpen ? 'bg-slate-200 dark:bg-white/[0.15] shadow-inner' : 'bg-slate-100/80 dark:bg-white/[0.06] hover:bg-slate-200/80 dark:hover:bg-white/[0.1] border border-black/[0.04] dark:border-white/[0.06]'}`
+            : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-bold bg-slate-50 dark:bg-white/[0.05] border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-white/[0.1]' : 'border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.08]')}`
         }`}
       >
         <Icon size={variant === 'filter' ? 13 : 16} className={`${isOpen || (variant === 'filter' && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
@@ -273,10 +273,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   }, [trip.expenses, flightsTotal, getCatName]);
 
   const inputClass = (isError: boolean) => 
-    `bg-slate-50 dark:bg-slate-900 focus:bg-white dark:focus:bg-slate-800 rounded-2xl border transition-all outline-none ${
+    `bg-slate-50 dark:bg-white/[0.04] focus:bg-white dark:focus:bg-white/[0.08] text-slate-900 dark:text-white rounded-2xl border transition-all outline-none ${
       isError 
         ? 'border-red-500 ring-2 ring-red-500/20' 
-        : 'border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/20'
+        : 'border-slate-200/80 dark:border-white/10 focus:border-primary focus:ring-2 focus:ring-primary/20'
     }`;
 
   const manualCategories = Object.keys(CATEGORY_UI).filter(c => c !== 'Flight');
@@ -285,43 +285,43 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500 max-w-7xl mx-auto pb-16">
       {/* Left Column: Apple Wallet Hero Card & Category Breakdown */}
       <div className="space-y-6 lg:col-span-1">
-        {/* Apple Wallet Frosted Titanium / Gradient Card */}
-        <div className="relative overflow-hidden rounded-[36px] bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-7 sm:p-8 shadow-2xl border border-white/10 group">
+        {/* Apple Wallet iOS 27 Liquid Glass Card */}
+        <div className="relative overflow-hidden rounded-[36px] ios27-card p-7 sm:p-8 shadow-2xl border border-black/[0.06] dark:border-white/[0.14] group">
           {/* Card Specular Reflection / Glow Effect */}
-          <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/15 dark:bg-primary/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 dark:bg-white/[0.03] rounded-full blur-2xl pointer-events-none" />
           
           <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-white/70 uppercase tracking-widest">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-white/70 uppercase tracking-widest">
                 <CreditCard size={16} className="text-primary" />
                 <span>{t('totalCost')}</span>
               </div>
-              <div className="w-8 h-6 rounded-md border border-white/20 bg-white/10 flex items-center justify-center">
-                <div className="w-3 h-3 rounded-full bg-amber-400/80" />
+              <div className="w-8 h-6 rounded-md border border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/10 flex items-center justify-center">
+                <div className="w-3 h-3 rounded-full bg-amber-400/90" />
               </div>
             </div>
 
             <div className="my-4">
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-white font-mono">
+              <div className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white font-mono">
                 NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <div className="text-xs text-white/60 mt-1 flex items-center gap-1.5 font-medium">
+              <div className="text-xs text-slate-500 dark:text-white/60 mt-1 flex items-center gap-1.5 font-medium">
                 <Plane size={13} className="text-primary" />
                 <span>{t('includesFlight')} (NT$ {Math.round(flightsTotal).toLocaleString()})</span>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/70 font-medium">
+            <div className="pt-3 border-t border-black/[0.06] dark:border-white/10 flex items-center justify-between text-xs text-slate-600 dark:text-white/70 font-medium">
               <span>當地累積消費</span>
-              <span className="font-bold text-white font-mono">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Category Breakdown (Apple Health / Wallet Activity style) */}
-        <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl p-7 rounded-[36px] shadow-ios border border-black/[0.04] dark:border-white/[0.06]">
-          <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+        <div className="ios27-card p-7 rounded-[36px] shadow-ios">
+          <h3 className="text-xs font-black text-slate-400 dark:text-slate-400 uppercase tracking-widest mb-5 flex items-center gap-2">
             <Sparkles size={14} className="text-primary" />
             <span>{t('breakdown')}</span>
           </h3>
@@ -342,12 +342,12 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                         <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
                           NT$ {Math.round(entry.value).toLocaleString()}
                         </span>
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
                           {Math.round(percent)}%
                         </span>
                       </div>
                     </div>
-                    <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden w-full">
+                    <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden w-full">
                       <div 
                         className="h-full rounded-full transition-all duration-700 ease-out" 
                         style={{ width: `${percent}%`, backgroundColor: ui.hexColor }} 
@@ -366,7 +366,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       </div>
 
       {/* Right Column: Inset Grouped Expense List & Form */}
-      <div className="lg:col-span-2 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl rounded-[36px] shadow-ios border border-black/[0.04] dark:border-white/[0.06] overflow-hidden flex flex-col min-h-[600px]">
+      <div className="lg:col-span-2 ios27-card rounded-[36px] shadow-ios overflow-hidden flex flex-col min-h-[600px]">
         {/* Add Entry Accordion Button / Form */}
         <div className="bg-slate-50/70 dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06]">
           <div className={`${isFormOpen ? 'hidden' : 'block'}`}>
@@ -450,7 +450,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                 </button>
                 <button 
                   onClick={resetForm} 
-                  className="px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                  className="px-6 py-3 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-xs hover:bg-slate-200 dark:hover:bg-white/15 transition-all cursor-pointer"
                 >
                   {t('cancel')}
                 </button>
@@ -517,7 +517,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
             return (
               <div 
                 key={item.id} 
-                className="group flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-[#2C2C2E]/60 border border-black/[0.04] dark:border-white/[0.06] hover:border-primary/30 shadow-sm transition-all duration-200"
+                className="group flex items-center justify-between p-4 rounded-2xl bg-white dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] hover:border-primary/30 dark:hover:border-white/20 shadow-sm transition-all duration-200"
               >
                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
                   <div className={`w-10 h-10 rounded-xl ${config.bgColor} ${config.darkBgColor} ${config.textColor} flex items-center justify-center shrink-0 shadow-sm`}>

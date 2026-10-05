@@ -44,7 +44,7 @@ const CATEGORY_META: Record<string, { icon: any; color: string; bg: string; badg
     icon: Tag,
     color: 'text-slate-500 dark:text-slate-400',
     bg: 'bg-slate-500',
-    badgeBg: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+    badgeBg: 'bg-slate-100 text-slate-600 dark:bg-white/[0.08] dark:text-slate-300'
   }
 };
 
@@ -210,28 +210,28 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-16">
-      <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl p-6 sm:p-10 rounded-[36px] shadow-ios border border-black/[0.04] dark:border-white/[0.06]">
+      <div className="ios27-card p-6 sm:p-10 rounded-[36px] shadow-ios">
         {/* Title & Progress Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
               <span>{labels.title}</span>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300">
                 {completedCount}/{myItems.length}
               </span>
             </h2>
-            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-400 font-medium mt-1">
               Apple Reminders 風格清單 • 點擊圓圈標記完成
             </p>
           </div>
 
           {/* Filter Pills */}
-          <div className="flex bg-slate-100/80 dark:bg-white/[0.06] p-1 rounded-2xl gap-1 shrink-0 self-start sm:self-auto">
+          <div className="flex bg-slate-100/80 dark:bg-white/[0.06] p-1 rounded-2xl gap-1 shrink-0 self-start sm:self-auto border border-black/[0.03] dark:border-white/[0.08]">
             <button
               onClick={() => setFilterState('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterState === 'all'
-                  ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
@@ -239,9 +239,9 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             </button>
             <button
               onClick={() => setFilterState('pending')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterState === 'pending'
-                  ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
@@ -249,9 +249,9 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             </button>
             <button
               onClick={() => setFilterState('completed')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 filterState === 'completed'
-                  ? 'bg-white dark:bg-[#2C2C2E] text-slate-900 dark:text-white shadow-sm'
+                  ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
@@ -261,14 +261,14 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
         </div>
         
         {/* iOS Battery/Health Progress Capsule */}
-        <div className="mb-8 bg-slate-50/80 dark:bg-white/[0.03] p-5 rounded-2xl border border-slate-100 dark:border-white/[0.05]">
+        <div className="mb-8 bg-slate-50/80 dark:bg-white/[0.03] p-5 rounded-2xl border border-slate-100 dark:border-white/[0.06]">
           <div className="flex justify-between items-center text-[11px] font-bold mb-2.5 text-slate-500 dark:text-slate-400">
             <span>{labels.ready}</span>
             <span className={`font-mono font-black ${globalProgress === 100 ? "text-emerald-500" : "text-primary"}`}>
               {globalProgress}%
             </span>
           </div>
-          <div className="h-2.5 bg-slate-200/60 dark:bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-slate-200/60 dark:bg-white/10 rounded-full overflow-hidden">
             <div 
               className={`h-full transition-all duration-700 ease-out rounded-full ${
                 globalProgress === 100 
@@ -301,7 +301,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               </h3>
               <button 
                 onClick={() => setIsFormOpen(false)} 
-                className="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
+                className="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 rounded-full text-slate-400 transition-colors"
                 aria-label="Close form"
               >
                 <CloseIcon size={16} />
@@ -315,7 +315,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 onChange={(e) => setNewItemText(e.target.value)} 
                 placeholder={labels.inputPlaceholder} 
                 onKeyDown={(e) => e.key === 'Enter' && addItem()}
-                className="flex-1 px-5 py-3.5 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border border-slate-200/80 dark:border-slate-700 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-sm shadow-sm" 
+                className="flex-1 px-5 py-3.5 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-sm shadow-sm" 
               />
               
               <div className="relative group/select min-w-[150px] h-12 md:h-auto">
@@ -325,7 +325,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 <select 
                   value={category} 
                   onChange={(e) => setCategory(e.target.value as any)} 
-                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-slate-900 dark:text-white rounded-2xl border border-slate-200/80 dark:border-slate-700 appearance-none font-bold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 appearance-none font-bold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
                 >
                   {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
                 </select>
@@ -341,7 +341,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             </div>
 
             {/* Quick Suggestion Chips */}
-            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
                 常見行李推薦（點擊直接新增）：
               </span>
@@ -350,7 +350,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                   <button
                     key={i}
                     onClick={() => addItemWithText(sug.text, sug.category)}
-                    className="text-xs px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/20 border border-slate-200/60 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold transition-all active:scale-95"
+                    className="text-xs px-3 py-1.5 rounded-xl bg-white dark:bg-white/[0.06] hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/20 border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-slate-300 font-semibold transition-all active:scale-95 cursor-pointer"
                   >
                     + {sug.text}
                   </button>
@@ -372,7 +372,6 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             
             const totalInCat = myItems.filter(i => i.category === cat).length;
             const catCompleted = myItems.filter(i => i.category === cat && i.isCompleted).length;
-            const catProgress = totalInCat === 0 ? 0 : Math.round((catCompleted / totalInCat) * 100);
             const isComplete = totalInCat > 0 && catCompleted === totalInCat;
             const isExpanded = expandedCats[cat];
             const meta = CATEGORY_META[cat] || CATEGORY_META.Other;
@@ -381,7 +380,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             return (
               <div 
                 key={cat} 
-                className="bg-white/80 dark:bg-[#2C2C2E]/60 rounded-[28px] border border-black/[0.04] dark:border-white/[0.06] p-5 sm:p-6 shadow-sm hover:shadow-ios transition-all duration-300"
+                className="ios27-card rounded-[28px] p-5 sm:p-6 shadow-sm hover:shadow-ios transition-all duration-300"
               >
                 <div 
                   onClick={() => toggleExpand(cat)}
@@ -399,7 +398,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           isComplete 
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' 
-                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
                         }`}>
                           {catCompleted}/{totalInCat}
                         </span>
@@ -407,20 +406,20 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     </div>
                   </div>
                   
-                  <div className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-slate-600">
+                  <div className="p-1.5 text-slate-400 dark:text-slate-400 hover:text-slate-600">
                     {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </div>
                 </div>
 
                 {isExpanded && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.05] grid grid-cols-1 md:grid-cols-2 gap-2.5 animate-in fade-in duration-200">
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/[0.06] grid grid-cols-1 md:grid-cols-2 gap-2.5 animate-in fade-in duration-200">
                     {items.map(item => (
                       <div 
                         key={item.id} 
                         className={`group/item flex items-center justify-between p-3.5 px-4 rounded-2xl transition-all border ${
                           item.isCompleted 
                           ? 'bg-slate-50/50 dark:bg-white/[0.02] border-transparent opacity-60' 
-                          : 'bg-white dark:bg-[#1C1C1E] border-slate-100 dark:border-slate-800 shadow-sm hover:border-primary/30'
+                          : 'bg-white dark:bg-white/[0.04] border-slate-100 dark:border-white/[0.08] shadow-sm hover:border-primary/40'
                         }`}
                       >
                         <div className="flex items-center gap-3.5 flex-1 min-w-0">
@@ -430,7 +429,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shrink-0 cursor-pointer active:scale-75 ${
                               item.isCompleted 
                               ? 'bg-indigo-500 border-indigo-500 text-white shadow-sm shadow-indigo-500/30 scale-100' 
-                              : 'border-slate-300 dark:border-slate-600 text-transparent hover:border-indigo-500 hover:scale-105'
+                              : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-indigo-500 hover:scale-105'
                             }`}
                             aria-label="Toggle item"
                           >
@@ -462,7 +461,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           })}
 
           {myItems.length === 0 && (
-            <div className="text-center py-12 px-4 rounded-3xl bg-slate-50/60 dark:bg-white/[0.02] border border-dashed border-slate-200 dark:border-slate-800">
+            <div className="text-center py-12 px-4 rounded-3xl bg-slate-50/60 dark:bg-white/[0.02] border border-dashed border-slate-200 dark:border-white/10">
               <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
                 <CheckCircle2 size={24} />
               </div>
@@ -477,7 +476,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                   <button
                     key={i}
                     onClick={() => addItemWithText(sug.text, sug.category)}
-                    className="text-xs px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold hover:bg-primary hover:text-white transition-all shadow-sm"
+                    className="text-xs px-3.5 py-1.5 rounded-full bg-white dark:bg-white/[0.08] border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 font-bold hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer"
                   >
                     + {sug.text}
                   </button>

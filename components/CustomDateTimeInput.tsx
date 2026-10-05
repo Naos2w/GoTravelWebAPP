@@ -57,7 +57,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
           <button
             type="button"
             onClick={() => setShowPicker(!showPicker)}
-            className="flex items-center gap-3 bg-white dark:bg-slate-800 px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-slate-700 text-sm font-mono font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 shadow-sm transition-all min-w-[110px] justify-between"
+            className="flex items-center gap-3 bg-white dark:bg-white/[0.05] px-4 py-2.5 rounded-2xl border border-gray-200 dark:border-white/[0.1] text-sm font-mono font-black text-slate-800 dark:text-white focus:ring-2 focus:ring-primary/10 shadow-sm transition-all min-w-[110px] justify-between"
           >
             <Clock size={14} className="text-slate-400" />
             {timePart}
@@ -65,7 +65,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
           </button>
 
           {showPicker && (
-            <div className="absolute top-full right-0 mt-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[32px] shadow-2xl z-50 p-5 flex gap-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="absolute top-full right-0 mt-3 bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] rounded-[32px] shadow-2xl z-50 p-5 flex gap-5 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex flex-col gap-1.5">
                 <div className="text-[9px] font-black text-slate-400 uppercase text-center mb-1 tracking-widest">H</div>
                 <div className="h-56 overflow-y-auto no-scrollbar space-y-1.5 pr-1">
@@ -74,7 +74,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
                       key={h}
                       onClick={() => selectTime(h, minute)}
                       className={`w-11 h-11 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${
-                        h === hour ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        h === hour ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {h}
@@ -82,7 +82,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
                   ))}
                 </div>
               </div>
-              <div className="w-px bg-slate-100 dark:bg-slate-700 my-2"></div>
+              <div className="w-px bg-slate-100 dark:bg-white/[0.1] my-2"></div>
               <div className="flex flex-col gap-1.5">
                 <div className="text-[9px] font-black text-slate-400 uppercase text-center mb-1 tracking-widest">M</div>
                 <div className="h-56 overflow-y-auto no-scrollbar space-y-1.5 pr-1">
@@ -91,7 +91,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
                       key={m}
                       onClick={() => selectTime(hour, m)}
                       className={`w-11 h-11 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${
-                        m === minute ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        m === minute ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {m}
