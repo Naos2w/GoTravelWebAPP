@@ -2325,11 +2325,11 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            {/* Instagram / Dynamic Island Floating Bottom Navigation Dock */}
+            {/* Flat Liquid Glass / Glassmorphism Floating Bottom Navigation Dock */}
             <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto ios27-dock rounded-full px-2 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+                className="pointer-events-auto ios27-dock rounded-full px-2 py-1.5 flex items-center justify-between gap-1 transition-all duration-200"
               >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -2340,31 +2340,31 @@ const App: React.FC = () => {
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
                       aria-label={tab.label}
-                      className={`relative z-10 flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
-                        isDisabled ? "opacity-35 cursor-not-allowed active:scale-100" : ""
+                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-2xl gap-0.5 transition-colors duration-150 select-none cursor-pointer ${
+                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:opacity-70"
                       }`}
                     >
                       <div
-                        className={`relative flex items-center justify-center w-12 h-7 rounded-full transition-all duration-300 ${
+                        className={`relative flex items-center justify-center w-10 h-7 rounded-xl transition-colors duration-150 ${
                           isActive
-                            ? "ios27-dock-active text-white scale-105"
-                            : "text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                            ? "ios27-dock-active text-primary"
+                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
                         }`}
                       >
                         {isDisabled ? (
                           <Lock size={16} />
                         ) : (
-                          <tab.icon size={18} strokeWidth={isActive ? 2.5 : 1.8} className={isActive ? "text-primary dark:text-sky-300 drop-shadow-[0_2px_8px_rgba(56,189,248,0.45)]" : ""} />
+                          <tab.icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
                         )}
                         {tab.alert && (
-                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white/80 dark:ring-white/20 animate-pulse" />
+                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
                         )}
                       </div>
                       <span
-                        className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
+                        className={`text-[10px] tracking-tight transition-colors duration-150 ${
                           isActive
-                            ? "text-primary dark:text-sky-300 font-black scale-100 drop-shadow-[0_1px_4px_rgba(0,122,255,0.35)]"
-                            : "text-slate-400 dark:text-slate-500 scale-95"
+                            ? "text-primary font-black"
+                            : "text-slate-400 dark:text-slate-500 font-bold"
                         }`}
                       >
                         {tab.label}
