@@ -2325,11 +2325,11 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            {/* Flat Liquid Glass / Glassmorphism Floating Bottom Navigation Dock */}
-            <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
+            {/* Transparent Floating Bottom Navigation Capsule Dock (Icon Only) */}
+            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-6 max-w-xs mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto ios27-dock rounded-full px-2 py-1.5 flex items-center justify-between gap-1 transition-all duration-200"
+                className="pointer-events-auto ios27-dock rounded-full px-3 py-2 flex items-center justify-around transition-all duration-200"
               >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -2340,35 +2340,32 @@ const App: React.FC = () => {
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
                       aria-label={tab.label}
-                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-2xl gap-0.5 transition-colors duration-150 select-none cursor-pointer ${
-                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:opacity-70"
+                      title={tab.label}
+                      className={`relative flex flex-col items-center justify-center p-2 rounded-full transition-all duration-150 select-none cursor-pointer ${
+                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:opacity-60"
                       }`}
                     >
-                      <div
-                        className={`relative flex items-center justify-center w-10 h-7 rounded-xl transition-colors duration-150 ${
-                          isActive
-                            ? "ios27-dock-active text-primary"
-                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
-                        }`}
-                      >
+                      <div className="relative flex items-center justify-center">
                         {isDisabled ? (
-                          <Lock size={16} />
+                          <Lock size={20} className="text-slate-400 dark:text-slate-500" />
                         ) : (
-                          <tab.icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
+                          <tab.icon
+                            size={21}
+                            strokeWidth={isActive ? 2.5 : 1.8}
+                            className={`transition-colors duration-200 ${
+                              isActive
+                                ? "text-primary dark:text-[#38bdf8]"
+                                : "text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            }`}
+                          />
                         )}
                         {tab.alert && (
-                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
+                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
                         )}
                       </div>
-                      <span
-                        className={`text-[10px] tracking-tight transition-colors duration-150 ${
-                          isActive
-                            ? "text-primary font-black"
-                            : "text-slate-400 dark:text-slate-500 font-bold"
-                        }`}
-                      >
-                        {tab.label}
-                      </span>
+                      {isActive && (
+                        <span className="w-1 h-1 rounded-full bg-primary dark:bg-[#38bdf8] mt-1 transition-all duration-200" />
+                      )}
                     </button>
                   );
                 })}
