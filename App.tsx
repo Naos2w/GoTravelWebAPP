@@ -98,6 +98,8 @@ import {
   Compass,
   Filter,
   FileText,
+  MoreHorizontal,
+  User as UserIcon,
 } from "lucide-react";
 import {
   PieChart,
@@ -182,6 +184,8 @@ const App: React.FC = () => {
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [isDeletingTrip, setIsDeletingTrip] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Automatically reset edit mode if all trips are deleted or if leaving list view
   useEffect(() => {
@@ -189,6 +193,35 @@ const App: React.FC = () => {
       setIsEditMode(false);
     }
   }, [trips.length, view, isEditMode]);
+
+  // Close profile menu when view or active trip changes
+  useEffect(() => {
+    setIsProfileMenuOpen(false);
+  }, [view, currentTripId]);
+
+  // Dismiss profile dropdown on outside click or Escape key press
+  useEffect(() => {
+    if (!isProfileMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isProfileMenuOpen]);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -1477,63 +1510,168 @@ const App: React.FC = () => {
     };
   }, [trips, tripSearchQuery, tripFilter]);
 
-  const GlobalNav = () => (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
-      >
-        {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
-      </button>
-      <button
-        onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
-        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
-      >
-        <Languages size={18} />
-      </button>
-    </div>
-  );
-
   const UserHeaderProfile = () => {
-    if (!user) {
-      return (
-        <div className="flex items-center gap-2 pl-3 border-l border-black/[0.06] dark:border-white/10">
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-            {t("guestPreview")}
-          </span>
-          <button
-            onClick={() => setIsLoginModalOpen(true)}
-            className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>{t("loginToJoin")}</span>
-          </button>
-        </div>
-      );
-    }
     return (
-      <div className="flex items-center gap-2.5 pl-3 border-l border-black/[0.06] dark:border-white/10">
-        <img
-          src={user.picture}
-          referrerPolicy="no-referrer"
-          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/[0.08] object-cover ring-2 ring-white dark:ring-white/20 shadow-sm"
-        />
-        <div className="text-right hidden sm:block">
-          <div className="text-xs font-bold truncate max-w-[100px] text-slate-900 dark:text-slate-100">
-            {user.name ? user.name.split(" ")[0] : "User"}
+      <div className="relative flex items-center" ref={profileMenuRef}>
+        {!user ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+              aria-label={t("more")}
+              aria-expanded={isProfileMenuOpen}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer active:scale-95"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsLoginModalOpen(true)}
+              className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>{t("loginToJoin")}</span>
+            </button>
           </div>
-          {view === "detail" && currentTrip && (
-            <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
-              {isCreator ? t("permissionEditor") : t("permissionGuest")}
-            </div>
-          )}
-        </div>
-        <button
-          onClick={handleLogout}
-          aria-label="Logout"
-          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cursor-pointer"
-        >
-          <LogOut size={16} />
-        </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+            aria-label={user.name || "User Profile"}
+            aria-expanded={isProfileMenuOpen}
+            className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-black/5 dark:hover:ring-white/10 transition-all cursor-pointer active:scale-95"
+          >
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name || "User"}
+                referrerPolicy="no-referrer"
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20 shadow-sm"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs ring-1 ring-black/10 dark:ring-white/20">
+                {user.name ? user.name[0].toUpperCase() : <UserIcon size={16} />}
+              </div>
+            )}
+          </button>
+        )}
+
+        {/* Unified iOS / Threads Liquid Glass Dropdown Menu */}
+        {isProfileMenuOpen && (
+          <div
+            className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl p-1.5 shadow-2xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl text-slate-900 dark:text-slate-100 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right select-none"
+            role="menu"
+          >
+            {user && (
+              <>
+                <div className="px-3 py-2.5 flex items-center gap-2.5">
+                  {user.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name || "User"}
+                      referrerPolicy="no-referrer"
+                      className="w-9 h-9 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
+                      {user.name ? user.name[0].toUpperCase() : <UserIcon size={18} />}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold truncate text-slate-900 dark:text-white">
+                      {user.name || "User"}
+                    </div>
+                    {user.email && (
+                      <div className="text-[11px] text-slate-400 truncate">
+                        {user.email}
+                      </div>
+                    )}
+                    {view === "detail" && currentTrip && (
+                      <div className="mt-0.5 inline-block text-[9px] font-bold text-primary uppercase tracking-wider">
+                        {isCreator ? t("permissionEditor") : t("permissionGuest")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+              </>
+            )}
+
+            {/* Theme Toggle */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                {theme === "light" ? (
+                  <Moon size={15} className="text-slate-500 dark:text-slate-400" />
+                ) : (
+                  <Sun size={15} className="text-amber-400" />
+                )}
+                <span>{t("theme")}</span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {theme === "dark" ? t("themeDark") : t("themeLight")}
+              </span>
+            </button>
+
+            {/* Language Toggle */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <Languages size={15} className="text-slate-500 dark:text-slate-400" />
+                <span>{t("language")}</span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {language === "zh" ? "繁體中文" : "English"}
+              </span>
+            </button>
+
+            {/* Export Trip (Detail View only) */}
+            {view === "detail" && currentTrip && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setIsProfileMenuOpen(false);
+                  setIsExportModalOpen(true);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileText size={15} className="text-amber-500" />
+                  <span>{t("exportTrip")}</span>
+                </div>
+                <span className="text-[10px] font-medium text-slate-400">
+                  iOS / 日曆
+                </span>
+              </button>
+            )}
+
+            {user && (
+              <>
+                <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                >
+                  <LogOut size={15} />
+                  <span>{t("logout")}</span>
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -1963,25 +2101,16 @@ const App: React.FC = () => {
                     onClick={() =>
                       !isGuest ? setIsShareModalOpen(true) : null
                     }
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all cursor-pointer ${
+                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all cursor-pointer ${
                       isGuest
                         ? "opacity-30 cursor-not-allowed text-slate-400"
-                        : "text-slate-400 hover:text-primary hover:bg-primary/10"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
                     }`}
                     disabled={isGuest}
                     title={t("shareTrip")}
                   >
                     <Share2 size={18} />
                   </button>
-                  <button
-                    onClick={() => setIsExportModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/[0.08] hover:bg-primary/10 hover:text-primary text-slate-700 dark:text-slate-200 transition-all text-xs font-bold cursor-pointer active:scale-95"
-                    title="匯出至 iOS 備忘錄 / Apple 日曆"
-                  >
-                    <FileText size={14} className="text-amber-500" />
-                    <span className="hidden sm:inline">匯出</span>
-                  </button>
-                  <GlobalNav />
                   <UserHeaderProfile />
                 </div>
               </div>
@@ -2405,7 +2534,6 @@ const App: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <GlobalNav />
                 <UserHeaderProfile />
               </div>
             </header>

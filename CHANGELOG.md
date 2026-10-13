@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.5.1] - 2026-10-13
+
+### 💎 Header & Footer 跨裝置極簡現代化 (Option B: Unified Modern Minimalist UI)
+
+#### Added & Improved
+- **Header 極簡個人選單收納 (Unified Profile & Action Menu)**：
+  - 將過往散落在頂部導航列的「切換深淺模式」、「切換語言」、「匯出至 iOS 備忘錄 / Apple 行事曆」與「登出」全面整合至 Threads / iOS 風格的個人頭像下拉選單（未登入時為極簡 `MoreHorizontal` ⋯ 選單）。
+  - 行程詳情頁頂部右側僅保留 `[分享]` 與 `[個人選單]`，大幅釋出 70% 橫向呼吸空間，讓旅程名稱與桌面端導航分頁在任何螢幕（手機、平板、桌面端）均清爽不擁擠。
+  - 行程列表頁移除重複的小按鈕，維持一致的高級極簡現代美學。
+  - 支援點擊選單外部自動關閉與按 `Escape` 鍵退出。
+- **行動端懸浮 Liquid Glass 膠囊選單 (Instagram & Threads Aesthetics)**：
+  - 全面去除下方選單文字標籤，僅保留精緻圖示，緊湊漂浮於螢幕底部。
+  - 移除凸起與強烈藍色高光，改採 Instagram/Threads 柔和微透選取膠囊與右下角微型通知紅點。
+- **🧪 測試套件擴充**：
+  - `test/smoke/App.smoke.test.tsx` 新增頭像下拉選單交互測試，驗證外觀、語言切換與登出選項均正常開合。
+  - 全專案測試套件擴充至 **21 個檔案、102 項測試 100% 通過**。
+
+---
+
 ## [v1.5.0] - 2026-10-05
 
 ### 📱 各模組 iOS 18 風格重構與手機原生功能聯動 (iOS 18 UI/UX & Native Apple Integrations)

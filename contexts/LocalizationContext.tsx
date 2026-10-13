@@ -227,6 +227,13 @@ export const translations = {
     done: "完成",
     manage: "管理",
     manageTripsHint: "點擊卡片右上角圖示刪除或退出旅程",
+    theme: "外觀模式",
+    themeLight: "淺色模式",
+    themeDark: "深色模式",
+    language: "語言",
+    exportTrip: "匯出行程",
+    logout: "登出帳號",
+    more: "更多選項",
   },
   en: {
     appName: "Go Travel",
@@ -452,6 +459,13 @@ export const translations = {
     done: "Done",
     manage: "Manage",
     manageTripsHint: "Tap the badge on any card to delete or leave",
+    theme: "Appearance",
+    themeLight: "Light Mode",
+    themeDark: "Dark Mode",
+    language: "Language",
+    exportTrip: "Export Trip",
+    logout: "Log Out",
+    more: "More Options",
   },
 };
 

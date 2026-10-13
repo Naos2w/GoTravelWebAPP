@@ -210,4 +210,45 @@ describe("App Component (Smoke Test)", () => {
       expect(screen.queryByText("Osaka Food Tour")).not.toBeInTheDocument();
     });
   });
+
+  it("toggles profile dropdown menu with theme, language, and logout options", async () => {
+    const { supabase, getTrips } = await import("../../services/storageService");
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-123",
+            email: "traveler@example.com",
+            user_metadata: { full_name: "Modern Voyager", avatar_url: "https://example.com/avatar.jpg" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Modern Voyager" })).toBeInTheDocument();
+    });
+
+    const profileBtn = screen.getByRole("button", { name: "Modern Voyager" });
+
+    // Menu should be closed initially
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Click to open menu
+    act(() => {
+      profileBtn.click();
+    });
+
+    // Menu should open displaying theme, language, and logout
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("traveler@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/外觀模式|Appearance/i)).toBeInTheDocument();
+    expect(screen.getByText(/語言|Language/i)).toBeInTheDocument();
+    expect(screen.getByText(/登出|Log Out/i)).toBeInTheDocument();
+  });
 });
+
