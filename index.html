@@ -178,6 +178,68 @@
         border: 1px solid rgba(255, 255, 255, 0.06);
       }
 
+      /* === iOS 27 Liquid Glass Floating Dock (Spatial Water Droplet Lens) === */
+      .ios27-dock {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.18) 100%);
+        backdrop-filter: blur(24px) saturate(220%) contrast(106%);
+        -webkit-backdrop-filter: blur(24px) saturate(220%) contrast(106%);
+        border: 1px solid rgba(255, 255, 255, 0.75);
+        box-shadow: 
+          0 20px 48px -8px rgba(0, 0, 0, 0.15),
+          0 0 20px -2px rgba(0, 122, 255, 0.12),
+          inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95),
+          inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05);
+      }
+      .ios27-dock::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 52%;
+        border-radius: 9999px 9999px 0 0;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.05) 75%, transparent 100%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .dark .ios27-dock {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.02) 60%, rgba(255, 255, 255, 0.005) 100%);
+        backdrop-filter: blur(22px) saturate(240%) brightness(1.15) contrast(108%);
+        -webkit-backdrop-filter: blur(22px) saturate(240%) brightness(1.15) contrast(108%);
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        box-shadow: 
+          0 24px 52px -10px rgba(0, 0, 0, 0.85),
+          0 0 30px -4px rgba(0, 122, 255, 0.22),
+          inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.55),
+          inset 0 -1px 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .dark .ios27-dock::before {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.03) 70%, transparent 100%);
+      }
+
+      /* Liquid Glass Droplet Indicator */
+      .ios27-dock-active {
+        background: linear-gradient(180deg, rgba(0, 122, 255, 0.28) 0%, rgba(0, 122, 255, 0.12) 100%);
+        border: 1px solid rgba(0, 122, 255, 0.40);
+        box-shadow: 
+          0 4px 14px rgba(0, 122, 255, 0.35),
+          0 0 12px rgba(0, 122, 255, 0.2),
+          inset 0 1.5px 1px rgba(255, 255, 255, 0.8),
+          inset 0 -1px 1px rgba(0, 122, 255, 0.3);
+      }
+      .dark .ios27-dock-active {
+        background: linear-gradient(180deg, rgba(0, 122, 255, 0.40) 0%, rgba(0, 122, 255, 0.18) 100%);
+        border: 1px solid rgba(147, 197, 253, 0.55);
+        box-shadow: 
+          0 4px 18px rgba(0, 122, 255, 0.55),
+          0 0 16px rgba(0, 122, 255, 0.35),
+          inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
+          inset 0 -1px 1px rgba(0, 122, 255, 0.45);
+      }
+
       .glass {
         background: var(--glass-light);
         backdrop-filter: saturate(180%) blur(20px);

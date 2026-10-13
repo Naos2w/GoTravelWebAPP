@@ -665,7 +665,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-[calc(100dvh-175px)] overflow-hidden animate-in fade-in duration-500">
+    <div className={`flex flex-col lg:flex-row gap-4 lg:gap-6 ${viewMode === 'list' ? 'h-auto pb-28 lg:h-[calc(100dvh-175px)] lg:pb-0' : 'h-[calc(100dvh-175px)]'} overflow-hidden animate-in fade-in duration-500`}>
       {/* Day Selector — iOS Segmented control on mobile, sleek glass column on desktop */}
       <div className="lg:w-32 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
@@ -866,7 +866,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           <div className={`lg:w-[450px] shrink-0 ios27-card rounded-[24px] sm:rounded-[36px] flex flex-col overflow-hidden
             ${viewMode === 'map' ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'}`}>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-28 sm:pb-6 space-y-0 relative custom-scrollbar">
 
             {displayItems.map((item, idx) => {
               const isTransport = item.type === 'Transport';

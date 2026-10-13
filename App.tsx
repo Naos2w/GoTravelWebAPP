@@ -1685,6 +1685,79 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Mobile Spending Breakdown & Packing Progress Widgets */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          <div className="ios27-card rounded-[28px] p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <PieChartIcon size={12} /> {t("breakdown")}
+              </span>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                NT$ {Math.round(spentTotal).toLocaleString()}
+              </span>
+            </div>
+            <div className="h-32 w-full flex items-center justify-center">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={48}
+                      paddingAngle={4}
+                      dataKey="value"
+                      nameKey="displayName"
+                    >
+                      {chartData.map((e, i) => (
+                        <Cell
+                          key={`cell-m-${i}`}
+                          fill={CATEGORY_UI[e.category]?.hexColor || CATEGORY_UI["Other"].hexColor}
+                        />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                  {t("noData")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="ios27-card rounded-[28px] p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <CheckSquare size={12} /> {t("checklistSummary")}
+              </span>
+              <span className="text-xs font-black text-emerald-500">
+                {packingPercent}%
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {checklistStats.slice(0, 3).map((stat) => (
+                <div key={stat.category} className="flex items-center gap-2">
+                  <div className="w-16 text-[9px] font-bold text-slate-500 dark:text-slate-400 truncate uppercase">
+                    {stat.category}
+                  </div>
+                  <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{ width: `${(stat.completed / stat.total) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-[9px] font-black text-slate-400 w-6 text-right">
+                    {stat.completed}/{stat.total}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1857,7 +1930,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="hidden md:flex bg-black/[0.06] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.03] dark:border-white/[0.08]">
+                  <div className="hidden md:flex bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-2xl shadow-sm">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
                       const isDisabled = isPricePending && tab.id !== "flights";
@@ -1870,8 +1943,8 @@ const App: React.FC = () => {
                           disabled={isDisabled}
                           className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
                             isActive
-                              ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
-                              : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                              ? "ios27-dock-active text-primary shadow-sm"
+                              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
                           } ${
                             isDisabled ? "opacity-40 cursor-not-allowed" : ""
                           }`}
@@ -1880,7 +1953,7 @@ const App: React.FC = () => {
                           <tab.icon size={14} strokeWidth={isActive ? 2.5 : 1.8} />
                           <span className="hidden lg:inline">{tab.label}</span>
                           {tab.alert && (
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                           )}
                         </button>
                       );
@@ -2256,7 +2329,7 @@ const App: React.FC = () => {
             <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto bg-white/85 dark:bg-[#060709]/85 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.85)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+                className="pointer-events-auto ios27-dock rounded-full px-2 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
               >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -2267,30 +2340,30 @@ const App: React.FC = () => {
                       onClick={() => !isDisabled && setActiveTab(tab.id as any)}
                       disabled={isDisabled}
                       aria-label={tab.label}
-                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
+                      className={`relative z-10 flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
                         isDisabled ? "opacity-35 cursor-not-allowed active:scale-100" : ""
                       }`}
                     >
                       <div
-                        className={`relative flex items-center justify-center w-11 h-7 rounded-full transition-all duration-300 ${
+                        className={`relative flex items-center justify-center w-12 h-7 rounded-full transition-all duration-300 ${
                           isActive
-                            ? "bg-primary/15 dark:bg-primary/25 text-primary scale-105 shadow-sm"
-                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                            ? "ios27-dock-active text-white scale-105"
+                            : "text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                         }`}
                       >
                         {isDisabled ? (
-                          <Lock size={17} />
+                          <Lock size={16} />
                         ) : (
-                          <tab.icon size={19} strokeWidth={isActive ? 2.5 : 1.8} />
+                          <tab.icon size={18} strokeWidth={isActive ? 2.5 : 1.8} className={isActive ? "text-primary dark:text-sky-300 drop-shadow-[0_2px_8px_rgba(56,189,248,0.45)]" : ""} />
                         )}
                         {tab.alert && (
-                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
+                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white/80 dark:ring-white/20 animate-pulse" />
                         )}
                       </div>
                       <span
                         className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
                           isActive
-                            ? "text-primary font-black scale-100"
+                            ? "text-primary dark:text-sky-300 font-black scale-100 drop-shadow-[0_1px_4px_rgba(0,122,255,0.35)]"
                             : "text-slate-400 dark:text-slate-500 scale-95"
                         }`}
                       >
