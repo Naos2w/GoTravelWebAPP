@@ -7,22 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [v1.5.1] - 2026-10-13
+## [v1.5.1] - 2026-10-14
 
-### 💎 Header & Footer 跨裝置極簡現代化 (Option B: Unified Modern Minimalist UI)
+### 💎 Header & Footer 跨裝置極簡現代化 (Instagram/iOS Style Modernization)
 
 #### Added & Improved
-- **Header 極簡個人選單收納 (Unified Profile & Action Menu)**：
-  - 將過往散落在頂部導航列的「切換深淺模式」、「切換語言」、「匯出至 iOS 備忘錄 / Apple 行事曆」與「登出」全面整合至 Threads / iOS 風格的個人頭像下拉選單（未登入時為極簡 `MoreHorizontal` ⋯ 選單）。
-  - 行程詳情頁頂部右側僅保留 `[分享]` 與 `[個人選單]`，大幅釋出 70% 橫向呼吸空間，讓旅程名稱與桌面端導航分頁在任何螢幕（手機、平板、桌面端）均清爽不擁擠。
-  - 行程列表頁移除重複的小按鈕，維持一致的高級極簡現代美學。
-  - 支援點擊選單外部自動關閉與按 `Escape` 鍵退出。
-- **行動端懸浮 Liquid Glass 膠囊選單 (Instagram & Threads Aesthetics)**：
-  - 全面去除下方選單文字標籤，僅保留精緻圖示，緊湊漂浮於螢幕底部。
-  - 移除凸起與強烈藍色高光，改採 Instagram/Threads 柔和微透選取膠囊與右下角微型通知紅點。
+- **行動端底欄個人頭像整合 (Instagram-Style Mobile Dock Avatar)**：
+  - 行動端懸浮導航列（Dock）最右側新增第 6 個標籤：個人圓形大頭貼（未登入為極簡圖示），點擊時平滑向上展開 Liquid Glass 浮動功能選單（向上彈出 Action Sheet）。
+  - 行動端頂部 Header 徹底解放：僅保留 `[返回鍵]`、`[旅程名稱 & 目的地]` 與 `[分享鍵]`，旅程名稱享用 100% 橫向呼吸空間，絕不被截斷。
+  - 桌面端與大螢幕（`md:` 以上）自動無縫保留在頂部 Header 右側，兼顧各裝置操作習慣。
+- **動態頂部狀態微膠囊 (Dynamic Header Pill - 僅限較寬裝置)**：
+  - 在較寬螢幕的旅程目的地旁新增極簡動態同步狀態（`● 即時同步`），手機端維持極致乾淨不顯示，杜絕多餘視覺干擾。
+- **分頁平滑轉場微動態 (Smooth Tab View Transitions)**：
+  - 各分頁（Dashboard、Itinerary、Checklist、Expenses、Flights）切換時採用平滑的淡入向上滑動動態（`animate-in fade-in slide-in-from-bottom-2 duration-200`），操作順暢如 Native App。
+  - 底欄圖示按鈕加入 Apple 觸感縮放動態（`active:scale-90`）。
 - **🧪 測試套件擴充**：
-  - `test/smoke/App.smoke.test.tsx` 新增頭像下拉選單交互測試，驗證外觀、語言切換與登出選項均正常開合。
-  - 全專案測試套件擴充至 **21 個檔案、102 項測試 100% 通過**。
+  - `test/smoke/App.smoke.test.tsx` 擴充行動端 Dock 頭像開合向上彈出選單測試。
+  - 全專案測試套件擴充至 **21 個檔案、103 項測試 100% 通過**。
 
 ---
 

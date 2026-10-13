@@ -250,5 +250,66 @@ describe("App Component (Smoke Test)", () => {
     expect(screen.getByText(/語言|Language/i)).toBeInTheDocument();
     expect(screen.getByText(/登出|Log Out/i)).toBeInTheDocument();
   });
+
+  it("renders Instagram-style mobile dock profile button and toggles upward popover in trip detail view", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-dock-1",
+      user_id: "user-dock-123",
+      name: "Tokyo Adventure",
+      destination: "Tokyo, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-dock-123",
+            email: "dockuser@example.com",
+            user_metadata: { full_name: "Dock Voyager" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    render(<App />);
+
+    // Wait for trip to render and click to enter detail view
+    await waitFor(() => {
+      expect(screen.getByText("Tokyo Adventure")).toBeInTheDocument();
+    });
+
+    const tripCardTitle = screen.getByText("Tokyo Adventure");
+    act(() => {
+      tripCardTitle.click();
+    });
+
+    // In detail view, mobile dock profile button must be present
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-dock-profile-btn")).toBeInTheDocument();
+    });
+
+    const mobileDockProfileBtn = screen.getByTestId("mobile-dock-profile-btn");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Click mobile dock profile button
+    act(() => {
+      mobileDockProfileBtn.click();
+    });
+
+    // Popover opens with user info and settings
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("dockuser@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/外觀模式|Appearance/i)).toBeInTheDocument();
+    expect(screen.getByText(/匯出行程|Export Trip/i)).toBeInTheDocument();
+  });
 });
 

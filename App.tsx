@@ -184,8 +184,9 @@ const App: React.FC = () => {
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [isDeletingTrip, setIsDeletingTrip] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState<"desktop" | "mobile" | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileProfileMenuRef = useRef<HTMLDivElement>(null);
 
   // Automatically reset edit mode if all trips are deleted or if leaving list view
   useEffect(() => {
@@ -194,25 +195,25 @@ const App: React.FC = () => {
     }
   }, [trips.length, view, isEditMode]);
 
-  // Close profile menu when view or active trip changes
+  // Close profile menu when view, active trip, or active tab changes
   useEffect(() => {
-    setIsProfileMenuOpen(false);
-  }, [view, currentTripId]);
+    setProfileMenuOpen(null);
+  }, [view, currentTripId, activeTab]);
 
   // Dismiss profile dropdown on outside click or Escape key press
   useEffect(() => {
-    if (!isProfileMenuOpen) return;
+    if (!profileMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        profileMenuRef.current &&
-        !profileMenuRef.current.contains(e.target as Node)
-      ) {
-        setIsProfileMenuOpen(false);
+      const target = e.target as Node;
+      const insideDesktop = profileMenuRef.current && profileMenuRef.current.contains(target);
+      const insideMobile = mobileProfileMenuRef.current && mobileProfileMenuRef.current.contains(target);
+      if (!insideDesktop && !insideMobile) {
+        setProfileMenuOpen(null);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setIsProfileMenuOpen(false);
+        setProfileMenuOpen(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -221,7 +222,7 @@ const App: React.FC = () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isProfileMenuOpen]);
+  }, [profileMenuOpen]);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -1510,16 +1511,147 @@ const App: React.FC = () => {
     };
   }, [trips, tripSearchQuery, tripFilter]);
 
+  const ProfileDropdownContent = () => (
+    <>
+      {user && (
+        <>
+          <div className="px-3 py-2.5 flex items-center gap-2.5">
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name || "User"}
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
+                {user.name ? user.name[0].toUpperCase() : <UserIcon size={18} />}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold truncate text-slate-900 dark:text-white">
+                {user.name || "User"}
+              </div>
+              {user.email && (
+                <div className="text-[11px] text-slate-400 truncate">
+                  {user.email}
+                </div>
+              )}
+              {view === "detail" && currentTrip && (
+                <div className="mt-0.5 inline-block text-[9px] font-bold text-primary uppercase tracking-wider">
+                  {isCreator ? t("permissionEditor") : t("permissionGuest")}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+        </>
+      )}
+
+      {/* Theme Toggle */}
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5">
+          {theme === "light" ? (
+            <Moon size={15} className="text-slate-500 dark:text-slate-400" />
+          ) : (
+            <Sun size={15} className="text-amber-400" />
+          )}
+          <span>{t("theme")}</span>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">
+          {theme === "dark" ? t("themeDark") : t("themeLight")}
+        </span>
+      </button>
+
+      {/* Language Toggle */}
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+      >
+        <div className="flex items-center gap-2.5">
+          <Languages size={15} className="text-slate-500 dark:text-slate-400" />
+          <span>{t("language")}</span>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">
+          {language === "zh" ? "繁體中文" : "English"}
+        </span>
+      </button>
+
+      {/* Export Trip (Detail View only) */}
+      {view === "detail" && currentTrip && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setProfileMenuOpen(null);
+            setIsExportModalOpen(true);
+          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <FileText size={15} className="text-amber-500" />
+            <span>{t("exportTrip")}</span>
+          </div>
+          <span className="text-[10px] font-medium text-slate-400">
+            iOS / 日曆
+          </span>
+        </button>
+      )}
+
+      {user ? (
+        <>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setProfileMenuOpen(null);
+              handleLogout();
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+          >
+            <LogOut size={15} />
+            <span>{t("logout")}</span>
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setProfileMenuOpen(null);
+              setIsLoginModalOpen(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            <UserIcon size={15} />
+            <span>{t("loginToJoin")}</span>
+          </button>
+        </>
+      )}
+    </>
+  );
+
   const UserHeaderProfile = () => {
+    const isMenuOpen = profileMenuOpen === "desktop";
     return (
       <div className="relative flex items-center" ref={profileMenuRef}>
         {!user ? (
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+              onClick={() => setProfileMenuOpen((prev) => (prev === "desktop" ? null : "desktop"))}
               aria-label={t("more")}
-              aria-expanded={isProfileMenuOpen}
+              aria-expanded={isMenuOpen}
               className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer active:scale-95"
             >
               <MoreHorizontal size={18} />
@@ -1535,9 +1667,9 @@ const App: React.FC = () => {
         ) : (
           <button
             type="button"
-            onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+            onClick={() => setProfileMenuOpen((prev) => (prev === "desktop" ? null : "desktop"))}
             aria-label={user.name || "User Profile"}
-            aria-expanded={isProfileMenuOpen}
+            aria-expanded={isMenuOpen}
             className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-black/5 dark:hover:ring-white/10 transition-all cursor-pointer active:scale-95"
           >
             {user.picture ? (
@@ -1556,120 +1688,12 @@ const App: React.FC = () => {
         )}
 
         {/* Unified iOS / Threads Liquid Glass Dropdown Menu */}
-        {isProfileMenuOpen && (
+        {isMenuOpen && (
           <div
             className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl p-1.5 shadow-2xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl text-slate-900 dark:text-slate-100 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right select-none"
             role="menu"
           >
-            {user && (
-              <>
-                <div className="px-3 py-2.5 flex items-center gap-2.5">
-                  {user.picture ? (
-                    <img
-                      src={user.picture}
-                      alt={user.name || "User"}
-                      referrerPolicy="no-referrer"
-                      className="w-9 h-9 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
-                      {user.name ? user.name[0].toUpperCase() : <UserIcon size={18} />}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold truncate text-slate-900 dark:text-white">
-                      {user.name || "User"}
-                    </div>
-                    {user.email && (
-                      <div className="text-[11px] text-slate-400 truncate">
-                        {user.email}
-                      </div>
-                    )}
-                    {view === "detail" && currentTrip && (
-                      <div className="mt-0.5 inline-block text-[9px] font-bold text-primary uppercase tracking-wider">
-                        {isCreator ? t("permissionEditor") : t("permissionGuest")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
-              </>
-            )}
-
-            {/* Theme Toggle */}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                {theme === "light" ? (
-                  <Moon size={15} className="text-slate-500 dark:text-slate-400" />
-                ) : (
-                  <Sun size={15} className="text-amber-400" />
-                )}
-                <span>{t("theme")}</span>
-              </div>
-              <span className="text-[11px] font-semibold text-slate-400">
-                {theme === "dark" ? t("themeDark") : t("themeLight")}
-              </span>
-            </button>
-
-            {/* Language Toggle */}
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5">
-                <Languages size={15} className="text-slate-500 dark:text-slate-400" />
-                <span>{t("language")}</span>
-              </div>
-              <span className="text-[11px] font-semibold text-slate-400">
-                {language === "zh" ? "繁體中文" : "English"}
-              </span>
-            </button>
-
-            {/* Export Trip (Detail View only) */}
-            {view === "detail" && currentTrip && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setIsProfileMenuOpen(false);
-                  setIsExportModalOpen(true);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2.5">
-                  <FileText size={15} className="text-amber-500" />
-                  <span>{t("exportTrip")}</span>
-                </div>
-                <span className="text-[10px] font-medium text-slate-400">
-                  iOS / 日曆
-                </span>
-              </button>
-            )}
-
-            {user && (
-              <>
-                <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setIsProfileMenuOpen(false);
-                    handleLogout();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                >
-                  <LogOut size={15} />
-                  <span>{t("logout")}</span>
-                </button>
-              </>
-            )}
+            <ProfileDropdownContent />
           </div>
         )}
       </div>
@@ -2064,6 +2088,11 @@ const App: React.FC = () => {
                       <span className="hidden sm:flex text-[10px] font-semibold text-slate-400 items-center gap-0.5">
                         <Users size={9} /> {collaboratorCount}
                       </span>
+                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>{isSyncing ? t("syncing") : (language === "zh" ? "即時同步" : "Synced")}</span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2111,7 +2140,9 @@ const App: React.FC = () => {
                   >
                     <Share2 size={18} />
                   </button>
-                  <UserHeaderProfile />
+                  <div className="hidden md:block">
+                    <UserHeaderProfile />
+                  </div>
                 </div>
               </div>
             </nav>
@@ -2137,7 +2168,7 @@ const App: React.FC = () => {
 
             <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
               {activeTab === "dashboard" && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-700">
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
                   <MobileHero />
                   <div className="hidden md:grid grid-cols-12 grid-rows-2 gap-6 h-[700px]">
                     <div
@@ -2390,38 +2421,40 @@ const App: React.FC = () => {
                   <Loader2 className="animate-spin text-primary w-10 h-10" />
                 </div>
               }>
-                {activeTab === "itinerary" && (
-                  <Itinerary
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "checklist" && (
-                  <Checklist
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "expenses" && (
-                  <Expenses
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "flights" && (
-                  <FlightManager
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
+                <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  {activeTab === "itinerary" && (
+                    <Itinerary
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "checklist" && (
+                    <Checklist
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "expenses" && (
+                    <Expenses
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "flights" && (
+                    <FlightManager
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                </div>
               </Suspense>
             </main>
             {isShareModalOpen && user && !isGuest && (
@@ -2455,7 +2488,7 @@ const App: React.FC = () => {
               />
             )}
             {/* Instagram / Threads Style Floating Bottom Navigation Capsule Dock */}
-            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-6 max-w-[340px] mx-auto z-50 pointer-events-none">
+            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-4 max-w-[360px] mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
                 className="pointer-events-auto ios27-dock rounded-full p-1.5 flex items-center justify-between gap-1 transition-all duration-200"
@@ -2466,14 +2499,17 @@ const App: React.FC = () => {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => !isDisabled && setActiveTab(tab.id as any)}
+                      onClick={() => {
+                        setProfileMenuOpen(null);
+                        !isDisabled && setActiveTab(tab.id as any);
+                      }}
                       disabled={isDisabled}
                       aria-label={tab.label}
                       title={tab.label}
-                      className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer ${
-                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:scale-95"
+                      className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer active:scale-90 ${
+                        isDisabled ? "opacity-35 cursor-not-allowed" : ""
                       } ${
-                        isActive
+                        isActive && profileMenuOpen !== "mobile"
                           ? "dock-pill-active text-slate-900 dark:text-white"
                           : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
                       }`}
@@ -2484,7 +2520,7 @@ const App: React.FC = () => {
                         ) : (
                           <tab.icon
                             size={21}
-                            strokeWidth={isActive ? 2.5 : 1.9}
+                            strokeWidth={isActive && profileMenuOpen !== "mobile" ? 2.5 : 1.9}
                           />
                         )}
                         {tab.alert && (
@@ -2494,7 +2530,59 @@ const App: React.FC = () => {
                     </button>
                   );
                 })}
+
+                {/* 6th Tab: Instagram-Style Profile Avatar Button */}
+                <button
+                  type="button"
+                  data-testid="mobile-dock-profile-btn"
+                  onClick={() => setProfileMenuOpen((prev) => (prev === "mobile" ? null : "mobile"))}
+                  aria-label={user ? (user.name || "User Profile") : t("more")}
+                  aria-expanded={profileMenuOpen === "mobile"}
+                  className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer active:scale-90 ${
+                    profileMenuOpen === "mobile"
+                      ? "dock-pill-active text-slate-900 dark:text-white"
+                      : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {user ? (
+                    user.picture ? (
+                      <img
+                        src={user.picture}
+                        alt={user.name || "User"}
+                        referrerPolicy="no-referrer"
+                        className={`w-6 h-6 rounded-full object-cover transition-all ${
+                          profileMenuOpen === "mobile"
+                            ? "ring-2 ring-primary scale-105"
+                            : "ring-1 ring-black/10 dark:ring-white/25"
+                        }`}
+                      />
+                    ) : (
+                      <div
+                        className={`w-6 h-6 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-[10px] ${
+                          profileMenuOpen === "mobile"
+                            ? "ring-2 ring-primary"
+                            : "ring-1 ring-black/10 dark:ring-white/25"
+                        }`}
+                      >
+                        {user.name ? user.name[0].toUpperCase() : <UserIcon size={13} />}
+                      </div>
+                    )
+                  ) : (
+                    <UserIcon size={20} strokeWidth={profileMenuOpen === "mobile" ? 2.5 : 1.9} />
+                  )}
+                </button>
               </nav>
+
+              {/* Mobile Profile Popover floating above dock */}
+              {profileMenuOpen === "mobile" && (
+                <div
+                  ref={mobileProfileMenuRef}
+                  className="pointer-events-auto absolute bottom-full mb-3 right-0 w-64 rounded-3xl p-1.5 shadow-2xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl text-slate-900 dark:text-slate-100 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200 origin-bottom-right select-none"
+                  role="menu"
+                >
+                  <ProfileDropdownContent />
+                </div>
+              )}
             </div>
           </div>
         )}
