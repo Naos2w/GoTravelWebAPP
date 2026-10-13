@@ -2325,11 +2325,11 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            {/* Transparent Floating Bottom Navigation Capsule Dock (Icon Only) */}
-            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-6 max-w-xs mx-auto z-50 pointer-events-none">
+            {/* Instagram / Threads Style Floating Bottom Navigation Capsule Dock */}
+            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-6 max-w-[340px] mx-auto z-50 pointer-events-none">
               <nav 
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto ios27-dock rounded-full px-3 py-2 flex items-center justify-around transition-all duration-200"
+                className="pointer-events-auto ios27-dock rounded-full p-1.5 flex items-center justify-between gap-1 transition-all duration-200"
               >
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
@@ -2341,31 +2341,27 @@ const App: React.FC = () => {
                       disabled={isDisabled}
                       aria-label={tab.label}
                       title={tab.label}
-                      className={`relative flex flex-col items-center justify-center p-2 rounded-full transition-all duration-150 select-none cursor-pointer ${
-                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:opacity-60"
+                      className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer ${
+                        isDisabled ? "opacity-35 cursor-not-allowed" : "active:scale-95"
+                      } ${
+                        isActive
+                          ? "dock-pill-active text-slate-900 dark:text-white"
+                          : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
                       <div className="relative flex items-center justify-center">
                         {isDisabled ? (
-                          <Lock size={20} className="text-slate-400 dark:text-slate-500" />
+                          <Lock size={20} />
                         ) : (
                           <tab.icon
                             size={21}
-                            strokeWidth={isActive ? 2.5 : 1.8}
-                            className={`transition-colors duration-200 ${
-                              isActive
-                                ? "text-primary dark:text-[#38bdf8]"
-                                : "text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                            }`}
+                            strokeWidth={isActive ? 2.5 : 1.9}
                           />
                         )}
                         {tab.alert && (
-                          <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#060709] animate-pulse" />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full ring-2 ring-white dark:ring-[#18181b]" />
                         )}
                       </div>
-                      {isActive && (
-                        <span className="w-1 h-1 rounded-full bg-primary dark:bg-[#38bdf8] mt-1 transition-all duration-200" />
-                      )}
                     </button>
                   );
                 })}
