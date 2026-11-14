@@ -133,13 +133,13 @@ const getGradient = (str: string) => {
   for (let i = 0; i < str.length; i++)
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   const colors = [
-    "from-blue-500 to-cyan-400",
-    "from-purple-500 to-indigo-400",
-    "from-rose-500 to-orange-400",
-    "from-emerald-500 to-teal-400",
-    "from-amber-500 to-yellow-400",
-    "from-fuchsia-500 to-pink-400",
-    "from-sky-500 to-blue-400",
+    "from-[#0A84FF] via-[#0051D5] to-[#002B7F]",
+    "from-[#5E5CE6] via-[#3634A3] to-[#1D1B5E]",
+    "from-[#00C7BE] via-[#007AFF] to-[#003B80]",
+    "from-[#FF6B4A] via-[#D9381E] to-[#6E1409]",
+    "from-[#10B981] via-[#059669] to-[#064E3B]",
+    "from-[#8B5CF6] via-[#6D28D9] to-[#2E1065]",
+    "from-[#0284C7] via-[#1D4ED8] to-[#1E1B4B]",
   ];
   return colors[Math.abs(hash) % colors.length];
 };
@@ -187,6 +187,16 @@ const App: React.FC = () => {
   const [profileMenuOpen, setProfileMenuOpen] = useState<"desktop" | "mobile" | null>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const mobileProfileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileDockNavRef = useRef<HTMLElement>(null);
+  const [dockDragSlot, setDockDragSlot] = useState<number | null>(null);
+  const [tabSlideDir, setTabSlideDir] = useState<"left" | "right">("right");
+  const prevTabIndexRef = useRef<number>(0);
+  const dockScrubStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    moved: boolean;
+  } | null>(null);
+  const lastScrubEndTimeRef = useRef<number>(0);
 
   // Automatically reset edit mode if all trips are deleted or if leaving list view
   useEffect(() => {
@@ -195,9 +205,11 @@ const App: React.FC = () => {
     }
   }, [trips.length, view, isEditMode]);
 
-  // Close profile menu when view, active trip, or active tab changes
+  // Close profile menu when view, active trip, or active tab changes (unless actively scrubbing dock)
   useEffect(() => {
-    setProfileMenuOpen(null);
+    if (!dockScrubStateRef.current?.moved) {
+      setProfileMenuOpen(null);
+    }
   }, [view, currentTripId, activeTab]);
 
   // Dismiss profile dropdown on outside click or Escape key press
@@ -1371,6 +1383,97 @@ const App: React.FC = () => {
       alert: hasMissingFlightInfo,
     },
   ];
+  const activeDockIndex =
+    profileMenuOpen === "mobile"
+      ? tabs.length
+      : Math.max(0, tabs.findIndex((t) => t.id === activeTab));
+
+  const selectTabWithDirection = (nextTabId: typeof activeTab) => {
+    const nextIdx = tabs.findIndex((t) => t.id === nextTabId);
+    if (nextIdx !== -1 && nextIdx !== prevTabIndexRef.current) {
+      setTabSlideDir(nextIdx > prevTabIndexRef.current ? "right" : "left");
+      prevTabIndexRef.current = nextIdx;
+    }
+    setActiveTab(nextTabId);
+  };
+
+  useEffect(() => {
+    const idx = tabs.findIndex((t) => t.id === activeTab);
+    if (idx !== -1) {
+      prevTabIndexRef.current = idx;
+    }
+  }, [activeTab]);
+
+  const effectiveDockSlot = dockDragSlot !== null ? dockDragSlot : activeDockIndex;
+  const screenFollowOffsetPx =
+    dockDragSlot !== null
+      ? -(dockDragSlot - Math.round(dockDragSlot)) * 56
+      : 0;
+  const tabTransitionClass =
+    tabSlideDir === "right" ? "animate-tab-slide-right" : "animate-tab-slide-left";
+
+  const handleDockPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    dockScrubStateRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      moved: false,
+    };
+  };
+
+  const handleDockPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    const scrub = dockScrubStateRef.current;
+    if (!scrub || scrub.pointerId !== e.pointerId || !mobileDockNavRef.current) return;
+    if (!scrub.moved) {
+      if (Math.abs(e.clientX - scrub.startX) <= 4) return;
+      scrub.moved = true;
+      try {
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore if pointer capture is unsupported in test/browser environment
+      }
+    }
+    const rect = mobileDockNavRef.current.getBoundingClientRect();
+    const paddingX = 6;
+    const totalSlots = tabs.length + 1;
+    const slotWidth = Math.max(1, (rect.width - paddingX * 2) / totalSlots);
+    const rawSlot = (e.clientX - rect.left - paddingX) / slotWidth - 0.5;
+    const minSlot = isPricePending ? 4 : 0;
+    const clampedSlot = Math.max(minSlot, Math.min(totalSlots - 1, rawSlot));
+    setDockDragSlot(clampedSlot);
+
+    const nearestIdx = Math.round(clampedSlot);
+    if (nearestIdx < tabs.length) {
+      const targetTab = tabs[nearestIdx];
+      const disabled = isPricePending && targetTab.id !== "flights";
+      if (profileMenuOpen === "mobile") {
+        setProfileMenuOpen(null);
+      }
+      if (!disabled && activeTab !== targetTab.id) {
+        selectTabWithDirection(targetTab.id as any);
+      }
+    } else if (nearestIdx === tabs.length) {
+      if (profileMenuOpen !== "mobile") {
+        setProfileMenuOpen("mobile");
+      }
+    }
+  };
+
+  const handleDockPointerUpOrCancel = (e: React.PointerEvent<HTMLElement>) => {
+    const scrub = dockScrubStateRef.current;
+    if (!scrub || scrub.pointerId !== e.pointerId) return;
+    if (scrub.moved) {
+      try {
+        if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore if pointer capture is unsupported
+      }
+      lastScrubEndTimeRef.current = Date.now();
+      setDockDragSlot(null);
+    }
+    dockScrubStateRef.current = null;
+  };
   const spentTotal = currentTrip ? calculateTripTotal(currentTrip) : 0;
   const budgetLimit = currentTrip?.flights?.[0]?.budget || 50000;
   const budgetPercent = Math.min(100, (spentTotal / budgetLimit) * 100);
@@ -1442,6 +1545,15 @@ const App: React.FC = () => {
       value 
     }));
   }, [currentTrip, t]);
+
+  const sortedChartData = useMemo(
+    () => [...chartData].sort((a, b) => b.value - a.value),
+    [chartData]
+  );
+  const chartTotal = useMemo(
+    () => sortedChartData.reduce((sum, item) => sum + item.value, 0),
+    [sortedChartData]
+  );
 
 
 
@@ -1703,19 +1815,27 @@ const App: React.FC = () => {
   const MobileHero = () => {
     return (
       <div className="md:hidden space-y-4 mb-6">
-        <div className="w-full rounded-[32px] p-8 shadow-ios ios27-card relative overflow-hidden">
+        <div className="w-full rounded-[28px] p-7 shadow-ios ios27-card relative overflow-hidden aviation-grid-bg">
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+          {arrivalCode && (
+            <div
+              aria-hidden="true"
+              className="absolute right-4 top-4 text-5xl font-mono font-black tracking-tighter text-slate-900/[0.05] dark:text-white/[0.06] select-none pointer-events-none leading-none"
+            >
+              {arrivalCode}
+            </div>
+          )}
           <div className="relative z-10 flex flex-col gap-2">
             <div className="flex justify-between items-start mb-1">
-              <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">
+              <div className="text-[10px] font-semibold text-primary uppercase tracking-[0.18em]">
                 {arrivalCode || t("destination")}
               </div>
             </div>
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {currentTrip?.destination}
             </h2>
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
-              <Calendar size={12} /> {currentTrip?.startDate} —{" "}
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[11px] font-mono font-semibold tracking-wide mt-1 tabular-nums">
+              <Calendar size={12} className="text-primary" /> {currentTrip?.startDate} —{" "}
               {currentTrip?.endDate}
             </div>
             {/* Mobile Flight Numbers */}
@@ -1731,7 +1851,7 @@ const App: React.FC = () => {
                 })
                 .flat()
                 .map((item, idx) => (
-                  <div key={idx} className={`text-[10px] font-black px-3 py-1.5 rounded-xl flex items-center gap-1.5 border transition-all ${item.isReturn ? 'bg-slate-100 dark:bg-white/[0.06] text-slate-400 dark:text-slate-300 border-slate-200/60 dark:border-white/10' : 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/20'}`}>
+                  <div key={idx} className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border transition-all tabular-nums ${item.isReturn ? 'bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 border-slate-200/60 dark:border-white/10' : 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/20'}`}>
                      <Plane size={10} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
                   </div>
                 ))}
@@ -1739,13 +1859,13 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="ios27-card rounded-[32px] p-6 shadow-ios space-y-6">
+        <div className="ios27-card rounded-[28px] p-6 shadow-ios space-y-5">
           <div>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                 {t("countdown")}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {displayDays > 0 ? displayDays : 0} {t("daysLeft")}
               </span>
             </div>
@@ -1765,10 +1885,10 @@ const App: React.FC = () => {
             }
           >
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1">
                 {t("budgetStatus")} {!isGuest && <Edit2 size={10} />}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {(spentTotal / 1000).toFixed(1)}k /{" "}
                 {(budgetLimit / 1000).toFixed(1)}k ({Math.round(budgetPercent)}
                 %)
@@ -1777,18 +1897,22 @@ const App: React.FC = () => {
             <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${
-                  spentTotal > budgetLimit ? "bg-red-500" : "bg-primary"
+                  spentTotal > budgetLimit
+                    ? "bg-rose-500"
+                    : budgetPercent > 80
+                    ? "bg-amber-500"
+                    : "bg-primary"
                 }`}
-                style={{ width: `${budgetPercent}%` }}
+                style={{ width: `${Math.min(budgetPercent, 100)}%` }}
               />
             </div>
           </div>
           <div>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                 {t("packingProgress")}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {packingPercent}%
               </span>
             </div>
@@ -1851,59 +1975,80 @@ const App: React.FC = () => {
         {/* Mobile Spending Breakdown & Packing Progress Widgets */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
           <div className="ios27-card rounded-[28px] p-5 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
                 <PieChartIcon size={12} /> {t("breakdown")}
               </span>
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">
                 NT$ {Math.round(spentTotal).toLocaleString()}
               </span>
             </div>
-            <div className="h-32 w-full flex items-center justify-center">
-              {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={48}
-                      paddingAngle={4}
-                      dataKey="value"
-                      nameKey="displayName"
-                    >
-                      {chartData.map((e, i) => (
-                        <Cell
-                          key={`cell-m-${i}`}
-                          fill={CATEGORY_UI[e.category]?.hexColor || CATEGORY_UI["Other"].hexColor}
-                        />
-                      ))}
-                    </Pie>
-                    <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                  {t("noData")}
+            {chartData.length > 0 ? (
+              <div className="flex items-center gap-3">
+                <div className="h-28 w-28 shrink-0 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={28}
+                        outerRadius={44}
+                        paddingAngle={4}
+                        dataKey="value"
+                        nameKey="displayName"
+                      >
+                        {chartData.map((e, i) => (
+                          <Cell
+                            key={`cell-m-${i}`}
+                            fill={CATEGORY_UI[e.category]?.hexColor || CATEGORY_UI["Other"].hexColor}
+                          />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              )}
-            </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  {sortedChartData.slice(0, 4).map((entry) => {
+                    const pct = chartTotal > 0 ? Math.round((entry.value / chartTotal) * 100) : 0;
+                    const color = CATEGORY_UI[entry.category]?.hexColor || CATEGORY_UI["Other"].hexColor;
+                    return (
+                      <div key={entry.category} className="flex items-center justify-between gap-2 text-[11px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className="font-semibold text-slate-700 dark:text-slate-200 truncate">
+                            {entry.displayName}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="h-28 w-full flex items-center justify-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                {t("noData")}
+              </div>
+            )}
           </div>
 
           <div className="ios27-card rounded-[28px] p-5 flex flex-col justify-between">
             <div className="flex justify-between items-center mb-3">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
                 <CheckSquare size={12} /> {t("checklistSummary")}
               </span>
-              <span className="text-xs font-black text-emerald-500">
+              <span className="text-xs font-mono font-bold text-emerald-500 tabular-nums">
                 {packingPercent}%
               </span>
             </div>
             <div className="space-y-2.5">
               {checklistStats.slice(0, 3).map((stat) => (
                 <div key={stat.category} className="flex items-center gap-2">
-                  <div className="w-16 text-[9px] font-bold text-slate-500 dark:text-slate-400 truncate uppercase">
+                  <div className="w-16 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate uppercase">
                     {stat.category}
                   </div>
                   <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
@@ -1912,7 +2057,7 @@ const App: React.FC = () => {
                       style={{ width: `${(stat.completed / stat.total) * 100}%` }}
                     />
                   </div>
-                  <div className="text-[9px] font-black text-slate-400 w-6 text-right">
+                  <div className="text-[10px] font-mono font-bold text-slate-400 w-7 text-right tabular-nums">
                     {stat.completed}/{stat.total}
                   </div>
                 </div>
@@ -1953,53 +2098,148 @@ const App: React.FC = () => {
               onClose={() => setNotification(null)}
             />
           )}
-          <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] -z-10" />
-            <div className="max-w-2xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-              <div className="space-y-4">
-                <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-slate-900 dark:text-white whitespace-pre-line leading-[1.1]">
-                  {t("heroTitle")}
-                </h1>
-                <p className="text-xl sm:text-2xl text-slate-500 font-medium tracking-tight">
-                  {t("heroSubtitle")}
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-                <button
-                  onClick={handleLogin}
-                  disabled={isLoggingIn}
-                  className="bg-primary text-white px-8 py-4 sm:px-10 sm:py-5 rounded-[24px] font-black text-base sm:text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center gap-3 cursor-pointer"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <Loader2 className="animate-spin" size={22} />
-                      <span>{t("loggingIn")}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                      </svg>
-                      <span>{t("login")}</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setIsLoginModalOpen(true)}
-                  className="bg-slate-100 dark:bg-white/[0.08] hover:bg-slate-200 dark:hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 px-6 py-4 sm:px-8 sm:py-5 rounded-[24px] font-bold text-base sm:text-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm border border-black/[0.04] dark:border-white/[0.08]"
-                >
-                  <Mail size={20} />
-                  <span>{t("emailLogin")}</span>
-                </button>
+          <div className="min-h-[100dvh] flex flex-col justify-between p-6 sm:p-10 relative overflow-hidden aviation-grid-bg">
+            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[640px] bg-primary/15 dark:bg-primary/20 rounded-full blur-[140px] -z-10 pointer-events-none" />
+
+            <div className="flex-1 flex items-center justify-center w-full max-w-6xl mx-auto py-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center w-full animate-in fade-in slide-in-from-bottom-8 duration-700">
+                {/* Left Column: Hero Copy & Auth Actions */}
+                <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full ios27-card text-[11px] font-semibold tracking-wider text-primary uppercase">
+                    <Plane size={13} className="shrink-0" />
+                    <span>{t("flightReadyBadge")}</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tighter text-slate-900 dark:text-white whitespace-pre-line leading-[1.08]">
+                      {t("heroTitle")}
+                    </h1>
+                    <p className="text-lg sm:text-xl text-slate-500 dark:text-slate-400 font-medium tracking-tight max-w-lg mx-auto lg:mx-0">
+                      {t("heroSubtitle")}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-2">
+                    <button
+                      onClick={handleLogin}
+                      disabled={isLoggingIn}
+                      className="w-full sm:w-auto bg-primary text-white px-7 py-4 rounded-2xl font-bold text-base shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 cursor-pointer"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <Loader2 className="animate-spin" size={20} />
+                          <span>{t("loggingIn")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                          </svg>
+                          <span>{t("login")}</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setIsLoginModalOpen(true)}
+                      className="w-full sm:w-auto ios27-card hover:bg-slate-100/80 dark:hover:bg-white/[0.1] text-slate-700 dark:text-slate-200 px-6 py-4 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Mail size={19} />
+                      <span>{t("emailLogin")}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column: Flighty x Apple Wallet Showcase Card */}
+                <div className="lg:col-span-6 w-full max-w-md mx-auto lg:max-w-none">
+                  <div className="ios27-card rounded-[28px] p-6 sm:p-7 relative overflow-hidden space-y-5">
+                    <div className="absolute -right-12 -top-12 w-44 h-44 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+
+                    {/* Top Aviation Pass Header */}
+                    <div className="flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.08] pb-4 relative z-10">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <Plane size={17} />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                            FLIGHTY PASS
+                          </div>
+                          <div className="font-mono font-bold text-sm text-slate-900 dark:text-white tabular-nums">
+                            BR198 • ON TIME
+                          </div>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        LIVE
+                      </span>
+                    </div>
+
+                    {/* Route Display */}
+                    <div className="flex items-center justify-between py-2 relative z-10">
+                      <div>
+                        <div className="text-3xl sm:text-4xl font-mono font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                          TPE
+                        </div>
+                        <div className="text-xs font-mono font-bold text-primary dark:text-sky-400 tabular-nums mt-0.5">
+                          08:50
+                        </div>
+                      </div>
+
+                      <div className="flex-1 px-4 flex flex-col items-center">
+                        <div className="w-full border-t-2 border-dashed border-slate-200 dark:border-white/[0.14] relative">
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white dark:bg-[#12141C] border border-slate-200 dark:border-white/[0.14] flex items-center justify-center text-primary">
+                            <Plane size={13} className="rotate-90" />
+                          </div>
+                        </div>
+                        <div className="text-[10px] font-mono font-semibold text-slate-400 mt-3 tabular-nums">
+                          3h 25m • GATE C7
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-3xl sm:text-4xl font-mono font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                          NRT
+                        </div>
+                        <div className="text-xs font-mono font-bold text-primary dark:text-sky-400 tabular-nums mt-0.5">
+                          13:15
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mini Bento Feature Chips */}
+                    <div className="grid grid-cols-2 gap-3 pt-1 relative z-10">
+                      <div className="ios27-subcard rounded-2xl p-3.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 mb-1">
+                          <MapPin size={11} className="text-primary" />
+                          <span>{t("itinerary")}</span>
+                        </div>
+                        <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                          Senso-ji • Shibuya Sky
+                        </div>
+                      </div>
+                      <div className="ios27-subcard rounded-2xl p-3.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 mb-1">
+                          <Wallet size={11} className="text-emerald-500" />
+                          <span>{t("expenses")}</span>
+                        </div>
+                        <div className="font-mono font-bold text-xs text-slate-800 dark:text-slate-100 tabular-nums">
+                          NT$ 24,800
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            <footer className="absolute bottom-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+
+            <footer className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-[0.25em] flex items-center justify-center gap-2 pt-4">
               <span>{t("appName")}</span>
               <span>•</span>
-              <span className="font-mono">v{APP_VERSION}</span>
+              <span className="font-mono tabular-nums">v{APP_VERSION}</span>
             </footer>
           </div>
           {pendingTripId && (
@@ -2105,10 +2345,10 @@ const App: React.FC = () => {
                         <button
                           key={tab.id}
                           onClick={() =>
-                            !isDisabled && setActiveTab(tab.id as any)
+                            !isDisabled && selectTabWithDirection(tab.id as any)
                           }
                           disabled={isDisabled}
-                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 cursor-pointer ${
+                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-300 ease-spring active:scale-95 cursor-pointer ${
                             isActive
                               ? "ios27-dock-active text-primary shadow-sm"
                               : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
@@ -2166,34 +2406,55 @@ const App: React.FC = () => {
               </div>
             )}
 
-            <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
+            <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1 overflow-x-hidden">
+              <div
+                data-testid="tab-screen-follow-wrapper"
+                style={{
+                  transform: screenFollowOffsetPx
+                    ? `translate3d(${screenFollowOffsetPx.toFixed(1)}px, 0, 0)`
+                    : undefined,
+                  transition:
+                    dockDragSlot !== null
+                      ? "transform 45ms linear"
+                      : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+              >
               {activeTab === "dashboard" && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className={`space-y-6 ${tabTransitionClass}`}>
                   <MobileHero />
-                  <div className="hidden md:grid grid-cols-12 grid-rows-2 gap-6 h-[700px]">
-                    <div
-                      className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group ios27-card p-12 flex flex-col justify-between`}
-                    >
-                      <div>
-                        <div className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4">
+                  <div className="hidden md:grid grid-cols-12 gap-5 min-h-[620px]">
+                    {/* Destination Hero Card */}
+                    <div className="col-span-12 lg:col-span-6 rounded-[32px] overflow-hidden relative group ios27-card p-8 lg:p-10 flex flex-col justify-between aviation-grid-bg">
+                      <div className="absolute -right-12 -top-12 w-52 h-52 bg-primary/10 dark:bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+                      {arrivalCode && (
+                        <div
+                          aria-hidden="true"
+                          className="absolute right-6 top-6 text-7xl lg:text-8xl font-mono font-black tracking-tighter text-slate-900/[0.04] dark:text-white/[0.05] select-none pointer-events-none leading-none"
+                        >
+                          {arrivalCode}
+                        </div>
+                      )}
+                      <div className="relative z-10">
+                        <div className="text-[10px] font-semibold text-primary uppercase tracking-[0.2em] mb-3">
                           {arrivalCode
                             ? `Arriving at ${arrivalCode}`
                             : t("destination")}
                         </div>
-                        <h2 className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 leading-[0.9]">
+                        <h2 className="text-4xl lg:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-2 leading-[1.05]">
                           {currentTrip.destination}
                         </h2>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">
-                          <Calendar size={14} /> {currentTrip.startDate} —{" "}
-                          {currentTrip.endDate}
+                      <div className="relative z-10 pt-6">
+                        <div className="inline-flex items-center gap-2.5 text-slate-500 dark:text-slate-400 font-mono font-semibold text-xs tabular-nums bg-slate-100/80 dark:bg-white/[0.06] px-3.5 py-1.5 rounded-full border border-black/[0.04] dark:border-white/[0.08]">
+                          <Calendar size={13} className="text-primary" />
+                          <span>
+                            {currentTrip.startDate} — {currentTrip.endDate}
+                          </span>
                         </div>
-                        <div className="mt-6 flex flex-wrap gap-2">
+                        <div className="mt-5 flex flex-wrap gap-2">
                           {(currentTrip.flights || [])
                             .filter((f) => f.user_id === user?.id)
                             .map((f) => {
-                               // Collect outgoing and returning flight numbers
                                const numbers = [];
                                if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
                                if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
@@ -2203,9 +2464,9 @@ const App: React.FC = () => {
                             .map((item, i) => (
                             <div
                               key={i}
-                              className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 border transition-all hover:scale-105 ${
+                              className={`text-[11px] font-mono font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 border transition-all hover:scale-105 tabular-nums ${
                                 item.isReturn
-                                 ? "bg-slate-100 dark:bg-white/[0.06] text-slate-400 dark:text-slate-300 border-slate-200/60 dark:border-white/10"
+                                 ? "bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 border-slate-200/60 dark:border-white/10"
                                  : "bg-primary/10 dark:bg-primary/20 text-primary border-primary/20 shadow-sm"
                               }`}
                             >
@@ -2215,9 +2476,19 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 ios27-card rounded-[40px] p-6 flex flex-col relative group/budget">
+
+                    {/* Budget Status Card */}
+                    <div className="col-span-6 lg:col-span-3 ios27-card rounded-[28px] p-6 flex flex-col relative group/budget">
                       <div className="flex justify-between items-start mb-4">
-                        <div className="bg-primary/10 dark:bg-primary/20 text-primary p-2.5 rounded-2xl">
+                        <div
+                          className={`p-2.5 rounded-2xl ${
+                            spentTotal > budgetLimit
+                              ? "bg-rose-500/10 text-rose-500"
+                              : budgetPercent > 80
+                              ? "bg-amber-500/10 text-amber-500"
+                              : "bg-primary/10 dark:bg-primary/20 text-primary"
+                          }`}
+                        >
                           <Wallet size={20} />
                         </div>
                         {!isGuest && (
@@ -2226,27 +2497,37 @@ const App: React.FC = () => {
                               setTempBudget(budgetLimit.toString());
                               setIsEditingBudget(true);
                             }}
-                            className="p-2 text-slate-300 hover:text-primary rounded-lg transition-all"
+                            className="p-2 text-slate-400 hover:text-primary rounded-lg transition-all cursor-pointer"
                           >
                             <Edit2 size={16} />
                           </button>
                         )}
                       </div>
                       <div className="flex-1 flex flex-col justify-end space-y-1">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                           {t("budgetStatus")}
                         </div>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-black text-slate-900 dark:text-white">
+                          <span
+                            className={`text-3xl font-mono font-extrabold tabular-nums ${
+                              spentTotal > budgetLimit
+                                ? "text-rose-500"
+                                : budgetPercent > 80
+                                ? "text-amber-500"
+                                : "text-slate-900 dark:text-white"
+                            }`}
+                          >
                             {Math.round(budgetPercent)}
-                            <span className="text-lg">%</span>
+                            <span className="text-lg font-bold">%</span>
                           </span>
                         </div>
                         <div className="w-full h-2 bg-slate-100 dark:bg-white/10 rounded-full mt-2 mb-2 overflow-hidden">
                           <div
-                            className={`h-full ${
+                            className={`h-full rounded-full transition-all duration-500 ${
                               spentTotal > budgetLimit
-                                ? "bg-red-500"
+                                ? "bg-rose-500"
+                                : budgetPercent > 80
+                                ? "bg-amber-500"
                                 : "bg-primary"
                             }`}
                             style={{
@@ -2254,73 +2535,106 @@ const App: React.FC = () => {
                             }}
                           />
                         </div>
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
+                        <div className="flex justify-between items-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2.5 border-t border-slate-100 dark:border-white/[0.06]">
                           <div>
-                            <div className="text-slate-300 dark:text-slate-500 mb-0.5">
+                            <div className="text-slate-400 dark:text-slate-500 mb-0.5">
                               {t("spent")}
                             </div>
                             <div
-                              className={
+                              className={`font-mono font-bold tabular-nums ${
                                 spentTotal > budgetLimit
-                                  ? "text-red-500"
+                                  ? "text-rose-500"
                                   : "text-slate-700 dark:text-slate-200"
-                              }
+                              }`}
                             >
                               NT$ {(spentTotal / 1000).toFixed(1)}k
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-slate-300 dark:text-slate-500 mb-0.5">
+                            <div className="text-slate-400 dark:text-slate-500 mb-0.5">
                               {t("limit")}
                             </div>
-                            <div className="text-slate-700 dark:text-slate-200">
+                            <div className="font-mono font-bold tabular-nums text-slate-700 dark:text-slate-200">
                               NT$ {(budgetLimit / 1000).toFixed(1)}k
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 ios27-card rounded-[40px] p-6 flex flex-col">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <PieChartIcon size={14} /> {t("breakdown")}
+
+                    {/* Spending Breakdown Card */}
+                    <div className="col-span-6 lg:col-span-3 ios27-card rounded-[28px] p-6 flex flex-col">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
+                          <PieChartIcon size={13} /> {t("breakdown")}
+                        </span>
                       </div>
-                      <div className="flex-1 min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={40}
-                              outerRadius={60}
-                              paddingAngle={5}
-                              dataKey="value"
-                              nameKey="displayName"
-                            >
-                              {chartData.map((e, i) => (
-                                <Cell
-                                  key={`cell-${i}`}
-                                  fill={
-                                    CATEGORY_UI[e.category]?.hexColor ||
-                                    CATEGORY_UI["Other"].hexColor
-                                  }
-                                />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {chartData.length > 0 ? (
+                        <div className="flex-1 flex flex-col justify-between min-h-0">
+                          <div className="h-32 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={chartData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={34}
+                                  outerRadius={52}
+                                  paddingAngle={4}
+                                  dataKey="value"
+                                  nameKey="displayName"
+                                >
+                                  {chartData.map((e, i) => (
+                                    <Cell
+                                      key={`cell-${i}`}
+                                      fill={
+                                        CATEGORY_UI[e.category]?.hexColor ||
+                                        CATEGORY_UI["Other"].hexColor
+                                      }
+                                    />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
+                            {sortedChartData.slice(0, 4).map((entry) => {
+                              const pct = chartTotal > 0 ? Math.round((entry.value / chartTotal) * 100) : 0;
+                              const color = CATEGORY_UI[entry.category]?.hexColor || CATEGORY_UI["Other"].hexColor;
+                              return (
+                                <div key={entry.category} className="flex items-center justify-between gap-2 text-[11px]">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200 truncate">
+                                      {entry.displayName}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                                    {pct}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-400 dark:text-slate-500">
+                          {t("noData")}
+                        </div>
+                      )}
                     </div>
-                    <div className="col-span-4 row-span-1 ios27-card rounded-[40px] p-8 flex flex-col overflow-hidden">
-                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <MapPin size={14} /> {t("upcomingSchedule")}
+
+                    {/* Upcoming Schedule */}
+                    <div className="col-span-12 lg:col-span-4 ios27-card rounded-[28px] p-7 flex flex-col overflow-hidden">
+                      <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] mb-5 flex items-center gap-2">
+                        <MapPin size={14} className="text-primary" /> {t("upcomingSchedule")}
                       </div>
-                      <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
+                      <div className="flex-1 space-y-3.5 overflow-y-auto no-scrollbar">
                         {upcomingItems.map((item, i) => (
                           <div
                             key={i}
-                            className="flex gap-4 group cursor-pointer"
+                            className="flex gap-3.5 group cursor-pointer p-2 -mx-2 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
                             onClick={() =>
                               window.open(
                                 `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -2330,50 +2644,57 @@ const App: React.FC = () => {
                               )
                             }
                           >
-                            <div className="flex flex-col items-center">
-                              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+                            <div className="flex flex-col items-center pt-1">
+                              <div className={`w-2.5 h-2.5 rounded-full ${i === 0 ? "bg-primary ring-4 ring-primary/15" : "bg-slate-300 dark:bg-white/25"}`} />
                               {i !== upcomingItems.length - 1 && (
-                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-white/10 my-1" />
+                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-white/10 mt-1.5" />
                               )}
                             </div>
-                            <div>
-                              <div className="text-sm font-black text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
-                                {item.placeName}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
+                                  {item.placeName}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-primary dark:text-sky-400 bg-primary/10 px-2 py-0.5 rounded-md tabular-nums shrink-0">
+                                  {item.time}
+                                </span>
                               </div>
-                              <div className="text-[10px] font-bold text-slate-400">
-                                {item.date} • {item.time}
+                              <div className="text-[11px] font-mono font-medium text-slate-400 tabular-nums">
+                                {item.date}
                               </div>
                             </div>
                           </div>
                         ))}
                         {upcomingItems.length === 0 && (
-                          <div className="text-slate-300 dark:text-slate-600 font-bold text-xs uppercase text-center py-8">
+                          <div className="text-slate-400 dark:text-slate-600 font-semibold text-xs uppercase text-center py-8">
                             {t("noUpcoming")}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 ios27-card rounded-[40px] p-8 flex flex-col">
-                      <div className="flex justify-between items-center mb-6">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <CheckSquare size={14} /> {t("checklistSummary")}
+
+                    {/* Packing Progress */}
+                    <div className="col-span-6 lg:col-span-4 ios27-card rounded-[28px] p-7 flex flex-col">
+                      <div className="flex justify-between items-center mb-5">
+                        <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-2">
+                          <CheckSquare size={14} className="text-emerald-500" /> {t("checklistSummary")}
                         </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        <div className="text-2xl font-mono font-extrabold text-slate-900 dark:text-white tabular-nums">
                           {packingPercent}%
                         </div>
                       </div>
-                      <div className="space-y-3 flex-1 overflow-y-auto no-scrollbar pr-2">
+                      <div className="space-y-3.5 flex-1 overflow-y-auto no-scrollbar pr-1">
                         {checklistStats.map((stat) => (
                           <div
                             key={stat.category}
                             className="flex items-center gap-3"
                           >
-                            <div className="w-20 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            <div className="w-20 text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
                               {stat.category}
                             </div>
                             <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-emerald-500 rounded-full"
+                                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                                 style={{
                                   width: `${
                                     (stat.completed / stat.total) * 100
@@ -2381,34 +2702,38 @@ const App: React.FC = () => {
                                 }}
                               />
                             </div>
-                            <div className="text-[10px] font-black text-slate-400 w-8 text-right">
+                            <div className="text-[10px] font-mono font-bold text-slate-400 w-9 text-right tabular-nums">
                               {stat.completed}/{stat.total}
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 flex flex-col gap-6">
-                      <div className="flex-1 ios27-card rounded-[40px] p-8 flex flex-col justify-center relative overflow-hidden group">
+
+                    {/* Countdown & Trip Actions */}
+                    <div className="col-span-6 lg:col-span-4 flex flex-col gap-4">
+                      <div className="flex-1 ios27-card rounded-[28px] p-7 flex flex-col justify-center relative overflow-hidden group aviation-grid-bg">
                         <div className="relative z-10">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                          <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] mb-2">
                             {t("countdown")}
                           </div>
-                          <div className="text-6xl font-black tracking-tighter text-slate-900 dark:text-white">
-                            {displayDays > 0 ? displayDays : 0}
-                          </div>
-                          <div className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-1">
-                            {t("daysLeft")}
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-6xl font-mono font-extrabold tracking-tighter text-slate-900 dark:text-white tabular-nums">
+                              {displayDays > 0 ? displayDays : 0}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                              {t("daysLeft")}
+                            </span>
                           </div>
                         </div>
-                        <Clock className="absolute -right-4 -bottom-4 text-slate-100 dark:text-white/[0.04] w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
+                        <Clock className="absolute -right-4 -bottom-4 text-slate-200/70 dark:text-white/[0.04] w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
                       </div>
                       {isCreator && (
                         <button
                           onClick={handleDeleteTrip}
-                          className="h-16 flex items-center justify-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-white dark:bg-white/[0.04] border border-red-100 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-3xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                          className="h-12 flex items-center justify-center gap-2 text-rose-500/80 hover:text-rose-600 font-semibold text-xs tracking-wide bg-white/70 dark:bg-white/[0.03] border border-rose-200/60 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all active:scale-95 cursor-pointer"
                         >
-                          <Trash2 size={16} /> {t("deleteTrip")}
+                          <Trash2 size={14} /> {t("deleteTrip")}
                         </button>
                       )}
                     </div>
@@ -2421,7 +2746,7 @@ const App: React.FC = () => {
                   <Loader2 className="animate-spin text-primary w-10 h-10" />
                 </div>
               }>
-                <div key={activeTab} className="animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div key={activeTab} className={tabTransitionClass}>
                   {activeTab === "itinerary" && (
                     <Itinerary
                       trip={currentTrip}
@@ -2456,6 +2781,7 @@ const App: React.FC = () => {
                   )}
                 </div>
               </Suspense>
+              </div>
             </main>
             {isShareModalOpen && user && !isGuest && (
               <ShareModal
@@ -2490,9 +2816,27 @@ const App: React.FC = () => {
             {/* Instagram / Threads Style Floating Bottom Navigation Capsule Dock */}
             <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-4 max-w-[360px] mx-auto z-50 pointer-events-none">
               <nav 
+                ref={mobileDockNavRef}
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto ios27-dock rounded-full p-1.5 flex items-center justify-between gap-1 transition-all duration-200"
+                onPointerDown={handleDockPointerDown}
+                onPointerMove={handleDockPointerMove}
+                onPointerUp={handleDockPointerUpOrCancel}
+                onPointerCancel={handleDockPointerUpOrCancel}
+                className="pointer-events-auto ios27-dock rounded-full p-1.5 relative grid grid-cols-6 items-center transition-all duration-200 touch-none select-none"
               >
+                <div
+                  aria-hidden="true"
+                  data-testid="mobile-dock-active-pill"
+                  className={`absolute top-1.5 bottom-1.5 left-1.5 rounded-full dock-pill-active ${
+                    dockDragSlot !== null ? "dock-pill-scrubbing" : ""
+                  } pointer-events-none z-0`}
+                  style={{
+                    width: `calc((100% - 12px) / ${tabs.length + 1})`,
+                    transform: `translate3d(${(effectiveDockSlot * 100).toFixed(2)}%, 0, 0) scale(${
+                      dockDragSlot !== null ? 1.06 : 1
+                    })`,
+                  }}
+                />
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isDisabled = isPricePending && tab.id !== "flights";
@@ -2500,21 +2844,26 @@ const App: React.FC = () => {
                     <button
                       key={tab.id}
                       onClick={() => {
+                        if (Date.now() - lastScrubEndTimeRef.current < 250) return;
                         setProfileMenuOpen(null);
-                        !isDisabled && setActiveTab(tab.id as any);
+                        !isDisabled && selectTabWithDirection(tab.id as any);
                       }}
                       disabled={isDisabled}
                       aria-label={tab.label}
                       title={tab.label}
-                      className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer active:scale-90 ${
+                      className={`relative z-10 flex items-center justify-center h-11 rounded-full transition-colors duration-200 select-none cursor-pointer active:scale-90 ${
                         isDisabled ? "opacity-35 cursor-not-allowed" : ""
                       } ${
                         isActive && profileMenuOpen !== "mobile"
-                          ? "dock-pill-active text-slate-900 dark:text-white"
+                          ? "text-slate-900 dark:text-white"
                           : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
-                      <div className="relative flex items-center justify-center">
+                      <div
+                        className={`relative flex items-center justify-center transition-transform duration-300 ease-spring ${
+                          isActive && profileMenuOpen !== "mobile" ? "scale-110" : "scale-100"
+                        }`}
+                      >
                         {isDisabled ? (
                           <Lock size={20} />
                         ) : (
@@ -2535,41 +2884,50 @@ const App: React.FC = () => {
                 <button
                   type="button"
                   data-testid="mobile-dock-profile-btn"
-                  onClick={() => setProfileMenuOpen((prev) => (prev === "mobile" ? null : "mobile"))}
+                  onClick={() => {
+                    if (Date.now() - lastScrubEndTimeRef.current < 250) return;
+                    setProfileMenuOpen((prev) => (prev === "mobile" ? null : "mobile"));
+                  }}
                   aria-label={user ? (user.name || "User Profile") : t("more")}
                   aria-expanded={profileMenuOpen === "mobile"}
-                  className={`relative flex items-center justify-center flex-1 h-11 rounded-full transition-all duration-200 select-none cursor-pointer active:scale-90 ${
+                  className={`relative z-10 flex items-center justify-center h-11 rounded-full transition-colors duration-200 select-none cursor-pointer active:scale-90 ${
                     profileMenuOpen === "mobile"
-                      ? "dock-pill-active text-slate-900 dark:text-white"
+                      ? "text-slate-900 dark:text-white"
                       : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
                   }`}
                 >
-                  {user ? (
-                    user.picture ? (
-                      <img
-                        src={user.picture}
-                        alt={user.name || "User"}
-                        referrerPolicy="no-referrer"
-                        className={`w-6 h-6 rounded-full object-cover transition-all ${
-                          profileMenuOpen === "mobile"
-                            ? "ring-2 ring-primary scale-105"
-                            : "ring-1 ring-black/10 dark:ring-white/25"
-                        }`}
-                      />
+                  <div
+                    className={`flex items-center justify-center transition-transform duration-300 ease-spring ${
+                      profileMenuOpen === "mobile" ? "scale-110" : "scale-100"
+                    }`}
+                  >
+                    {user ? (
+                      user.picture ? (
+                        <img
+                          src={user.picture}
+                          alt={user.name || "User"}
+                          referrerPolicy="no-referrer"
+                          className={`w-6 h-6 rounded-full object-cover transition-all ${
+                            profileMenuOpen === "mobile"
+                              ? "ring-2 ring-primary"
+                              : "ring-1 ring-black/10 dark:ring-white/25"
+                          }`}
+                        />
+                      ) : (
+                        <div
+                          className={`w-6 h-6 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-[10px] ${
+                            profileMenuOpen === "mobile"
+                              ? "ring-2 ring-primary"
+                              : "ring-1 ring-black/10 dark:ring-white/25"
+                          }`}
+                        >
+                          {user.name ? user.name[0].toUpperCase() : <UserIcon size={13} />}
+                        </div>
+                      )
                     ) : (
-                      <div
-                        className={`w-6 h-6 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-[10px] ${
-                          profileMenuOpen === "mobile"
-                            ? "ring-2 ring-primary"
-                            : "ring-1 ring-black/10 dark:ring-white/25"
-                        }`}
-                      >
-                        {user.name ? user.name[0].toUpperCase() : <UserIcon size={13} />}
-                      </div>
-                    )
-                  ) : (
-                    <UserIcon size={20} strokeWidth={profileMenuOpen === "mobile" ? 2.5 : 1.9} />
-                  )}
+                      <UserIcon size={20} strokeWidth={profileMenuOpen === "mobile" ? 2.5 : 1.9} />
+                    )}
+                  </div>
                 </button>
               </nav>
 

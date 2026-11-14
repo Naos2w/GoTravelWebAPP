@@ -100,6 +100,14 @@ export const TripCard: React.FC<TripCardProps> = ({
   const collaboratorCount = getTripCollaboratorCount(trip);
   const totalCost = calculateTripTotal(trip);
 
+  const outFlight = trip.flights?.[0]?.outbound;
+  const routeCode =
+    outFlight?.departureAirport && outFlight?.arrivalAirport
+      ? `${outFlight.departureAirport} ✈ ${outFlight.arrivalAirport}`
+      : null;
+  const watermarkCode =
+    outFlight?.arrivalAirport || trip.destination.slice(0, 3).toUpperCase();
+
   const renderStatusBadge = () => {
     if (timing.status === "ongoing") {
       return (
@@ -147,7 +155,7 @@ export const TripCard: React.FC<TripCardProps> = ({
           }
         }
       }}
-      className={`group relative ios27-card rounded-[32px] border ${
+      className={`group relative ios27-card rounded-[28px] border ${
         isEditMode
           ? "border-rose-400/60 dark:border-rose-500/50 ring-2 ring-rose-500/20"
           : "border-slate-200/70 dark:border-white/12"
@@ -159,12 +167,24 @@ export const TripCard: React.FC<TripCardProps> = ({
           trip.destination
         )} p-6 flex flex-col justify-between transition-transform duration-500`}
       >
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
+        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/15 blur-2xl pointer-events-none" />
+        <div
+          aria-hidden="true"
+          className="absolute right-4 top-8 text-6xl font-mono font-black tracking-tighter text-white/[0.12] select-none pointer-events-none leading-none"
+        >
+          {watermarkCode}
+        </div>
 
         {/* Top Badges & Delete/Leave Button */}
         <div className="relative z-10 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
             {renderStatusBadge()}
+            {routeCode && (
+              <span className="font-mono text-[10px] font-bold bg-white/15 backdrop-blur-md text-white px-2.5 py-0.5 rounded-full border border-white/20 tabular-nums">
+                {routeCode}
+              </span>
+            )}
             {isOwner ? (
               <span className="backdrop-blur-md bg-white/20 text-white border border-white/20 px-2 py-0.5 rounded-full text-[10px] font-semibold">
                 {t("permissionEditor")}
@@ -203,10 +223,10 @@ export const TripCard: React.FC<TripCardProps> = ({
             <MapPin size={13} className="shrink-0 text-white/90" />
             <span className="truncate">{trip.destination}</span>
           </div>
-          <h3 className="text-white text-2xl font-black tracking-tight truncate drop-shadow-sm">
+          <h3 className="text-white text-2xl font-extrabold tracking-tight truncate drop-shadow-sm">
             {trip.name}
           </h3>
-          <p className="text-white/80 text-[11px] font-medium tracking-wide flex items-center gap-1.5 pt-0.5">
+          <p className="text-white/80 text-[11px] font-mono font-medium tracking-wide flex items-center gap-1.5 pt-0.5 tabular-nums">
             <Calendar size={12} className="shrink-0" />
             <span>
               {trip.startDate} – {trip.endDate} • {timing.durationDays} {t("daysCount")}
@@ -218,10 +238,10 @@ export const TripCard: React.FC<TripCardProps> = ({
       {/* Bottom Info Shelf */}
       <div className="px-6 py-4 bg-slate-50/80 dark:bg-white/[0.03] flex items-center justify-between border-t border-slate-100 dark:border-white/[0.08]">
         <div>
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+          <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
             {t("totalCost")}
           </div>
-          <div className="text-base font-black text-slate-900 dark:text-white">
+          <div className="text-base font-mono font-extrabold text-slate-900 dark:text-white tabular-nums">
             NT$ {totalCost.toLocaleString()}
           </div>
         </div>

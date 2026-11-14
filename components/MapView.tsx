@@ -19,7 +19,7 @@ interface Props {
   hasBottomCards?: boolean;
 }
 
-const createCustomIcon = (index: number, type: string) => {
+const createCustomIcon = (index: number, type: string, isActive = false) => {
   const isFood = type === 'Food';
   const isFlight = type === 'Flight';
   
@@ -27,14 +27,17 @@ const createCustomIcon = (index: number, type: string) => {
   const bgClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
   const pulseClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
   const shadowClass = isFlight ? 'shadow-blue-500/50' : isFood ? 'shadow-orange-500/50' : 'shadow-primary/50';
+  const sizeClass = isActive
+    ? 'w-8 h-8 ring-4 ring-white/30 dark:ring-primary/40 scale-110 -translate-y-1'
+    : 'w-7 h-7';
 
   const html = `
     <div class="relative group cursor-pointer">
-      <div class="absolute -inset-2 ${pulseClass} rounded-full opacity-20 group-hover:opacity-40 animate-ping-soft transition-opacity"></div>
-      <div class="relative w-8 h-8 ${bgClass} rounded-full border-[3px] border-white dark:border-slate-800 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
-        <span class="text-white text-xs font-black">${index + 1}</span>
+      ${isActive ? `<div class="absolute -inset-2 ${pulseClass} rounded-full opacity-35 animate-pulse-soft"></div>` : ''}
+      <div class="relative ${sizeClass} ${bgClass} rounded-full border-[2.5px] border-white dark:border-slate-900 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
+        <span class="text-white ${isActive ? 'text-xs' : 'text-[11px]'} font-black font-mono tabular-nums">${index + 1}</span>
       </div>
-      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] ${
+      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] ${
         isFlight ? 'border-t-blue-500' : isFood ? 'border-t-orange-500' : 'border-t-primary'
       }"></div>
     </div>
@@ -43,9 +46,9 @@ const createCustomIcon = (index: number, type: string) => {
   return L.divIcon({
     html,
     className: 'custom-leaflet-marker',
-    iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -40]
+    iconSize: isActive ? [32, 40] : [28, 36],
+    iconAnchor: isActive ? [16, 40] : [14, 36],
+    popupAnchor: isActive ? [0, -40] : [0, -36]
   });
 };
 
@@ -200,6 +203,20 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   }[]>([]);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
+
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const updateTheme = () => setIsDarkMode(root.classList.contains('dark'));
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -541,7 +558,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
-        {/* High-Performance 60 FPS Basemap with Smooth Dark/Light Adaptation (Zero Lag & 100% Free) */}
+        {/* 100% Free Watermark-Free OpenStreetMap Basemap (Dark Mode Styled via Calibrated Slate-Navy Filter) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -550,57 +567,77 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
-        {/* Draw the connected route legs */}
+        {/* Draw the connected route legs with dual-layer Flighty glowing casing */}
         {legsRouteInfo && legsRouteInfo.length > 0 ? (
           legsRouteInfo.map((leg, idx) => {
-            let color = '#64748B'; // Slate (Driving / default)
+            let color = isDarkMode ? '#38BDF8' : '#0284C7'; // Sky Blue (Driving / default)
             let dashArray = undefined;
             let weight = 4;
-            let opacity = 0.8;
+            let opacity = 0.92;
 
             if (leg.mode === 'walking') {
-              color = '#F59E0B'; // Amber
+              color = isDarkMode ? '#FBBF24' : '#F59E0B'; // Amber
               dashArray = '5, 8'; // Dotted/dashed
               weight = 4;
             } else if (leg.mode === 'transit') {
-              color = '#6366F1'; // Indigo
+              color = isDarkMode ? '#818CF8' : '#6366F1'; // Indigo
               dashArray = '10, 10';
               weight = 4;
             } else if (leg.mode === 'bicycling') {
-              color = '#10B981'; // Emerald
+              color = isDarkMode ? '#34D399' : '#10B981'; // Emerald
               weight = 4;
             } else if (leg.mode === 'flight') {
-              color = '#3B82F6'; // Blue
+              color = isDarkMode ? '#60A5FA' : '#3B82F6'; // Blue
               dashArray = '5, 10';
               weight = 3;
-              opacity = 0.6;
+              opacity = 0.78;
             }
 
             return (
-              <Polyline
-                key={`leg-route-${idx}`}
-                positions={leg.geometry}
-                color={color}
-                weight={weight}
-                opacity={opacity}
-                dashArray={dashArray}
-              />
+              <React.Fragment key={`leg-route-${idx}`}>
+                <Polyline
+                  positions={leg.geometry}
+                  color={color}
+                  weight={weight + 3}
+                  opacity={isDarkMode ? 0.18 : 0.12}
+                />
+                <Polyline
+                  positions={leg.geometry}
+                  color={color}
+                  weight={weight}
+                  opacity={opacity}
+                  dashArray={dashArray}
+                />
+              </React.Fragment>
             );
           })
         ) : pathPositions.length > 1 ? (
-          <Polyline 
-            positions={pathPositions} 
-            color="#64748B" 
-            weight={3} 
-            opacity={0.8} 
-            dashArray="10, 10" 
-          />
+          <>
+            <Polyline
+              positions={pathPositions}
+              color={isDarkMode ? '#38BDF8' : '#0284C7'}
+              weight={6}
+              opacity={isDarkMode ? 0.18 : 0.12}
+            />
+            <Polyline 
+              positions={pathPositions} 
+              color={isDarkMode ? '#38BDF8' : '#0284C7'} 
+              weight={3} 
+              opacity={0.92} 
+              dashArray="10, 10" 
+            />
+          </>
         ) : null}
 
-        {/* Draw Driving Times between stops if we have routing data */}
+        {/* Draw Driving Times between stops (decluttered on multi-stop days > 4 stops unless connected to active stop) */}
         {legsRouteInfo && legsRouteInfo.length > 0 && validItems.length > 1 && validItems.map((item, idx) => {
            if (idx === validItems.length - 1) return null;
            const nextItem = validItems[idx + 1];
+           const isConnectedToActive =
+             activeItemId != null &&
+             (item.id === activeItemId || nextItem?.id === activeItemId);
+           if (validItems.length > 4 && !isConnectedToActive) return null;
+
            const leg = legsRouteInfo[idx];
            if (!leg || !leg.geometry || leg.geometry.length < 2) return null;
            
@@ -613,24 +650,24 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            
            let modeIcon = '';
            let modeText = isEn ? 'Drive' : '車程';
-           let bgClass = 'bg-slate-500 border-slate-400/30 text-white';
+           let iconColorClass = 'text-sky-400';
            
            if (leg.mode === 'walking') {
              modeIcon = renderToString(<Footprints size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Walk' : '步行';
-             bgClass = 'bg-amber-500 border-amber-400/30 text-white';
+             iconColorClass = 'text-amber-400';
            } else if (leg.mode === 'transit') {
              modeIcon = renderToString(<TrainFront size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Transit' : '乘車';
-             bgClass = 'bg-indigo-500 border-indigo-400/30 text-white';
+             iconColorClass = 'text-indigo-400';
            } else if (leg.mode === 'bicycling') {
              modeIcon = renderToString(<Bike size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Bike' : '騎車';
-             bgClass = 'bg-emerald-500 border-emerald-400/30 text-white';
+             iconColorClass = 'text-emerald-400';
            } else if (leg.mode === 'flight') {
              modeIcon = renderToString(<Plane size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Flight' : '飛行';
-             bgClass = 'bg-blue-500 border-blue-400/30 text-white';
+             iconColorClass = 'text-blue-400';
            } else {
              modeIcon = renderToString(<Car size={11} strokeWidth={2.5} />);
            }
@@ -656,15 +693,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                position={[midLat, midLng]}
                zIndexOffset={100}
                icon={L.divIcon({
-                 html: `<div class="${bgClass} backdrop-blur-md px-2 py-1 rounded-xl shadow-lg border text-[9px] sm:text-[10px] font-black whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="text-white/80 group-hover/time:text-white transition-colors">
+                 html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
+                          <div class="${iconColorClass} transition-colors">
                             ${modeIcon}
                           </div>
                           ${displayStr}
                         </div>`,
                  className: 'custom-leaflet-marker z-[999]',
-                 iconSize: [100, 26],
-                 iconAnchor: [50, 13]
+                 iconSize: [108, 26],
+                 iconAnchor: [54, 13]
                })}
              />
            );
@@ -675,15 +712,16 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           <Marker 
             key={item.id} 
             position={[Number(item.lat!), Number(item.lng!)]}
-            icon={createCustomIcon(idx, item.type)}
+            icon={createCustomIcon(idx, item.type, item.id === activeItemId)}
+            zIndexOffset={item.id === activeItemId ? 1000 : idx * 10}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(item.id)
             }}
           >
             <Popup className="custom-popup" closeButton={false}>
               <div className="p-1 px-2 min-w-[120px]">
-                <div className="flex items-center gap-2 mb-1.5 border-b border-slate-100 dark:border-slate-700/50 pb-1.5">
-                  <div className={`px-1.5 py-0.5 rounded text-[10px] font-black ${item.transportType === 'Flight' ? 'bg-blue-100 text-blue-600' : item.type === 'Food' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-primary'}`}>
+                <div className="flex items-center gap-2 mb-1.5 border-b border-slate-100 dark:border-white/[0.1] pb-1.5">
+                  <div className={`px-1.5 py-0.5 rounded text-[10px] font-black font-mono tabular-nums ${item.transportType === 'Flight' ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' : item.type === 'Food' ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' : 'bg-indigo-100 text-primary dark:bg-primary/20 dark:text-sky-300'}`}>
                     {item.time}
                   </div>
                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-auto">

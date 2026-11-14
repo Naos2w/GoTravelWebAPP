@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
@@ -44,6 +44,7 @@ import App from "../../App";
 describe("App Component (Smoke Test)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, "", "/");
   });
 
   it("should mount and transition from loading to landing page when unauthenticated", async () => {
@@ -310,6 +311,86 @@ describe("App Component (Smoke Test)", () => {
     expect(screen.getByText("dockuser@example.com")).toBeInTheDocument();
     expect(screen.getByText(/外觀模式|Appearance/i)).toBeInTheDocument();
     expect(screen.getByText(/匯出行程|Export Trip/i)).toBeInTheDocument();
+  });
+
+  it("supports press-and-slide scrubbing on mobile dock with synchronized screen follow and tab switching", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-scrub-1",
+      user_id: "user-scrub-123",
+      name: "Kyoto Spring",
+      destination: "Kyoto, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-scrub-123",
+            email: "scrub@example.com",
+            user_metadata: { full_name: "Scrub Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Kyoto Spring")).toBeInTheDocument();
+    });
+
+    act(() => {
+      screen.getByText("Kyoto Spring").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Mobile Navigation")).toBeInTheDocument();
+    });
+
+    const mobileNav = screen.getByLabelText("Mobile Navigation");
+    const activePill = screen.getByTestId("mobile-dock-active-pill");
+    const screenFollowWrapper = screen.getByTestId("tab-screen-follow-wrapper");
+
+    vi.spyOn(mobileNav, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      width: 312,
+      top: 0,
+      right: 312,
+      bottom: 56,
+      height: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    // Start on slot 0 (clientX = 31) -> drag to slot 2.2 (clientX = 141, checklist)
+    act(() => {
+      fireEvent.pointerDown(mobileNav, { pointerId: 1, clientX: 31 });
+      fireEvent.pointerMove(mobileNav, { pointerId: 1, clientX: 141 });
+    });
+
+    // While scrubbing, pill follows fractional position and screen wrapper tracks sub-slot drag
+    expect(activePill.style.transform).toContain("translate3d(220.00%");
+    expect(activePill.style.transform).toContain("scale(1.06)");
+    expect(screenFollowWrapper.style.transform).toContain("translate3d(-11.2px");
+
+    // Release pointer -> snaps to slot 2 (200%) and clears temporary drag offset
+    act(() => {
+      fireEvent.pointerUp(mobileNav, { pointerId: 1, clientX: 141 });
+    });
+
+    expect(activePill.style.transform).toContain("translate3d(200.00%");
+    expect(activePill.style.transform).toContain("scale(1)");
+    expect(screenFollowWrapper.style.transform).toBe("");
   });
 });
 

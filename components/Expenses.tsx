@@ -5,7 +5,7 @@ import {
   Plus, DollarSign, TrendingUp, Plane, Trash2, 
   Coffee, Home, Car, 
   Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon, Calendar, ArrowUpDown, Clock, Check, ChevronDown,
-  CreditCard, Wallet, Sparkles
+  CreditCard, Wallet, Sparkles, X
 } from 'lucide-react';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
@@ -286,42 +286,43 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       {/* Left Column: Apple Wallet Hero Card & Category Breakdown */}
       <div className="space-y-6 lg:col-span-1">
         {/* Apple Wallet iOS 27 Liquid Glass Card */}
-        <div className="relative overflow-hidden rounded-[36px] ios27-card p-7 sm:p-8 shadow-2xl border border-black/[0.06] dark:border-white/[0.14] group">
+        <div className="relative overflow-hidden rounded-[28px] ios27-card p-7 sm:p-8 shadow-xl border border-black/[0.06] dark:border-white/[0.14] group aviation-grid-bg">
           {/* Card Specular Reflection / Glow Effect */}
           <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/15 dark:bg-primary/25 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 dark:bg-white/[0.03] rounded-full blur-2xl pointer-events-none" />
           
           <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-white/70 uppercase tracking-widest">
-                <CreditCard size={16} className="text-primary" />
+              <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-white/70 uppercase tracking-[0.14em]">
+                <CreditCard size={15} className="text-primary" />
                 <span>{t('totalCost')}</span>
               </div>
-              <div className="w-8 h-6 rounded-md border border-black/10 dark:border-white/20 bg-black/5 dark:bg-white/10 flex items-center justify-center">
-                <div className="w-3 h-3 rounded-full bg-amber-400/90" />
+              {/* Metallic EMV Chip Graphic */}
+              <div className="w-9 h-6 rounded-md border border-amber-500/30 bg-gradient-to-br from-amber-300/60 via-amber-200/40 to-amber-500/50 dark:from-amber-300/30 dark:to-amber-500/20 flex items-center justify-center shadow-inner">
+                <div className="w-5 h-3 border border-amber-700/25 dark:border-amber-200/25 rounded-[2px]" />
               </div>
             </div>
 
             <div className="my-4">
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white font-mono">
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white font-mono tabular-nums">
                 NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </div>
-              <div className="text-xs text-slate-500 dark:text-white/60 mt-1 flex items-center gap-1.5 font-medium">
+              <div className="text-xs text-slate-500 dark:text-white/60 mt-1.5 flex items-center gap-1.5 font-medium font-mono tabular-nums">
                 <Plane size={13} className="text-primary" />
                 <span>{t('includesFlight')} (NT$ {Math.round(flightsTotal).toLocaleString()})</span>
               </div>
             </div>
 
             <div className="pt-3 border-t border-black/[0.06] dark:border-white/10 flex items-center justify-between text-xs text-slate-600 dark:text-white/70 font-medium">
-              <span>當地累積消費</span>
-              <span className="font-bold text-slate-900 dark:text-white font-mono">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
+              <span>{t('localSpending')}</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono tabular-nums">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Category Breakdown (Apple Health / Wallet Activity style) */}
-        <div className="ios27-card p-7 rounded-[36px] shadow-ios">
-          <h3 className="text-xs font-black text-slate-400 dark:text-slate-400 uppercase tracking-widest mb-5 flex items-center gap-2">
+        <div className="ios27-card p-7 rounded-[28px] shadow-ios">
+          <h3 className="text-[11px] font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-[0.14em] mb-5 flex items-center gap-2">
             <Sparkles size={14} className="text-primary" />
             <span>{t('breakdown')}</span>
           </h3>
@@ -339,10 +340,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                         <span>{entry.name}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400">
+                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums">
                           NT$ {Math.round(entry.value).toLocaleString()}
                         </span>
-                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                        <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 tabular-nums">
                           {Math.round(percent)}%
                         </span>
                       </div>
@@ -366,13 +367,13 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       </div>
 
       {/* Right Column: Inset Grouped Expense List & Form */}
-      <div className="lg:col-span-2 ios27-card rounded-[36px] shadow-ios overflow-hidden flex flex-col min-h-[600px]">
+      <div className="lg:col-span-2 ios27-card rounded-[28px] shadow-ios overflow-hidden flex flex-col min-h-[600px]">
         {/* Add Entry Accordion Button / Form */}
         <div className="bg-slate-50/70 dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06]">
           <div className={`${isFormOpen ? 'hidden' : 'block'}`}>
             <button 
               onClick={() => setIsFormOpen(true)} 
-              className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary transition-all font-black text-xs uppercase tracking-widest cursor-pointer group"
+              className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary transition-all font-bold text-xs uppercase tracking-widest cursor-pointer group"
             >
               <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Plus size={14} strokeWidth={3} />
@@ -384,15 +385,15 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
           {isFormOpen && (
             <div className="p-6 sm:p-7 space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                  {editingExpenseId ? "編輯記帳" : t('addEntry')}
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  {editingExpenseId ? t('edit') : t('addEntry')}
                 </h3>
                 <button 
                   onClick={resetForm}
-                  className="w-7 h-7 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400"
+                  aria-label="Close form"
+                  className="w-7 h-7 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors cursor-pointer"
                 >
-                  <Trash2 size={14} className="hidden" />
-                  ✕
+                  <X size={16} />
                 </button>
               </div>
 
@@ -461,8 +462,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
 
         {/* Filter Toolbar */}
         <div className="border-b border-black/[0.04] dark:border-white/[0.06] bg-slate-50/40 dark:bg-white/[0.02] px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
-            共 {processedExpenses.length} 筆消費
+          <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 tabular-nums">
+            {processedExpenses.length} {t('expenseCountLabel')}
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <CustomFilterSelect 
@@ -541,11 +542,11 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
 
                 <div className="flex items-center gap-4 shrink-0 pl-3">
                   <div className="text-right">
-                    <div className="font-mono font-bold text-sm sm:text-base text-slate-800 dark:text-white">
+                    <div className="font-mono font-bold text-sm sm:text-base text-slate-800 dark:text-white tabular-nums">
                       {item.currency} {item.amount.toLocaleString()}
                     </div>
                     {item.currency !== Currency.TWD && (
-                      <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                      <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 tabular-nums">
                         ≈ NT$ {Math.round(item.amount * item.exchangeRate).toLocaleString()}
                       </div>
                     )}

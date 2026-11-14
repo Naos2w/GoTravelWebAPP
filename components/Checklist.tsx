@@ -210,18 +210,18 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-16">
-      <div className="ios27-card p-6 sm:p-10 rounded-[36px] shadow-ios">
+      <div className="ios27-card p-6 sm:p-10 rounded-[28px] shadow-ios">
         {/* Title & Progress Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
               <span>{labels.title}</span>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300">
+              <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300 tabular-nums">
                 {completedCount}/{myItems.length}
               </span>
             </h2>
             <p className="text-xs text-slate-400 dark:text-slate-400 font-medium mt-1">
-              Apple Reminders 風格清單 • 點擊圓圈標記完成
+              {t('checklistSubtitle')}
             </p>
           </div>
 
@@ -229,42 +229,42 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           <div className="flex bg-slate-100/80 dark:bg-white/[0.06] p-1 rounded-2xl gap-1 shrink-0 self-start sm:self-auto border border-black/[0.03] dark:border-white/[0.08]">
             <button
               onClick={() => setFilterState('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 filterState === 'all'
                   ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
-              全部
+              {t('filterAll')}
             </button>
             <button
               onClick={() => setFilterState('pending')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 filterState === 'pending'
                   ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
-              未完成
+              {t('filterPending')}
             </button>
             <button
               onClick={() => setFilterState('completed')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 filterState === 'completed'
                   ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20'
                   : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
               }`}
             >
-              已完成
+              {t('completed')}
             </button>
           </div>
         </div>
         
         {/* iOS Battery/Health Progress Capsule */}
         <div className="mb-8 bg-slate-50/80 dark:bg-white/[0.03] p-5 rounded-2xl border border-slate-100 dark:border-white/[0.06]">
-          <div className="flex justify-between items-center text-[11px] font-bold mb-2.5 text-slate-500 dark:text-slate-400">
+          <div className="flex justify-between items-center text-[11px] font-semibold mb-2.5 text-slate-500 dark:text-slate-400">
             <span>{labels.ready}</span>
-            <span className={`font-mono font-black ${globalProgress === 100 ? "text-emerald-500" : "text-primary"}`}>
+            <span className={`font-mono font-bold tabular-nums ${globalProgress === 100 ? "text-emerald-500" : "text-primary"}`}>
               {globalProgress}%
             </span>
           </div>
@@ -285,7 +285,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           <div className={`transition-all duration-300 ease-in-out ${isFormOpen ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-20 opacity-100'}`}>
             <button 
               onClick={() => setIsFormOpen(true)} 
-              className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-all font-black text-xs uppercase tracking-widest cursor-pointer group"
+              className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-all font-bold text-xs uppercase tracking-widest cursor-pointer group"
             >
               <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Plus size={14} strokeWidth={3} />
@@ -296,7 +296,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           
           <div className={`transition-all duration-300 ease-in-out ${isFormOpen ? 'max-h-[400px] opacity-100 p-5 sm:p-7' : 'max-h-0 opacity-0 pointer-events-none'}`}>
             <div className="flex justify-between items-center mb-5">
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                 {labels.addItem}
               </h3>
               <button 
@@ -315,7 +315,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 onChange={(e) => setNewItemText(e.target.value)} 
                 placeholder={labels.inputPlaceholder} 
                 onKeyDown={(e) => e.key === 'Enter' && addItem()}
-                className="flex-1 px-5 py-3.5 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 focus:ring-2 focus:ring-primary/20 outline-none font-bold text-sm shadow-sm" 
+                className="flex-1 px-5 py-3.5 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 focus:ring-2 focus:ring-primary/20 outline-none font-semibold text-sm shadow-sm" 
               />
               
               <div className="relative group/select min-w-[150px] h-12 md:h-auto">
@@ -325,7 +325,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 <select 
                   value={category} 
                   onChange={(e) => setCategory(e.target.value as any)} 
-                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 appearance-none font-bold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 appearance-none font-semibold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
                 >
                   {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
                 </select>
@@ -342,8 +342,8 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
             {/* Quick Suggestion Chips */}
             <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">
-                常見行李推薦（點擊直接新增）：
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-2">
+                {t('quickSuggestionsLabel')}
               </span>
               <div className="flex flex-wrap gap-2">
                 {QUICK_SUGGESTIONS.map((sug, i) => (
@@ -392,10 +392,10 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                           {getCatName(cat)}
                         </h3>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full tabular-nums ${
                           isComplete 
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' 
                             : 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300'
@@ -466,10 +466,10 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 <CheckCircle2 size={24} />
               </div>
               <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">
-                尚無待辦事項
+                {t('emptyChecklistTitle')}
               </h4>
               <p className="text-xs text-slate-400 mb-4 max-w-xs mx-auto">
-                點擊上方「新增項目」或下方快速按鈕，輕鬆準備出發行李！
+                {t('emptyChecklistDesc')}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 {QUICK_SUGGESTIONS.slice(0, 3).map((sug, i) => (
