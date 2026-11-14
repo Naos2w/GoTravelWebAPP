@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
@@ -203,6 +203,19 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   }[]>([]);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
+  const [isRoutingMenuOpen, setIsRoutingMenuOpen] = useState(false);
+  const routingMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isRoutingMenuOpen) return;
+    const handlePointerDownOutside = (e: MouseEvent | PointerEvent) => {
+      if (routingMenuRef.current && !routingMenuRef.current.contains(e.target as Node)) {
+        setIsRoutingMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDownOutside);
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
+  }, [isRoutingMenuOpen]);
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() =>
     typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
@@ -512,49 +525,81 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
       ) : (
       <>
-        {/* Travel Mode Selector Overlay */}
-        <div className={`absolute ${hasBottomCards ? 'bottom-[148px] sm:bottom-4' : 'bottom-4'} left-3 sm:left-4 z-[1000] pointer-events-auto flex items-center gap-1 bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl shadow-lg rounded-2xl p-1 border border-slate-100 dark:border-white/[0.12] transition-all duration-300`}>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('auto')}
-            title={isEn ? "Auto (by Itinerary)" : "自動 (依行程)"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'auto' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Route size={15} />
-          </button>
-          <div className="w-px h-5 bg-slate-100 dark:bg-white/[0.1]" />
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('driving')}
-            title={isEn ? "Always Driving" : "全域開車"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'driving' ? 'bg-slate-600 dark:bg-white/[0.2] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Car size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('walking')}
-            title={isEn ? "Always Walking" : "全域走路"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'walking' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Footprints size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('transit')}
-            title={isEn ? "Always Transit" : "全域大眾運輸"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'transit' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <TrainFront size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('bicycling')}
-            title={isEn ? "Always Cycling" : "全域自行車"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'bicycling' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Bike size={15} />
-          </button>
+        {/* Travel Mode Selector Overlay (Collapsed by default, horizontally aligned with mobile stops pill) */}
+        <div
+          ref={routingMenuRef}
+          data-testid="routing-mode-selector"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className={`absolute ${
+            hasBottomCards ? 'bottom-[130px] lg:bottom-4' : 'bottom-3 lg:bottom-4'
+          } left-3 lg:left-4 z-[1000] pointer-events-auto h-8 flex items-center gap-1 bg-white/95 dark:bg-[#121318]/90 backdrop-blur-2xl shadow-lg rounded-full p-[3px] border border-black/[0.06] dark:border-white/[0.12] transition-all duration-200`}
+        >
+          {[
+            {
+              mode: 'auto' as const,
+              icon: Route,
+              title: isEn ? 'Auto (by Itinerary)' : '自動 (依行程)',
+              activeClass: 'bg-violet-600 text-white shadow-sm',
+            },
+            {
+              mode: 'driving' as const,
+              icon: Car,
+              title: isEn ? 'Always Driving' : '全域開車',
+              activeClass: 'bg-slate-600 dark:bg-white/[0.2] text-white shadow-sm',
+            },
+            {
+              mode: 'walking' as const,
+              icon: Footprints,
+              title: isEn ? 'Always Walking' : '全域走路',
+              activeClass: 'bg-amber-500 text-white shadow-sm',
+            },
+            {
+              mode: 'transit' as const,
+              icon: TrainFront,
+              title: isEn ? 'Always Transit' : '全域大眾運輸',
+              activeClass: 'bg-indigo-500 text-white shadow-sm',
+            },
+            {
+              mode: 'bicycling' as const,
+              icon: Bike,
+              title: isEn ? 'Always Cycling' : '全域自行車',
+              activeClass: 'bg-emerald-500 text-white shadow-sm',
+            },
+          ]
+            .filter((opt) => isRoutingMenuOpen || opt.mode === routingModeOverride)
+            .map((opt, idx) => {
+              const Icon = opt.icon;
+              const isActive = routingModeOverride === opt.mode;
+              return (
+                <React.Fragment key={opt.mode}>
+                  {isRoutingMenuOpen && idx === 1 && (
+                    <div className="w-px h-4 bg-slate-200 dark:bg-white/[0.12] mx-0.5" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isRoutingMenuOpen) {
+                        setIsRoutingMenuOpen(true);
+                      } else {
+                        setRoutingModeOverride(opt.mode);
+                        setIsRoutingMenuOpen(false);
+                      }
+                    }}
+                    title={opt.title}
+                    aria-label={opt.title}
+                    aria-expanded={isActive ? isRoutingMenuOpen : undefined}
+                    className={`w-6 h-6 rounded-full transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                      isActive
+                        ? opt.activeClass
+                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Icon size={14} />
+                  </button>
+                </React.Fragment>
+              );
+            })}
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>

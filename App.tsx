@@ -1813,6 +1813,16 @@ const App: React.FC = () => {
   };
 
   const MobileHero = () => {
+    const departureCode = allFlights[0]?.outbound?.departureAirport || "";
+    const routeBadgeLabel =
+      departureCode && arrivalCode
+        ? `${departureCode} ✈ ${arrivalCode}`
+        : arrivalCode || t("destination");
+    const statusPillLabel =
+      displayDays > 0
+        ? `${displayDays} ${t("daysLeft")}`
+        : t("statusOngoing");
+
     return (
       <div className="md:hidden space-y-4 mb-6">
         <div className="w-full rounded-[28px] p-7 shadow-ios ios27-card relative overflow-hidden aviation-grid-bg">
@@ -1820,16 +1830,19 @@ const App: React.FC = () => {
           {arrivalCode && (
             <div
               aria-hidden="true"
-              className="absolute right-4 top-4 text-5xl font-mono font-black tracking-tighter text-slate-900/[0.05] dark:text-white/[0.06] select-none pointer-events-none leading-none"
+              className="absolute right-4 top-4 text-6xl font-mono font-black tracking-tighter text-slate-900/[0.05] dark:text-white/[0.06] select-none pointer-events-none leading-none"
             >
               {arrivalCode}
             </div>
           )}
           <div className="relative z-10 flex flex-col gap-2">
-            <div className="flex justify-between items-start mb-1">
-              <div className="text-[10px] font-semibold text-primary uppercase tracking-[0.18em]">
-                {arrivalCode || t("destination")}
+            <div className="flex justify-between items-center gap-2 mb-1">
+              <div className="text-[10px] font-mono font-semibold text-primary uppercase tracking-[0.18em]">
+                {routeBadgeLabel}
               </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20 tabular-nums shrink-0">
+                {statusPillLabel}
+              </span>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {currentTrip?.destination}

@@ -1366,10 +1366,14 @@ export const FlightManager: React.FC<Props> = ({
                           currency: e.target.value as Currency,
                         })
                       }
-                      className="bg-transparent dark:text-white px-3 border-none font-bold text-xs outline-none w-20"
+                      className="bg-transparent dark:text-white px-3 border-none font-bold text-xs outline-none w-20 cursor-pointer"
                     >
                       {Object.values(Currency).map((c) => (
-                        <option key={c} value={c}>
+                        <option
+                          key={c}
+                          value={c}
+                          className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white"
+                        >
                           {c}
                         </option>
                       ))}
@@ -1402,11 +1406,17 @@ export const FlightManager: React.FC<Props> = ({
                           cabinClass: e.target.value,
                         })
                       }
-                      className="w-full bg-transparent dark:text-white px-3 font-bold text-sm outline-none appearance-none"
+                      className="w-full bg-transparent dark:text-white px-3 font-bold text-sm outline-none appearance-none cursor-pointer"
                     >
-                      <option value="Economy">Economy</option>
-                      <option value="Business">Business</option>
-                      <option value="First">First Class</option>
+                      <option value="Economy" className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white">
+                        Economy
+                      </option>
+                      <option value="Business" className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white">
+                        Business
+                      </option>
+                      <option value="First" className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white">
+                        First Class
+                      </option>
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500">
                       <svg
@@ -1508,7 +1518,7 @@ export const FlightManager: React.FC<Props> = ({
             )}
           </div>
 
-          <div className="mt-8 space-y-6 opacity-60 pointer-events-none grayscale">
+          <div className="mt-8 space-y-6 pointer-events-none">
             {renderFlightBoardingPasses(
               tempFlightData.outbound,
               tempFlightData.traveler_name,
@@ -1532,10 +1542,25 @@ export const FlightManager: React.FC<Props> = ({
                 return 0;
               })
               .map((flight) => (
-                <div key={flight.id} className="relative group">
-                  <div className="absolute -top-3 left-8 z-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-slate-200 dark:shadow-none">
-                    <UserIcon size={12} /> {flight.traveler_name}{" "}
-                    {flight.user_id === currentUser?.id ? "(Me)" : ""}
+                <div key={flight.id} className="relative group space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="inline-flex items-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
+                      <UserIcon size={12} />
+                      <span>{flight.traveler_name}</span>
+                      {flight.user_id === currentUser?.id && (
+                        <span className="opacity-70 font-bold">({t("you")})</span>
+                      )}
+                    </div>
+                    {flight.user_id === currentUser?.id && (
+                      <button
+                        onClick={() => startEdit(flight)}
+                        aria-label={t("edit")}
+                        className="px-3.5 py-1.5 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
+                      >
+                        <Edit2 size={13} />
+                        <span>{t("edit")}</span>
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-4">
                     {renderFlightBoardingPasses(
@@ -1550,14 +1575,6 @@ export const FlightManager: React.FC<Props> = ({
                         flight.cabinClass
                       )}
                   </div>
-                  {flight.user_id === currentUser?.id && (
-                    <button
-                      onClick={() => startEdit(flight)}
-                      className="absolute top-4 right-4 p-3 bg-white/80 dark:bg-white/[0.12] border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-md rounded-xl text-slate-500 hover:text-primary transition-all shadow-sm opacity-0 group-hover:opacity-100"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                  )}
                 </div>
               ))
           ) : (

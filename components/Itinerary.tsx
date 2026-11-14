@@ -768,11 +768,11 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               return (
                 <div className="lg:hidden absolute bottom-3 inset-x-0 z-[1000] pointer-events-none flex flex-col gap-1.5 px-3">
                   {/* Apple Maps Grabber Handle & Header Toggle */}
-                  <div className="flex justify-end pointer-events-auto">
+                  <div className="flex justify-end pointer-events-none">
                     <button
                       type="button"
                       onClick={() => setIsMobileCardsCollapsed(!isMobileCardsCollapsed)}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-[#121318]/90 ios27-card backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.12] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
+                      className="pointer-events-auto h-8 flex items-center gap-1.5 px-3.5 rounded-full bg-white/95 dark:bg-[#121318]/90 ios27-card backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.12] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
                     >
                       <MapPin size={13} className="text-primary" />
                       <span>{validItems.length} {isEn ? 'Stops' : '個景點'}</span>
@@ -984,43 +984,47 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                                  {item.placeName}
                               </div>
                            </div>
-                           <div className="text-[9px] sm:text-xs font-medium text-slate-400 whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 w-full text-left">
-                             {item.note || '...'}
-                           </div>
+                           {item.note && (
+                             <div className="text-[10px] sm:text-xs font-medium text-slate-400 whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 w-full text-left mt-0.5">
+                               {item.note}
+                             </div>
+                           )}
                         </div>
 
-                        <div className="shrink-0 flex flex-col gap-1 w-[72px] sm:w-24 items-end pl-1 sm:pl-3">
+                        <div className="shrink-0 flex items-center gap-1 pl-1 sm:pl-3">
                            {isFlight ? (
-                              <div className="flex gap-1 w-full justify-end">
+                              <div className="flex gap-1 justify-end">
                                   <div className="p-1.5 text-slate-300 dark:text-slate-500 flex items-center justify-center">
                                     <Lock size={13} />
                                   </div>
                               </div>
                            ) : (
-                             <>
+                             <div className="flex items-center gap-1">
                                <button 
                                  onClick={() => handleEditItem(item)}
                                  disabled={isGuest}
-                                 className={`hidden sm:flex w-full py-1.5 items-center justify-center rounded-lg border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 hover:text-primary'}`}
+                                 aria-label={`${t('edit')} ${item.placeName}`}
+                                 className={`p-1.5 sm:p-2 flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 hover:text-primary cursor-pointer'}`}
                                >
                                  <Edit2 size={13} />
                                </button>
-                               <div className="flex gap-1 w-full transition-opacity">
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank'); }} 
-                                    className="flex-1 py-1.5 flex items-center justify-center bg-slate-50 dark:bg-white/[0.06] text-slate-400 hover:text-primary rounded-lg border border-slate-200/80 dark:border-white/[0.08] active:scale-95 transition-all"
-                                  >
-                                    <Map size={13} />
-                                  </button>
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} 
-                                    disabled={isGuest}
-                                    className={`flex-1 py-1.5 flex items-center justify-center rounded-lg border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-red-400 hover:text-red-500'}`}
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                             </>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank'); }} 
+                                 aria-label={isEn ? `Navigate to ${item.placeName}` : `導航前往 ${item.placeName}`}
+                                 title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
+                                 className="p-1.5 sm:p-2 flex items-center justify-center bg-slate-50 dark:bg-white/[0.06] text-slate-400 hover:text-primary rounded-xl border border-slate-200/80 dark:border-white/[0.08] active:scale-95 transition-all cursor-pointer"
+                               >
+                                 <Map size={13} />
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} 
+                                 disabled={isGuest}
+                                 aria-label={isEn ? `Delete ${item.placeName}` : `刪除 ${item.placeName}`}
+                                 className={`p-1.5 sm:p-2 flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-red-400 hover:text-red-500 cursor-pointer'}`}
+                               >
+                                 <Trash2 size={13} />
+                               </button>
+                             </div>
                            )}
                         </div>
                       </div>
@@ -1044,7 +1048,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-[#161822] border border-slate-200 dark:border-white/[0.12] text-slate-400 dark:text-slate-400 hover:text-primary p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95">
+                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-[#161822] border border-slate-200 dark:border-white/[0.12] hover:border-primary/40 text-slate-400 dark:text-slate-400 hover:text-primary px-2.5 py-1 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-65 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95 cursor-pointer">
                         <Plus size={14} /> <span className="hidden sm:inline font-black ml-1 uppercase">{t('selectTransport')}</span>
                       </button>
                     )}

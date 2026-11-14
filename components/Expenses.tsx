@@ -78,12 +78,12 @@ const CustomFilterSelect = <T extends string>({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-max min-w-[150px] max-w-[240px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-[#2C2C2E]/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 p-1.5">
+        <div className="absolute top-full right-0 mt-2 w-max min-w-[150px] max-w-[240px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 p-1.5">
           {options.map((opt) => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
-              className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${value === opt.value ? 'bg-primary text-white shadow-sm' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+              className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${value === opt.value ? 'bg-primary text-white shadow-sm' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.08]'}`}
             >
               <span className="truncate pr-3">{opt.label}</span>
               {value === opt.value && <Check size={13} className="shrink-0" />}
