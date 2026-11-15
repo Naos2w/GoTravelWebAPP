@@ -77,6 +77,54 @@ export const consumeRedirectTripId = (): string | null => {
 };
 
 /**
+ * Extracts a target tripId from either legacy query parameter (?tripId=...)
+ * or path-based route (/trips/:tripId).
+ */
+export const extractTripIdFromLocation = (
+  locationObj: { pathname: string; search: string } = window.location
+): string | null => {
+  const params = new URLSearchParams(locationObj.search || "");
+  const queryTripId = params.get("tripId");
+  if (queryTripId && queryTripId.trim()) {
+    return queryTripId.trim();
+  }
+
+  const pathMatch = (locationObj.pathname || "").match(/^\/trips\/([^/?#]+)/);
+  if (pathMatch && pathMatch[1]) {
+    try {
+      return decodeURIComponent(pathMatch[1]);
+    } catch {
+      return pathMatch[1];
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Returns the clean origin URL for Supabase OAuth / Magic Link `redirectTo`
+ * so dynamic subpaths (e.g. /trips/:tripId) never cause whitelist mismatches
+ * that fall back to the production Site URL.
+ */
+export const getAuthRedirectUrl = (
+  customEnvRedirect?: string,
+  origin: string = window.location.origin
+): string => {
+  const envRedirect = customEnvRedirect ?? import.meta.env.VITE_AUTH_REDIRECT_URL;
+  if (typeof envRedirect === "string" && envRedirect.trim()) {
+    return envRedirect.trim().replace(/\/+$/, "");
+  }
+  return origin.replace(/\/+$/, "");
+};
+
+const preserveDeepLinkTripId = (redirectTripId?: string | null): void => {
+  const targetTripId = redirectTripId || extractTripIdFromLocation();
+  if (targetTripId) {
+    saveRedirectTripId(targetTripId);
+  }
+};
+
+/**
  * Initiates Google OAuth login via Supabase.
  * Checks for proper configuration and saves redirect target.
  */
@@ -85,18 +133,8 @@ export const signInWithGoogle = async (redirectTripId?: string | null): Promise<
     throw new Error("SUPABASE_NOT_CONFIGURED");
   }
 
-  if (redirectTripId) {
-    saveRedirectTripId(redirectTripId);
-  } else {
-    const params = new URLSearchParams(window.location.search);
-    const urlTripId = params.get("tripId");
-    if (urlTripId) {
-      saveRedirectTripId(urlTripId);
-    }
-  }
-
-  // Use clean origin + pathname so redirect URL matches standard Supabase whitelist
-  const redirectUrl = window.location.origin + window.location.pathname;
+  preserveDeepLinkTripId(redirectTripId);
+  const redirectUrl = getAuthRedirectUrl();
 
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -125,17 +163,8 @@ export const signInWithEmail = async (
     throw new Error("INVALID_EMAIL");
   }
 
-  if (redirectTripId) {
-    saveRedirectTripId(redirectTripId);
-  } else {
-    const params = new URLSearchParams(window.location.search);
-    const urlTripId = params.get("tripId");
-    if (urlTripId) {
-      saveRedirectTripId(urlTripId);
-    }
-  }
-
-  const redirectUrl = window.location.origin + window.location.pathname;
+  preserveDeepLinkTripId(redirectTripId);
+  const redirectUrl = getAuthRedirectUrl();
 
   const { error } = await supabase.auth.signInWithOtp({
     email: trimmedEmail,
