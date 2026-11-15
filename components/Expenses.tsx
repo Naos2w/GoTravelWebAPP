@@ -5,12 +5,13 @@ import {
   Plus, DollarSign, TrendingUp, Plane, Trash2, 
   Coffee, Home, Car, 
   Ticket, ShoppingBag, Tag, Edit2, Lock, User as UserIcon, Calendar, ArrowUpDown, Clock, Check, ChevronDown,
-  CreditCard, Wallet, Sparkles, X
+  CreditCard, Wallet, Sparkles, X, Users, ArrowRight, Scale
 } from 'lucide-react';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { supabase } from '../services/storageService';
 import { CATEGORY_UI, getCategoryName } from './ExpenseCategories';
+import { calculateSplitwiseSettlement, SplitMember } from '../services/splitwiseService';
 
 interface Props {
   trip: Trip;
@@ -111,15 +112,87 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const [filterUser, setFilterUser] = useState<string>('All');
   const [sortOrder, setSortOrder] = useState<SortType>('date-desc');
   const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const [paidBy, setPaidBy] = useState<string>(currentUser?.id || '');
+  const [splitWith, setSplitWith] = useState<string[]>([]);
+  const [newBuddyName, setNewBuddyName] = useState('');
+
+  const storageKey = `go-travel-split-members-${trip.id}`;
+  const [customBuddies, setCustomBuddies] = useState<SplitMember[]>(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      setCustomBuddies(saved ? JSON.parse(saved) : []);
+    } catch {
+      setCustomBuddies([]);
+    }
+  }, [storageKey]);
+
+  const persistCustomBuddies = (next: SplitMember[]) => {
+    setCustomBuddies(next);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+    } catch {}
+  };
 
   const getCatName = (cat: string) => getCategoryName(cat, t);
 
-  const members = useMemo(() => {
+  const members = useMemo<SplitMember[]>(() => {
     const userMap = new Map<string, string>();
-    (trip.expenses || []).forEach(e => { if(e.user_id && e.user_name) userMap.set(e.user_id, e.user_name); });
-    (trip.flights || []).forEach(f => { if(f.user_id && f.traveler_name) userMap.set(f.user_id, f.traveler_name); });
+    (trip.collaborators || []).forEach((c) => {
+      if (c.user_id) userMap.set(c.user_id, (c.email || c.user_id).split('@')[0]);
+    });
+    if (currentUser?.id) {
+      userMap.set(currentUser.id, currentUser.name || currentUser.email?.split('@')[0] || currentUser.id);
+    }
+    (trip.flights || []).forEach((f) => {
+      if (f.user_id && f.traveler_name) userMap.set(f.user_id, f.traveler_name);
+    });
+    (trip.expenses || []).forEach((e) => {
+      if (e.user_id && e.user_name) userMap.set(e.user_id, e.user_name);
+      if (e.paidBy && e.paidByName) userMap.set(e.paidBy, e.paidByName);
+    });
+    customBuddies.forEach((b) => {
+      if (b.id && b.name && !userMap.has(b.id)) userMap.set(b.id, b.name);
+    });
     return Array.from(userMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [trip.expenses, trip.flights]);
+  }, [trip.collaborators, trip.expenses, trip.flights, currentUser, customBuddies]);
+
+  const addCustomBuddy = () => {
+    const trimmed = newBuddyName.trim();
+    if (!trimmed) return;
+    if (members.some((m) => m.name.toLowerCase() === trimmed.toLowerCase())) {
+      setNewBuddyName('');
+      return;
+    }
+    const buddy: SplitMember = {
+      id: `buddy-${trimmed.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}`,
+      name: trimmed,
+    };
+    persistCustomBuddies([...customBuddies, buddy]);
+    if (isFormOpen) {
+      setSplitWith((prev) => Array.from(new Set([...(prev.length ? prev : members.map((m) => m.id)), buddy.id])));
+    }
+    setNewBuddyName('');
+  };
+
+  const toggleSplitMember = (memberId: string) => {
+    setSplitWith((prev) => {
+      const current = prev.length > 0 ? prev : members.map((m) => m.id);
+      if (current.includes(memberId)) {
+        if (current.length <= 1) return current;
+        return current.filter((id) => id !== memberId);
+      }
+      return [...current, memberId];
+    });
+  };
 
   const dateOptions = useMemo(() => {
     const dates: string[] = [];
@@ -155,11 +228,30 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     if (!currentUser) return;
     
     const val = parseFloat(amount);
+    const activePaidBy = paidBy || currentUser.id;
+    const paidByMember = members.find((m) => m.id === activePaidBy);
+    const activeSplitWith = splitWith.length > 0 ? splitWith : members.map((m) => m.id);
+
     if (editingExpenseId) {
       const exp = trip.expenses.find(e => e.id === editingExpenseId);
       if (exp?.user_id !== currentUser.id && trip.user_id !== currentUser.id) return;
       
-      const updatedExpenses = trip.expenses.map(exp => (exp.id === editingExpenseId ? { ...exp, amount: val, currency, category, date: selectedDate, note, exchangeRate: rates[currency] } : exp));
+      const updatedExpenses = trip.expenses.map(exp =>
+        exp.id === editingExpenseId
+          ? {
+              ...exp,
+              amount: val,
+              currency,
+              category,
+              date: selectedDate,
+              note,
+              exchangeRate: rates[currency],
+              paidBy: activePaidBy,
+              paidByName: paidByMember?.name || currentUser.name,
+              splitWith: activeSplitWith,
+            }
+          : exp
+      );
       onUpdate({ ...trip, expenses: updatedExpenses });
     } else {
       const newExpense: Expense = {
@@ -172,7 +264,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
         date: selectedDate,
         createdAt: new Date().toISOString(),
         note,
-        exchangeRate: rates[currency]
+        exchangeRate: rates[currency],
+        paidBy: activePaidBy,
+        paidByName: paidByMember?.name || currentUser.name,
+        splitWith: activeSplitWith,
       };
       onUpdate({ ...trip, expenses: [newExpense, ...trip.expenses] });
     }
@@ -182,6 +277,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const resetForm = () => { 
     setAmount(''); 
     setNote(''); 
+    setPaidBy(currentUser?.id || '');
+    setSplitWith(members.map((m) => m.id));
     setEditingExpenseId(null); 
     setIsFormOpen(false); 
     setErrors({}); 
@@ -195,6 +292,12 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     setCurrency(expense.currency);
     setSelectedDate(expense.date);
     setNote(expense.note);
+    setPaidBy(expense.paidBy || expense.user_id || currentUser?.id || '');
+    setSplitWith(
+      expense.splitWith && expense.splitWith.length > 0
+        ? expense.splitWith
+        : members.map((m) => m.id)
+    );
     setIsFormOpen(true);
     setErrors({});
   };
@@ -232,7 +335,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const processedExpenses = useMemo(() => {
     let list = [...trip.expenses, ...flightExpenses];
     if (filterCategory !== 'All') list = list.filter(e => e.category === filterCategory);
-    if (filterUser !== 'All') list = list.filter(e => e.user_id === filterUser);
+    if (filterUser !== 'All') list = list.filter(e => (e.paidBy || e.user_id) === filterUser);
     if (filterDate !== 'All') list = list.filter(e => e.date === filterDate);
     list.sort((a, b) => {
       switch (sortOrder) {
@@ -271,6 +374,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       value 
     }));
   }, [trip.expenses, flightsTotal, getCatName]);
+
+  const splitSettlement = useMemo(() => {
+    return calculateSplitwiseSettlement(trip.expenses || [], members);
+  }, [trip.expenses, members]);
 
   const inputClass = (isError: boolean) => 
     `bg-slate-50 dark:bg-white/[0.04] focus:bg-white dark:focus:bg-white/[0.08] text-slate-900 dark:text-white rounded-2xl border transition-all outline-none ${
@@ -364,6 +471,90 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
             )}
           </div>
         </div>
+        {/* Splitwise Smart AA Settlement Card */}
+        <div className="ios27-card p-7 rounded-[28px] shadow-ios" data-testid="splitwise-settlement-card">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className="text-[11px] font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-[0.14em] flex items-center gap-2">
+              <Scale size={14} className="text-primary" />
+              <span>{t('splitSettlementTitle')}</span>
+            </h3>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-300">
+              {members.length}
+            </span>
+          </div>
+
+          {/* Add offline travel buddy input */}
+          {!isGuest && (
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newBuddyName}
+                onChange={(e) => setNewBuddyName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addCustomBuddy()}
+                placeholder={t('addSplitMemberPlaceholder')}
+                className="flex-1 min-w-0 px-3 py-2 text-xs font-medium rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200/80 dark:border-white/10 text-slate-900 dark:text-white outline-none focus:border-primary"
+              />
+              <button
+                type="button"
+                onClick={addCustomBuddy}
+                disabled={!newBuddyName.trim()}
+                className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary hover:text-white text-primary text-xs font-bold transition-all disabled:opacity-40 cursor-pointer shrink-0"
+              >
+                {t('addMemberBtn')}
+              </button>
+            </div>
+          )}
+
+          {/* Member net balances */}
+          {splitSettlement.balances.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {splitSettlement.balances.map((b) => (
+                <div
+                  key={b.id}
+                  className="px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.08] text-[11px] flex items-center gap-1.5"
+                >
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{b.name}</span>
+                  <span
+                    className={`font-mono font-bold tabular-nums ${
+                      b.net > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : b.net < 0
+                        ? 'text-rose-500 dark:text-rose-400'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {b.net > 0 ? `+${b.net.toLocaleString()}` : b.net.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Minimum-transfer settlement instructions */}
+          {splitSettlement.transfers.length > 0 ? (
+            <div className="space-y-2">
+              {splitSettlement.transfers.map((tr, idx) => (
+                <div
+                  key={`${tr.fromId}-${tr.toId}-${idx}`}
+                  className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.08] text-xs"
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200 min-w-0 truncate">
+                    <span className="truncate">{tr.fromName}</span>
+                    <ArrowRight size={13} className="text-primary shrink-0" />
+                    <span className="truncate">{tr.toName}</span>
+                  </div>
+                  <span className="font-mono font-extrabold text-primary tabular-nums shrink-0 pl-2">
+                    NT$ {tr.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-3 text-center text-xs text-slate-400 font-medium">
+              {t('allSettled')}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Right Column: Inset Grouped Expense List & Form */}
@@ -372,7 +563,11 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
         <div className="bg-slate-50/70 dark:bg-white/[0.03] border-b border-black/[0.04] dark:border-white/[0.06]">
           <div className={`${isFormOpen ? 'hidden' : 'block'}`}>
             <button 
-              onClick={() => setIsFormOpen(true)} 
+              onClick={() => {
+                setPaidBy(currentUser?.id || members[0]?.id || '');
+                setSplitWith(members.map((m) => m.id));
+                setIsFormOpen(true);
+              }} 
               className="w-full py-5 flex items-center justify-center gap-2 text-slate-600 dark:text-slate-300 hover:text-primary transition-all font-bold text-xs uppercase tracking-widest cursor-pointer group"
             >
               <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -441,6 +636,48 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                   placeholder={t('descRequired') + "..."} 
                 />
               </div>
+
+              {members.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                      {t('paidByLabel')}
+                    </label>
+                    <CustomFilterSelect
+                      variant="form"
+                      icon={Wallet}
+                      value={paidBy || currentUser?.id || members[0]?.id || ''}
+                      onChange={(val) => setPaidBy(val)}
+                      options={members.map((m) => ({ value: m.id, label: m.name }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                      {t('splitWithLabel')}
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {members.map((m) => {
+                        const currentSelected = splitWith.length > 0 ? splitWith : members.map((mb) => mb.id);
+                        const active = currentSelected.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleSplitMember(m.id)}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                              active
+                                ? 'bg-primary text-white border-primary shadow-sm'
+                                : 'bg-white dark:bg-white/[0.04] text-slate-500 dark:text-slate-400 border-slate-200/80 dark:border-white/10'
+                            }`}
+                          >
+                            {m.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button 
@@ -528,10 +765,18 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                     <div className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">
                       {item.note}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                        <UserIcon size={10} /> {item.user_name}
+                        <UserIcon size={10} /> {item.paidByName || item.user_name}
                       </span>
+                      {Array.isArray(item.splitWith) && item.splitWith.length > 0 && (
+                        <>
+                          <span className="w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
+                          <span className="text-[10px] font-bold text-primary/80 dark:text-blue-400 flex items-center gap-0.5">
+                            <Users size={10} /> AA/{item.splitWith.length}
+                          </span>
+                        </>
+                      )}
                       <span className="w-1 h-1 bg-slate-300 dark:bg-slate-600 rounded-full" />
                       <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
                         {item.date}

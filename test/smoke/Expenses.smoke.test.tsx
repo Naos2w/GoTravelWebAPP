@@ -82,4 +82,45 @@ describe("Expenses Component Smoke Test", () => {
     // Verify component mounts without throwing
     expect(document.body).toBeDefined();
   });
+
+  it("renders AA Splitwise settlement transfers when multiple members share an expense", () => {
+    const sharedTrip: Trip = {
+      ...mockTrip,
+      collaborators: [
+        { user_id: "user-123", email: "alice@example.com", role: "owner" },
+        { user_id: "user-456", email: "bob@example.com", role: "editor" },
+      ],
+      expenses: [
+        {
+          id: "exp-shared-1",
+          user_id: "user-123",
+          user_name: "Test User",
+          paidBy: "user-123",
+          paidByName: "Test User",
+          splitWith: ["user-123", "user-456"],
+          amount: 1000,
+          currency: Currency.TWD,
+          category: "Food",
+          date: "2026-10-01",
+          note: "Wagyu Yakiniku",
+          exchangeRate: 1,
+        },
+      ],
+    };
+
+    render(
+      <LocalizationProvider>
+        <Expenses
+          trip={sharedTrip}
+          currentUser={mockUser}
+          onUpdate={vi.fn()}
+        />
+      </LocalizationProvider>
+    );
+
+    const settlementCard = screen.getByTestId("splitwise-settlement-card");
+    expect(settlementCard).toBeInTheDocument();
+    expect(settlementCard.textContent).toContain("NT$ 500");
+    expect(settlementCard.textContent).toContain("bob");
+  });
 });
