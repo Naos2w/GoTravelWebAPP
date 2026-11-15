@@ -5,7 +5,7 @@ import {
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
   Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation,
-  Sun, Cloud, CloudRain, Snowflake, CloudLightning
+  Sun, Cloud, CloudRain, Snowflake, CloudLightning, GripVertical
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
@@ -13,6 +13,7 @@ import { supabase } from '../services/storageService';
 import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
 import { DailyWeatherForecast, fetchDayWeather } from '../services/weatherService';
+import { reorderAnchorsWithSmartTime, recalculateTransportSegment } from '../services/itineraryReorderService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -289,23 +290,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   // Recalculates transport times/durations based on neighbor items
   const recalculateTransport = (prev: ItineraryItem, transport: ItineraryItem, next: ItineraryItem): ItineraryItem => {
-     if (transport.transportType === 'Flight') return transport; // Flights are static
-     
-     const [h1, m1] = prev.time.split(':').map(Number);
-     const [h2, m2] = next.time.split(':').map(Number);
-     
-     // Calculate mid-point time
-     const midMin = Math.floor(((h1 * 60 + m1) + (h2 * 60 + m2)) / 2);
-     const midTime = `${Math.floor(midMin/60).toString().padStart(2, '0')}:${(midMin%60).toString().padStart(2, '0')}`;
-     
-     // Calculate duration
-     const durationNote = DateTimeUtils.getDuration(prev.time, next.time);
-
-     return {
-         ...transport,
-         time: midTime,
-         note: durationNote
-     };
+     return recalculateTransportSegment(prev, transport, next);
   };
 
   const maintainListIntegrity = (items: ItineraryItem[]): ItineraryItem[] => {
@@ -457,91 +442,52 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     }
   };
 
+  const applySmartReorder = async (movedId: string, targetId: string, direction: 'above' | 'below') => {
+    if (isGuest || !currentDay) return;
+    const movedItem = displayItems.find((i) => i.id === movedId);
+    if (!movedItem || movedItem.transportType === 'Flight') return;
+
+    const updatedItems = await reorderAnchorsWithSmartTime(
+      displayItems,
+      movedId,
+      targetId,
+      direction,
+      (from, to, tType) =>
+        from.lat != null && from.lng != null && to.lat != null && to.lng != null
+          ? fetchRouteMins(from.lat, from.lng, to.lat, to.lng, tType)
+          : Promise.resolve(30)
+    );
+
+    const newDays = [...days];
+    const updatedMoved = updatedItems.find((i) => i.id === movedId) || movedItem;
+    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+    scrollAnchorRef.current = movedId;
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", updatedMoved);
+  };
+
   const handleDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     setDragOverItemId(null);
     if (isGuest || !draggedItemId || draggedItemId === targetId) {
-       setDraggedItemId(null);
-       return;
-    }
-
-    const currentItems = [...displayItems];
-    const draggedIndex = currentItems.findIndex(i => i.id === draggedItemId);
-    const targetIndex = currentItems.findIndex(i => i.id === targetId);
-
-    if (draggedIndex === -1 || targetIndex === -1) {
       setDraggedItemId(null);
       return;
     }
 
-    const draggedItem = currentItems[draggedIndex];
-    currentItems.splice(draggedIndex, 1);
-    currentItems.splice(targetIndex, 0, draggedItem);
-
-    // Adjust time to maintain DB logical order leveraging OSRM!
-    const anchors = currentItems.filter(i => i.type !== 'Transport');
-    const newIndex = anchors.findIndex(i => i.id === draggedItemId);
-
-    if (newIndex > -1) {
-      const prevAnchor = newIndex > 0 ? anchors[newIndex - 1] : null;
-
-      if (prevAnchor) {
-         let currentCursorMins = 0;
-         for (let i = newIndex; i < anchors.length; i++) {
-            const anchor = anchors[i];
-            const prev = i === newIndex ? prevAnchor : anchors[i - 1];
-            
-            let travelMins = 30;
-            if (prev.lat != null && prev.lng != null && anchor.lat != null && anchor.lng != null) {
-                travelMins = await fetchRouteMins(prev.lat, prev.lng, anchor.lat, anchor.lng);
-            }
-            
-            if (i === newIndex) {
-               const [ph, pm] = prev.time.split(':').map(Number);
-               let pMins = ph * 60 + pm;
-               // dragged item's time = prev time + travel time (rounded to 5-min grid)
-               currentCursorMins = roundTo5(pMins + travelMins);
-               const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
-               const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
-               anchor.time = `${nextHStr}:${nextMStr}`;
-            } else {
-               const [ah, am] = anchor.time.split(':').map(Number);
-               let aMins = ah * 60 + am;
-               // Cascade shift if the newly pushed item overlaps with the next anchor logically.
-               if (aMins < currentCursorMins + travelMins) {
-                  currentCursorMins = roundTo5(currentCursorMins + travelMins);
-                  const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
-                  const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
-                  anchor.time = `${nextHStr}:${nextMStr}`;
-               } else {
-                  break; // cascade ends, no collisions ahead.
-               }
-            }
-         }
-      } else {
-         // Inserted as First Item. Inherit next item's start offset backwards.
-         const nextAnchor = anchors[newIndex + 1];
-         if (nextAnchor) {
-            let travelMins = 30;
-            if (draggedItem.lat != null && draggedItem.lng != null && nextAnchor.lat != null && nextAnchor.lng != null) {
-               travelMins = await fetchRouteMins(draggedItem.lat, draggedItem.lng, nextAnchor.lat, nextAnchor.lng);
-            }
-            const [nh, nm] = nextAnchor.time.split(':').map(Number);
-            let nMins = nh * 60 + nm;
-            // Round backwards to nearest 5-min boundary
-            let startMins = Math.floor((nMins - travelMins) / 5) * 5;
-            if (startMins < 0) startMins += 1440;
-            draggedItem.time = `${Math.floor(startMins / 60).toString().padStart(2, '0')}:${(startMins % 60).toString().padStart(2, '0')}`;
-         }
-      }
-    }
-
-    const updatedItems = maintainListIntegrity(currentItems);
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
-
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", draggedItem);
+    const draggedId = draggedItemId;
     setDraggedItemId(null);
+    await applySmartReorder(draggedId, targetId, dragDirection);
+  };
+
+  const handleMoveStop = async (itemId: string, dir: 'up' | 'down') => {
+    if (isGuest) return;
+    const anchors = displayItems.filter((i) => i.type !== 'Transport');
+    const idx = anchors.findIndex((i) => i.id === itemId);
+    if (idx === -1) return;
+
+    const neighbor = dir === 'up' ? anchors[idx - 1] : anchors[idx + 1];
+    if (!neighbor || neighbor.transportType === 'Flight') return;
+
+    await applySmartReorder(itemId, neighbor.id, dir === 'up' ? 'above' : 'below');
   };
 
   const saveTransportNote = (id: string) => {
@@ -956,6 +902,10 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
               
               const isHighlighted = highlightedId === item.id;
+              const anchorsOnly = displayItems.filter(i => i.type !== 'Transport');
+              const anchorPos = anchorsOnly.findIndex(i => i.id === item.id);
+              const canMoveUp = !isGuest && !isTransport && !isFlight && anchorPos > 0 && anchorsOnly[anchorPos - 1]?.transportType !== 'Flight';
+              const canMoveDown = !isGuest && !isTransport && !isFlight && anchorPos > -1 && anchorPos < anchorsOnly.length - 1 && anchorsOnly[anchorPos + 1]?.transportType !== 'Flight';
 
               return (
                 <React.Fragment key={item.id}>
@@ -1042,7 +992,30 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                       }`}
                     >
                       <div className="flex items-center gap-2 sm:gap-4">
-                        <div className="shrink-0 w-10 sm:w-14">
+                        <div className="shrink-0 w-12 sm:w-16 flex items-center gap-1">
+                          {!isGuest && !isFlight && (
+                            <div className="flex flex-col items-center shrink-0">
+                              <button
+                                type="button"
+                                disabled={!canMoveUp}
+                                onClick={(e) => { e.stopPropagation(); handleMoveStop(item.id, 'up'); }}
+                                aria-label={isEn ? `Move ${item.placeName} up` : `上移 ${item.placeName}`}
+                                className="p-0.5 text-slate-400 hover:text-primary disabled:opacity-20 cursor-pointer disabled:cursor-default transition-colors"
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <GripVertical size={11} className="hidden sm:block text-slate-300 dark:text-slate-600 cursor-grab active:cursor-grabbing" />
+                              <button
+                                type="button"
+                                disabled={!canMoveDown}
+                                onClick={(e) => { e.stopPropagation(); handleMoveStop(item.id, 'down'); }}
+                                aria-label={isEn ? `Move ${item.placeName} down` : `下移 ${item.placeName}`}
+                                className="p-0.5 text-slate-400 hover:text-primary disabled:opacity-20 cursor-pointer disabled:cursor-default transition-colors"
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                            </div>
+                          )}
                           <div className={`font-mono font-black text-[10px] sm:text-sm ${isFlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>
                             {item.time}
                           </div>
