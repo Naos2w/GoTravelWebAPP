@@ -36,6 +36,12 @@ import {
   isSupabaseConfigured,
 } from "./services/authService";
 import {
+  AppView,
+  parseRouteFromLocation,
+  buildTripShareUrl,
+  syncUrlWithRoute,
+} from "./services/routerService";
+import {
   useTranslation,
   LocalizationProvider,
   translations,
@@ -51,6 +57,7 @@ import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
 import { LoginModal, LoginReason } from "./components/LoginModal";
 import { DeleteTripModal } from "./components/DeleteTripModal";
+import { ExportModal } from "./components/ExportModal";
 import { TripCard, getTripTiming } from "./components/TripCard";
 import { APP_VERSION } from "./services/version";
 
@@ -96,6 +103,9 @@ import {
   Search,
   Compass,
   Filter,
+  FileText,
+  MoreHorizontal,
+  User as UserIcon,
 } from "lucide-react";
 import {
   PieChart,
@@ -129,13 +139,13 @@ const getGradient = (str: string) => {
   for (let i = 0; i < str.length; i++)
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   const colors = [
-    "from-blue-500 to-cyan-400",
-    "from-purple-500 to-indigo-400",
-    "from-rose-500 to-orange-400",
-    "from-emerald-500 to-teal-400",
-    "from-amber-500 to-yellow-400",
-    "from-fuchsia-500 to-pink-400",
-    "from-sky-500 to-blue-400",
+    "from-[#0A84FF] via-[#0051D5] to-[#002B7F]",
+    "from-[#5E5CE6] via-[#3634A3] to-[#1D1B5E]",
+    "from-[#00C7BE] via-[#007AFF] to-[#003B80]",
+    "from-[#FF6B4A] via-[#D9381E] to-[#6E1409]",
+    "from-[#10B981] via-[#059669] to-[#064E3B]",
+    "from-[#8B5CF6] via-[#6D28D9] to-[#2E1065]",
+    "from-[#0284C7] via-[#1D4ED8] to-[#1E1B4B]",
   ];
   return colors[Math.abs(hash) % colors.length];
 };
@@ -147,7 +157,7 @@ const getGradient = (str: string) => {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<"landing" | "list" | "detail">("landing");
+  const [view, setView] = useState<AppView>("landing");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -171,6 +181,7 @@ const App: React.FC = () => {
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [tempBudget, setTempBudget] = useState("");
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [pendingTripId, setPendingTripId] = useState<string | null>(null);
   const [loginReason, setLoginReason] = useState<LoginReason>(null);
@@ -179,6 +190,19 @@ const App: React.FC = () => {
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
   const [isDeletingTrip, setIsDeletingTrip] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState<"desktop" | "mobile" | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileProfileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileDockNavRef = useRef<HTMLElement>(null);
+  const [dockDragSlot, setDockDragSlot] = useState<number | null>(null);
+  const [tabSlideDir, setTabSlideDir] = useState<"left" | "right">("right");
+  const prevTabIndexRef = useRef<number>(0);
+  const dockScrubStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    moved: boolean;
+  } | null>(null);
+  const lastScrubEndTimeRef = useRef<number>(0);
 
   // Automatically reset edit mode if all trips are deleted or if leaving list view
   useEffect(() => {
@@ -186,6 +210,37 @@ const App: React.FC = () => {
       setIsEditMode(false);
     }
   }, [trips.length, view, isEditMode]);
+
+  // Close profile menu when view, active trip, or active tab changes (unless actively scrubbing dock)
+  useEffect(() => {
+    if (!dockScrubStateRef.current?.moved) {
+      setProfileMenuOpen(null);
+    }
+  }, [view, currentTripId, activeTab]);
+
+  // Dismiss profile dropdown on outside click or Escape key press
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      const insideDesktop = profileMenuRef.current && profileMenuRef.current.contains(target);
+      const insideMobile = mobileProfileMenuRef.current && mobileProfileMenuRef.current.contains(target);
+      if (!insideDesktop && !insideMobile) {
+        setProfileMenuOpen(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setProfileMenuOpen(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [profileMenuOpen]);
 
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
@@ -655,37 +710,40 @@ const App: React.FC = () => {
     };
   }, [user, currentTripId]);
 
-  // View persistence and handle share links from URL
+  // View persistence and URL path synchronization (/, /trips, /trips/:tripId)
   useEffect(() => {
     // CRITICAL FIX: Do not touch the URL until loading is complete to prevent clearing invite links
     if (isLoading) return;
 
-    const url = new URL(window.location.href);
-
     if (view === "detail" && currentTripId) {
       sessionStorage.setItem("currentTripId", currentTripId);
-      url.searchParams.set("tripId", currentTripId);
-      window.history.replaceState({}, "", url);
+      const mode = window.location.pathname === "/trips" ? "push" : "replace";
+      syncUrlWithRoute("detail", currentTripId, mode);
     } else if (view === "list") {
       sessionStorage.removeItem("currentTripId");
-      if (url.searchParams.has("tripId")) {
-        url.searchParams.delete("tripId");
-        window.history.replaceState({}, "", url);
+      const mode = window.location.pathname.startsWith("/trips/") ? "push" : "replace";
+      syncUrlWithRoute("list", null, mode);
+    } else if (view === "landing") {
+      sessionStorage.removeItem("currentTripId");
+      if (!window.location.hash.includes("access_token")) {
+        syncUrlWithRoute("landing", null, "replace");
       }
     }
   }, [currentTripId, view, isLoading]);
 
-  // Handle browser back button (Popstate)
+  // Handle browser back/forward button (Popstate)
   useEffect(() => {
     const handlePopState = () => {
-      const url = new URL(window.location.href);
-      const urlTripId = url.searchParams.get("tripId");
-      if (!urlTripId && view === "detail") {
-        setView("list");
-        setCurrentTripId(null);
-      } else if (urlTripId && view === "list") {
-        setCurrentTripId(urlTripId);
+      const route = parseRouteFromLocation();
+      if (route.view === "detail" && route.tripId) {
+        setCurrentTripId(route.tripId);
         setView("detail");
+      } else if (route.view === "list") {
+        setCurrentTripId(null);
+        setView(userRef.current ? "list" : "landing");
+      } else {
+        setCurrentTripId(null);
+        setView("landing");
       }
     };
     window.addEventListener("popstate", handlePopState);
@@ -701,9 +759,9 @@ const App: React.FC = () => {
     const parsedUser = parseSupabaseUser(supabaseUser);
     setSafeUser(parsedUser);
 
-    // Read the URL param directly here, or restore from sessionStorage deep link
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlTripId = urlParams.get("tripId") || consumeRedirectTripId();
+    // Read target tripId from /trips/:tripId, legacy ?tripId=..., or sessionStorage deep link
+    const parsedRoute = parseRouteFromLocation();
+    const urlTripId = parsedRoute.tripId || consumeRedirectTripId();
 
     if (urlTripId) {
       // Do not flash full-screen loading spinner if the user is already actively viewing this trip
@@ -726,18 +784,12 @@ const App: React.FC = () => {
               const exists = prev.some((t) => t.id === trip.id);
               return exists ? prev : [trip, ...prev];
             });
-            // Keep ?tripId in URL bar so user permalinks and reloads work seamlessly
-            if (!window.location.search.includes(urlTripId)) {
-              window.history.replaceState(
-                null,
-                "",
-                `${window.location.pathname}?tripId=${urlTripId}`
-              );
-            }
+            // Keep canonical /trips/:tripId in URL bar (upgrades legacy ?tripId=... automatically)
+            syncUrlWithRoute("detail", urlTripId, "replace");
             setView("detail");
           } else {
             // 有登入但無權限：清除無效參數，跳出訊息，跳轉到自己的行程頁面
-            window.history.replaceState(null, "", window.location.pathname);
+            syncUrlWithRoute("list", null, "replace");
             setNotification({
               message:
                 translations[language].noPermissionRedirect ||
@@ -748,7 +800,7 @@ const App: React.FC = () => {
           }
         } else {
           // 找不到此行程：清除無效參數，跳出訊息，跳轉到自己的行程頁面
-          window.history.replaceState(null, "", window.location.pathname);
+          syncUrlWithRoute("list", null, "replace");
           setNotification({
             message:
               translations[language].tripNotFoundRedirect ||
@@ -758,12 +810,13 @@ const App: React.FC = () => {
           setView("list");
         }
       } catch (e) {
-        window.history.replaceState(null, "", window.location.pathname);
+        syncUrlWithRoute("list", null, "replace");
         setView("list");
       } finally {
         setIsLoading(false);
       }
     } else {
+      syncUrlWithRoute("list", null, "replace");
       setView("list");
       setIsLoading(false);
     }
@@ -794,12 +847,12 @@ const App: React.FC = () => {
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
           // 2. 沒登入：跳出訊息提示，跳轉到登入主頁 (landing)
-          const params = new URLSearchParams(window.location.search);
-          const urlTripId = params.get("tripId");
+          const parsedRoute = parseRouteFromLocation();
+          const urlTripId = parsedRoute.tripId;
           if (urlTripId) {
             saveRedirectTripId(urlTripId);
             setPendingTripId(urlTripId);
-            window.history.replaceState(null, "", window.location.pathname);
+            syncUrlWithRoute("landing", null, "replace");
             setNotification({
               message:
                 translations[language].loginRequiredRedirect ||
@@ -807,6 +860,9 @@ const App: React.FC = () => {
               type: "info",
             });
             setLoginReason("trip_access");
+            setIsLoginModalOpen(true);
+          } else if (parsedRoute.view === "list") {
+            syncUrlWithRoute("landing", null, "replace");
             setIsLoginModalOpen(true);
           }
 
@@ -849,10 +905,11 @@ const App: React.FC = () => {
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
         setSafeUser(parseSupabaseUser(session.user));
       } else if (event === "SIGNED_OUT") {
-        window.history.replaceState(null, "", window.location.pathname);
-        if (currentTripId) {
-          saveRedirectTripId(currentTripId);
-          setPendingTripId(currentTripId);
+        const activeTripId = currentTripIdRef.current;
+        syncUrlWithRoute("landing", null, "replace");
+        if (activeTripId) {
+          saveRedirectTripId(activeTripId);
+          setPendingTripId(activeTripId);
         }
         setUser(null);
         setView("landing");
@@ -1056,7 +1113,9 @@ const App: React.FC = () => {
     }
 
     if (action === "ADD_CHECKLIST_ITEM" && payload) {
-       addChecklistItem(payload, updatedTrip.id)
+       const items = Array.isArray(payload) ? payload : [payload];
+       if (items.length === 0) return;
+       Promise.all(items.map((item) => addChecklistItem(item, updatedTrip.id)))
           .catch(err => {
               console.error("[App] Add checklist item failed:", err);
               setTrips(previousTrips);
@@ -1334,6 +1393,97 @@ const App: React.FC = () => {
       alert: hasMissingFlightInfo,
     },
   ];
+  const activeDockIndex =
+    profileMenuOpen === "mobile"
+      ? tabs.length
+      : Math.max(0, tabs.findIndex((t) => t.id === activeTab));
+
+  const selectTabWithDirection = (nextTabId: typeof activeTab) => {
+    const nextIdx = tabs.findIndex((t) => t.id === nextTabId);
+    if (nextIdx !== -1 && nextIdx !== prevTabIndexRef.current) {
+      setTabSlideDir(nextIdx > prevTabIndexRef.current ? "right" : "left");
+      prevTabIndexRef.current = nextIdx;
+    }
+    setActiveTab(nextTabId);
+  };
+
+  useEffect(() => {
+    const idx = tabs.findIndex((t) => t.id === activeTab);
+    if (idx !== -1) {
+      prevTabIndexRef.current = idx;
+    }
+  }, [activeTab]);
+
+  const effectiveDockSlot = dockDragSlot !== null ? dockDragSlot : activeDockIndex;
+  const screenFollowOffsetPx =
+    dockDragSlot !== null
+      ? -(dockDragSlot - Math.round(dockDragSlot)) * 56
+      : 0;
+  const tabTransitionClass =
+    tabSlideDir === "right" ? "animate-tab-slide-right" : "animate-tab-slide-left";
+
+  const handleDockPointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    dockScrubStateRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      moved: false,
+    };
+  };
+
+  const handleDockPointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    const scrub = dockScrubStateRef.current;
+    if (!scrub || scrub.pointerId !== e.pointerId || !mobileDockNavRef.current) return;
+    if (!scrub.moved) {
+      if (Math.abs(e.clientX - scrub.startX) <= 4) return;
+      scrub.moved = true;
+      try {
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore if pointer capture is unsupported in test/browser environment
+      }
+    }
+    const rect = mobileDockNavRef.current.getBoundingClientRect();
+    const paddingX = 6;
+    const totalSlots = tabs.length + 1;
+    const slotWidth = Math.max(1, (rect.width - paddingX * 2) / totalSlots);
+    const rawSlot = (e.clientX - rect.left - paddingX) / slotWidth - 0.5;
+    const minSlot = isPricePending ? 4 : 0;
+    const clampedSlot = Math.max(minSlot, Math.min(totalSlots - 1, rawSlot));
+    setDockDragSlot(clampedSlot);
+
+    const nearestIdx = Math.round(clampedSlot);
+    if (nearestIdx < tabs.length) {
+      const targetTab = tabs[nearestIdx];
+      const disabled = isPricePending && targetTab.id !== "flights";
+      if (profileMenuOpen === "mobile") {
+        setProfileMenuOpen(null);
+      }
+      if (!disabled && activeTab !== targetTab.id) {
+        selectTabWithDirection(targetTab.id as any);
+      }
+    } else if (nearestIdx === tabs.length) {
+      if (profileMenuOpen !== "mobile") {
+        setProfileMenuOpen("mobile");
+      }
+    }
+  };
+
+  const handleDockPointerUpOrCancel = (e: React.PointerEvent<HTMLElement>) => {
+    const scrub = dockScrubStateRef.current;
+    if (!scrub || scrub.pointerId !== e.pointerId) return;
+    if (scrub.moved) {
+      try {
+        if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore if pointer capture is unsupported
+      }
+      lastScrubEndTimeRef.current = Date.now();
+      setDockDragSlot(null);
+    }
+    dockScrubStateRef.current = null;
+  };
   const spentTotal = currentTrip ? calculateTripTotal(currentTrip) : 0;
   const budgetLimit = currentTrip?.flights?.[0]?.budget || 50000;
   const budgetPercent = Math.min(100, (spentTotal / budgetLimit) * 100);
@@ -1406,6 +1556,15 @@ const App: React.FC = () => {
     }));
   }, [currentTrip, t]);
 
+  const sortedChartData = useMemo(
+    () => [...chartData].sort((a, b) => b.value - a.value),
+    [chartData]
+  );
+  const chartTotal = useMemo(
+    () => sortedChartData.reduce((sum, item) => sum + item.value, 0),
+    [sortedChartData]
+  );
+
 
 
   const checklistStats = useMemo(() => {
@@ -1474,83 +1633,232 @@ const App: React.FC = () => {
     };
   }, [trips, tripSearchQuery, tripFilter]);
 
-  const GlobalNav = () => (
-    <div className="flex items-center gap-1">
+  const ProfileDropdownContent = () => (
+    <>
+      {user && (
+        <>
+          <div className="px-3 py-2.5 flex items-center gap-2.5">
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name || "User"}
+                referrerPolicy="no-referrer"
+                className="w-9 h-9 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm">
+                {user.name ? user.name[0].toUpperCase() : <UserIcon size={18} />}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-bold truncate text-slate-900 dark:text-white">
+                {user.name || "User"}
+              </div>
+              {user.email && (
+                <div className="text-[11px] text-slate-400 truncate">
+                  {user.email}
+                </div>
+              )}
+              {view === "detail" && currentTrip && (
+                <div className="mt-0.5 inline-block text-[9px] font-bold text-primary uppercase tracking-wider">
+                  {isCreator ? t("permissionEditor") : t("permissionGuest")}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+        </>
+      )}
+
+      {/* Theme Toggle */}
       <button
+        type="button"
+        role="menuitem"
         onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
-        {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+        <div className="flex items-center gap-2.5">
+          {theme === "light" ? (
+            <Moon size={15} className="text-slate-500 dark:text-slate-400" />
+          ) : (
+            <Sun size={15} className="text-amber-400" />
+          )}
+          <span>{t("theme")}</span>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">
+          {theme === "dark" ? t("themeDark") : t("themeLight")}
+        </span>
       </button>
+
+      {/* Language Toggle */}
       <button
+        type="button"
+        role="menuitem"
         onClick={() => setLanguage(language === "zh" ? "en" : "zh")}
-        className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-200"
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
       >
-        <Languages size={18} />
+        <div className="flex items-center gap-2.5">
+          <Languages size={15} className="text-slate-500 dark:text-slate-400" />
+          <span>{t("language")}</span>
+        </div>
+        <span className="text-[11px] font-semibold text-slate-400">
+          {language === "zh" ? "繁體中文" : "English"}
+        </span>
       </button>
-    </div>
+
+      {/* Export Trip (Detail View only) */}
+      {view === "detail" && currentTrip && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            setProfileMenuOpen(null);
+            setIsExportModalOpen(true);
+          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <FileText size={15} className="text-amber-500" />
+            <span>{t("exportTrip")}</span>
+          </div>
+          <span className="text-[10px] font-medium text-slate-400">
+            iOS / 日曆
+          </span>
+        </button>
+      )}
+
+      {user ? (
+        <>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setProfileMenuOpen(null);
+              handleLogout();
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+          >
+            <LogOut size={15} />
+            <span>{t("logout")}</span>
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="h-px my-1 bg-black/[0.06] dark:bg-white/[0.08]" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setProfileMenuOpen(null);
+              setIsLoginModalOpen(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+          >
+            <UserIcon size={15} />
+            <span>{t("loginToJoin")}</span>
+          </button>
+        </>
+      )}
+    </>
   );
 
   const UserHeaderProfile = () => {
-    if (!user) {
-      return (
-        <div className="flex items-center gap-2 pl-3 border-l border-black/[0.06] dark:border-white/10">
-          <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-            {t("guestPreview")}
-          </span>
-          <button
-            onClick={() => setIsLoginModalOpen(true)}
-            className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-sm hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>{t("loginToJoin")}</span>
-          </button>
-        </div>
-      );
-    }
+    const isMenuOpen = profileMenuOpen === "desktop";
     return (
-      <div className="flex items-center gap-2.5 pl-3 border-l border-black/[0.06] dark:border-white/10">
-        <img
-          src={user.picture}
-          referrerPolicy="no-referrer"
-          className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 object-cover ring-2 ring-white dark:ring-slate-700 shadow-sm"
-        />
-        <div className="text-right hidden sm:block">
-          <div className="text-xs font-bold truncate max-w-[100px] text-slate-900 dark:text-slate-100">
-            {user.name ? user.name.split(" ")[0] : "User"}
+      <div className="relative flex items-center" ref={profileMenuRef}>
+        {!user ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((prev) => (prev === "desktop" ? null : "desktop"))}
+              aria-label={t("more")}
+              aria-expanded={isMenuOpen}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all cursor-pointer active:scale-95"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsLoginModalOpen(true)}
+              className="bg-primary hover:bg-primary/90 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-sm hover:scale-105 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>{t("loginToJoin")}</span>
+            </button>
           </div>
-          {view === "detail" && currentTrip && (
-            <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
-              {isCreator ? t("permissionEditor") : t("permissionGuest")}
-            </div>
-          )}
-        </div>
-        <button
-          onClick={handleLogout}
-          aria-label="Logout"
-          className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cursor-pointer"
-        >
-          <LogOut size={16} />
-        </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen((prev) => (prev === "desktop" ? null : "desktop"))}
+            aria-label={user.name || "User Profile"}
+            aria-expanded={isMenuOpen}
+            className="flex items-center gap-2 rounded-full p-0.5 hover:ring-2 hover:ring-black/5 dark:hover:ring-white/10 transition-all cursor-pointer active:scale-95"
+          >
+            {user.picture ? (
+              <img
+                src={user.picture}
+                alt={user.name || "User"}
+                referrerPolicy="no-referrer"
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-black/10 dark:ring-white/20 shadow-sm"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs ring-1 ring-black/10 dark:ring-white/20">
+                {user.name ? user.name[0].toUpperCase() : <UserIcon size={16} />}
+              </div>
+            )}
+          </button>
+        )}
+
+        {/* Unified iOS / Threads Liquid Glass Dropdown Menu */}
+        {isMenuOpen && (
+          <div
+            className="absolute right-0 top-full mt-2.5 w-64 rounded-2xl p-1.5 shadow-2xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl text-slate-900 dark:text-slate-100 z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right select-none"
+            role="menu"
+          >
+            <ProfileDropdownContent />
+          </div>
+        )}
       </div>
     );
   };
 
   const MobileHero = () => {
+    const departureCode = allFlights[0]?.outbound?.departureAirport || "";
+    const routeBadgeLabel =
+      departureCode && arrivalCode
+        ? `${departureCode} ✈ ${arrivalCode}`
+        : arrivalCode || t("destination");
+    const statusPillLabel =
+      displayDays > 0
+        ? `${displayDays} ${t("daysLeft")}`
+        : t("statusOngoing");
+
     return (
       <div className="md:hidden space-y-4 mb-6">
-        <div className="w-full rounded-[32px] p-8 shadow-ios border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-16 -mt-16" />
-          <div className="relative z-10 flex flex-col gap-2">
-            <div className="flex justify-between items-start mb-1">
-              <div className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">
-                {arrivalCode || t("destination")}
-              </div>
+        <div className="w-full rounded-[28px] p-7 shadow-ios ios27-card relative overflow-hidden aviation-grid-bg">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+          {arrivalCode && (
+            <div
+              aria-hidden="true"
+              className="absolute right-4 top-4 text-6xl font-mono font-black tracking-tighter text-slate-900/[0.05] dark:text-white/[0.06] select-none pointer-events-none leading-none"
+            >
+              {arrivalCode}
             </div>
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
+          )}
+          <div className="relative z-10 flex flex-col gap-2">
+            <div className="flex justify-between items-center gap-2 mb-1">
+              <div className="text-[10px] font-mono font-semibold text-primary uppercase tracking-[0.18em]">
+                {routeBadgeLabel}
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20 tabular-nums shrink-0">
+                {statusPillLabel}
+              </span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               {currentTrip?.destination}
             </h2>
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">
-              <Calendar size={12} /> {currentTrip?.startDate} —{" "}
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[11px] font-mono font-semibold tracking-wide mt-1 tabular-nums">
+              <Calendar size={12} className="text-primary" /> {currentTrip?.startDate} —{" "}
               {currentTrip?.endDate}
             </div>
             {/* Mobile Flight Numbers */}
@@ -1566,7 +1874,7 @@ const App: React.FC = () => {
                 })
                 .flat()
                 .map((item, idx) => (
-                  <div key={idx} className={`text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${item.isReturn ? 'bg-slate-100 dark:bg-slate-700 text-slate-400' : 'bg-primary/10 text-primary'}`}>
+                  <div key={idx} className={`text-[10px] font-mono font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 border transition-all tabular-nums ${item.isReturn ? 'bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 border-slate-200/60 dark:border-white/10' : 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/20'}`}>
                      <Plane size={10} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
                   </div>
                 ))}
@@ -1574,17 +1882,17 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-[32px] p-6 shadow-ios border border-slate-100 dark:border-slate-700 space-y-6">
+        <div className="ios27-card rounded-[28px] p-6 shadow-ios space-y-5">
           <div>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                 {t("countdown")}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {displayDays > 0 ? displayDays : 0} {t("daysLeft")}
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full"
                 style={{ width: `${countdownPercent}%` }}
@@ -1600,36 +1908,40 @@ const App: React.FC = () => {
             }
           >
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1">
                 {t("budgetStatus")} {!isGuest && <Edit2 size={10} />}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {(spentTotal / 1000).toFixed(1)}k /{" "}
                 {(budgetLimit / 1000).toFixed(1)}k ({Math.round(budgetPercent)}
                 %)
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${
-                  spentTotal > budgetLimit ? "bg-red-500" : "bg-indigo-500"
+                  spentTotal > budgetLimit
+                    ? "bg-rose-500"
+                    : budgetPercent > 80
+                    ? "bg-amber-500"
+                    : "bg-primary"
                 }`}
-                style={{ width: `${budgetPercent}%` }}
+                style={{ width: `${Math.min(budgetPercent, 100)}%` }}
               />
             </div>
           </div>
           <div>
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                 {t("packingProgress")}
               </span>
-              <span className="text-xs font-black text-slate-900 dark:text-white">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white tabular-nums">
                 {packingPercent}%
               </span>
             </div>
-            <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div className="h-2 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-green-500 rounded-full"
+                className="h-full bg-emerald-500 rounded-full"
                 style={{ width: `${packingPercent}%` }}
               />
             </div>
@@ -1655,13 +1967,13 @@ const App: React.FC = () => {
                       "_blank"
                     )
                   }
-                  className="bg-white dark:bg-slate-800 rounded-2xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-[0.98] transition-all"
+                  className="ios27-card rounded-2xl p-4 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all cursor-pointer"
                 >
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       i === 0
-                        ? "bg-primary/10 text-primary"
-                        : "bg-slate-50 dark:bg-slate-700 text-slate-400"
+                        ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                        : "bg-slate-100 dark:bg-white/10 text-slate-400 dark:text-slate-300"
                     }`}
                   >
                     <MapPin size={18} />
@@ -1674,7 +1986,7 @@ const App: React.FC = () => {
                       {item.placeName}
                     </div>
                   </div>
-                  <div className="text-slate-300">
+                  <div className="text-slate-300 dark:text-slate-500">
                     <Map size={16} />
                   </div>
                 </div>
@@ -1682,6 +1994,100 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Mobile Spending Breakdown & Packing Progress Widgets */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          <div className="ios27-card rounded-[28px] p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
+                <PieChartIcon size={12} /> {t("breakdown")}
+              </span>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                NT$ {Math.round(spentTotal).toLocaleString()}
+              </span>
+            </div>
+            {chartData.length > 0 ? (
+              <div className="flex items-center gap-3">
+                <div className="h-28 w-28 shrink-0 flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={28}
+                        outerRadius={44}
+                        paddingAngle={4}
+                        dataKey="value"
+                        nameKey="displayName"
+                      >
+                        {chartData.map((e, i) => (
+                          <Cell
+                            key={`cell-m-${i}`}
+                            fill={CATEGORY_UI[e.category]?.hexColor || CATEGORY_UI["Other"].hexColor}
+                          />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                  {sortedChartData.slice(0, 4).map((entry) => {
+                    const pct = chartTotal > 0 ? Math.round((entry.value / chartTotal) * 100) : 0;
+                    const color = CATEGORY_UI[entry.category]?.hexColor || CATEGORY_UI["Other"].hexColor;
+                    return (
+                      <div key={entry.category} className="flex items-center justify-between gap-2 text-[11px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className="font-semibold text-slate-700 dark:text-slate-200 truncate">
+                            {entry.displayName}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="h-28 w-full flex items-center justify-center text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                {t("noData")}
+              </div>
+            )}
+          </div>
+
+          <div className="ios27-card rounded-[28px] p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
+                <CheckSquare size={12} /> {t("checklistSummary")}
+              </span>
+              <span className="text-xs font-mono font-bold text-emerald-500 tabular-nums">
+                {packingPercent}%
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {checklistStats.slice(0, 3).map((stat) => (
+                <div key={stat.category} className="flex items-center gap-2">
+                  <div className="w-16 text-[10px] font-semibold text-slate-500 dark:text-slate-400 truncate uppercase">
+                    {stat.category}
+                  </div>
+                  <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full"
+                      style={{ width: `${(stat.completed / stat.total) * 100}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] font-mono font-bold text-slate-400 w-7 text-right tabular-nums">
+                    {stat.completed}/{stat.total}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1704,7 +2110,7 @@ const App: React.FC = () => {
         <div
           className={`min-h-screen transition-all duration-500 ${
             theme === "dark"
-              ? "dark bg-[#1C1C1E] text-slate-100"
+              ? "dark bg-[#060709] text-slate-100"
               : "bg-[#FBFBFD] text-slate-900"
           }`}
         >
@@ -1715,53 +2121,148 @@ const App: React.FC = () => {
               onClose={() => setNotification(null)}
             />
           )}
-          <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center relative overflow-hidden">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] -z-10" />
-            <div className="max-w-2xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-              <div className="space-y-4">
-                <h1 className="text-6xl sm:text-8xl font-black tracking-tighter text-slate-900 dark:text-white whitespace-pre-line leading-[1.1]">
-                  {t("heroTitle")}
-                </h1>
-                <p className="text-xl sm:text-2xl text-slate-500 font-medium tracking-tight">
-                  {t("heroSubtitle")}
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-                <button
-                  onClick={handleLogin}
-                  disabled={isLoggingIn}
-                  className="bg-primary text-white px-8 py-4 sm:px-10 sm:py-5 rounded-[24px] font-black text-base sm:text-lg shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center gap-3 cursor-pointer"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <Loader2 className="animate-spin" size={22} />
-                      <span>{t("loggingIn")}</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                      </svg>
-                      <span>{t("login")}</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setIsLoginModalOpen(true)}
-                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-6 py-4 sm:px-8 sm:py-5 rounded-[24px] font-bold text-base sm:text-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Mail size={20} />
-                  <span>{t("emailLogin")}</span>
-                </button>
+          <div className="min-h-[100dvh] flex flex-col justify-between p-6 sm:p-10 relative overflow-hidden aviation-grid-bg">
+            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[640px] bg-primary/15 dark:bg-primary/20 rounded-full blur-[140px] -z-10 pointer-events-none" />
+
+            <div className="flex-1 flex items-center justify-center w-full max-w-6xl mx-auto py-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center w-full animate-in fade-in slide-in-from-bottom-8 duration-700">
+                {/* Left Column: Hero Copy & Auth Actions */}
+                <div className="lg:col-span-6 space-y-6 text-center lg:text-left">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full ios27-card text-[11px] font-semibold tracking-wider text-primary uppercase">
+                    <Plane size={13} className="shrink-0" />
+                    <span>{t("flightReadyBadge")}</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tighter text-slate-900 dark:text-white whitespace-pre-line leading-[1.08]">
+                      {t("heroTitle")}
+                    </h1>
+                    <p className="text-lg sm:text-xl text-slate-500 dark:text-slate-400 font-medium tracking-tight max-w-lg mx-auto lg:mx-0">
+                      {t("heroSubtitle")}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 pt-2">
+                    <button
+                      onClick={handleLogin}
+                      disabled={isLoggingIn}
+                      className="w-full sm:w-auto bg-primary text-white px-7 py-4 rounded-2xl font-bold text-base shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 cursor-pointer"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <Loader2 className="animate-spin" size={20} />
+                          <span>{t("loggingIn")}</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                          </svg>
+                          <span>{t("login")}</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setIsLoginModalOpen(true)}
+                      className="w-full sm:w-auto ios27-card hover:bg-slate-100/80 dark:hover:bg-white/[0.1] text-slate-700 dark:text-slate-200 px-6 py-4 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Mail size={19} />
+                      <span>{t("emailLogin")}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column: Flighty x Apple Wallet Showcase Card */}
+                <div className="lg:col-span-6 w-full max-w-md mx-auto lg:max-w-none">
+                  <div className="ios27-card rounded-[28px] p-6 sm:p-7 relative overflow-hidden space-y-5">
+                    <div className="absolute -right-12 -top-12 w-44 h-44 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+
+                    {/* Top Aviation Pass Header */}
+                    <div className="flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.08] pb-4 relative z-10">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                          <Plane size={17} />
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                            FLIGHTY PASS
+                          </div>
+                          <div className="font-mono font-bold text-sm text-slate-900 dark:text-white tabular-nums">
+                            BR198 • ON TIME
+                          </div>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        LIVE
+                      </span>
+                    </div>
+
+                    {/* Route Display */}
+                    <div className="flex items-center justify-between py-2 relative z-10">
+                      <div>
+                        <div className="text-3xl sm:text-4xl font-mono font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                          TPE
+                        </div>
+                        <div className="text-xs font-mono font-bold text-primary dark:text-sky-400 tabular-nums mt-0.5">
+                          08:50
+                        </div>
+                      </div>
+
+                      <div className="flex-1 px-4 flex flex-col items-center">
+                        <div className="w-full border-t-2 border-dashed border-slate-200 dark:border-white/[0.14] relative">
+                          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white dark:bg-[#12141C] border border-slate-200 dark:border-white/[0.14] flex items-center justify-center text-primary">
+                            <Plane size={13} className="rotate-90" />
+                          </div>
+                        </div>
+                        <div className="text-[10px] font-mono font-semibold text-slate-400 mt-3 tabular-nums">
+                          3h 25m • GATE C7
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-3xl sm:text-4xl font-mono font-extrabold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                          NRT
+                        </div>
+                        <div className="text-xs font-mono font-bold text-primary dark:text-sky-400 tabular-nums mt-0.5">
+                          13:15
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mini Bento Feature Chips */}
+                    <div className="grid grid-cols-2 gap-3 pt-1 relative z-10">
+                      <div className="ios27-subcard rounded-2xl p-3.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 mb-1">
+                          <MapPin size={11} className="text-primary" />
+                          <span>{t("itinerary")}</span>
+                        </div>
+                        <div className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                          Senso-ji • Shibuya Sky
+                        </div>
+                      </div>
+                      <div className="ios27-subcard rounded-2xl p-3.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 mb-1">
+                          <Wallet size={11} className="text-emerald-500" />
+                          <span>{t("expenses")}</span>
+                        </div>
+                        <div className="font-mono font-bold text-xs text-slate-800 dark:text-slate-100 tabular-nums">
+                          NT$ 24,800
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            <footer className="absolute bottom-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-2">
+
+            <footer className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-[0.25em] flex items-center justify-center gap-2 pt-4">
               <span>{t("appName")}</span>
               <span>•</span>
-              <span className="font-mono">v{APP_VERSION}</span>
+              <span className="font-mono tabular-nums">v{APP_VERSION}</span>
             </footer>
           </div>
           {pendingTripId && (
@@ -1807,7 +2308,7 @@ const App: React.FC = () => {
       <div
         className={`min-h-screen transition-all duration-500 ${
           theme === "dark"
-            ? "dark bg-[#1C1C1E] text-slate-100"
+            ? "dark bg-[#060709] text-slate-100"
             : "bg-[#FBFBFD] text-slate-900"
         }`}
       >
@@ -1821,7 +2322,7 @@ const App: React.FC = () => {
 
         {view === "detail" && currentTrip && (
           <div className="min-h-screen flex flex-col pb-28 sm:pb-32 md:pb-0">
-            <nav className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/[0.06] dark:border-white/[0.06] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
+            <nav className="bg-white/80 dark:bg-[#060709]/80 backdrop-blur-3xl border-b border-black/[0.06] dark:border-white/[0.08] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
               <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <button
@@ -1846,15 +2347,20 @@ const App: React.FC = () => {
                       <span className="text-[10px] font-semibold text-slate-400">
                         {currentTrip.destination}
                       </span>
-                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 rounded-full" />
+                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
                       <span className="hidden sm:flex text-[10px] font-semibold text-slate-400 items-center gap-0.5">
                         <Users size={9} /> {collaboratorCount}
+                      </span>
+                      <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>{isSyncing ? t("syncing") : (language === "zh" ? "即時同步" : "Synced")}</span>
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="hidden md:flex bg-black/[0.06] dark:bg-white/[0.08] p-1 rounded-2xl gap-0.5">
+                  <div className="hidden md:flex bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-2xl shadow-sm">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
                       const isDisabled = isPricePending && tab.id !== "flights";
@@ -1862,13 +2368,13 @@ const App: React.FC = () => {
                         <button
                           key={tab.id}
                           onClick={() =>
-                            !isDisabled && setActiveTab(tab.id as any)
+                            !isDisabled && selectTabWithDirection(tab.id as any)
                           }
                           disabled={isDisabled}
-                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-200 ${
+                          className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-300 ease-spring active:scale-95 cursor-pointer ${
                             isActive
-                              ? "bg-white dark:bg-[#3a3a3c] text-slate-900 dark:text-white shadow-sm"
-                              : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                              ? "ios27-dock-active text-primary shadow-sm"
+                              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
                           } ${
                             isDisabled ? "opacity-40 cursor-not-allowed" : ""
                           }`}
@@ -1877,7 +2383,7 @@ const App: React.FC = () => {
                           <tab.icon size={14} strokeWidth={isActive ? 2.5 : 1.8} />
                           <span className="hidden lg:inline">{tab.label}</span>
                           {tab.alert && (
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                           )}
                         </button>
                       );
@@ -1887,17 +2393,19 @@ const App: React.FC = () => {
                     onClick={() =>
                       !isGuest ? setIsShareModalOpen(true) : null
                     }
-                    className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                    className={`w-8 h-8 flex items-center justify-center rounded-full transition-all cursor-pointer ${
                       isGuest
                         ? "opacity-30 cursor-not-allowed text-slate-400"
-                        : "text-slate-400 hover:text-primary hover:bg-primary/10"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
                     }`}
                     disabled={isGuest}
+                    title={t("shareTrip")}
                   >
                     <Share2 size={18} />
                   </button>
-                  <GlobalNav />
-                  <UserHeaderProfile />
+                  <div className="hidden md:block">
+                    <UserHeaderProfile />
+                  </div>
                 </div>
               </div>
             </nav>
@@ -1921,34 +2429,55 @@ const App: React.FC = () => {
               </div>
             )}
 
-            <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1">
+            <main className="max-w-7xl mx-auto p-4 sm:p-10 w-full flex-1 overflow-x-hidden">
+              <div
+                data-testid="tab-screen-follow-wrapper"
+                style={{
+                  transform: screenFollowOffsetPx
+                    ? `translate3d(${screenFollowOffsetPx.toFixed(1)}px, 0, 0)`
+                    : undefined,
+                  transition:
+                    dockDragSlot !== null
+                      ? "transform 45ms linear"
+                      : "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+              >
               {activeTab === "dashboard" && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-700">
+                <div className={`space-y-6 ${tabTransitionClass}`}>
                   <MobileHero />
-                  <div className="hidden md:grid grid-cols-12 grid-rows-2 gap-6 h-[700px]">
-                    <div
-                      className={`col-span-6 row-span-1 rounded-[48px] overflow-hidden relative group shadow-ios-lg p-12 flex flex-col justify-between border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800`}
-                    >
-                      <div>
-                        <div className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-4">
+                  <div className="hidden md:grid grid-cols-12 gap-5 min-h-[620px]">
+                    {/* Destination Hero Card */}
+                    <div className="col-span-12 lg:col-span-6 rounded-[32px] overflow-hidden relative group ios27-card p-8 lg:p-10 flex flex-col justify-between aviation-grid-bg">
+                      <div className="absolute -right-12 -top-12 w-52 h-52 bg-primary/10 dark:bg-primary/15 rounded-full blur-3xl pointer-events-none" />
+                      {arrivalCode && (
+                        <div
+                          aria-hidden="true"
+                          className="absolute right-6 top-6 text-7xl lg:text-8xl font-mono font-black tracking-tighter text-slate-900/[0.04] dark:text-white/[0.05] select-none pointer-events-none leading-none"
+                        >
+                          {arrivalCode}
+                        </div>
+                      )}
+                      <div className="relative z-10">
+                        <div className="text-[10px] font-semibold text-primary uppercase tracking-[0.2em] mb-3">
                           {arrivalCode
                             ? `Arriving at ${arrivalCode}`
                             : t("destination")}
                         </div>
-                        <h2 className="text-6xl font-black text-slate-900 dark:text-white tracking-tighter mb-2 leading-[0.9]">
+                        <h2 className="text-4xl lg:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-2 leading-[1.05]">
                           {currentTrip.destination}
                         </h2>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-[0.2em] text-xs">
-                          <Calendar size={14} /> {currentTrip.startDate} —{" "}
-                          {currentTrip.endDate}
+                      <div className="relative z-10 pt-6">
+                        <div className="inline-flex items-center gap-2.5 text-slate-500 dark:text-slate-400 font-mono font-semibold text-xs tabular-nums bg-slate-100/80 dark:bg-white/[0.06] px-3.5 py-1.5 rounded-full border border-black/[0.04] dark:border-white/[0.08]">
+                          <Calendar size={13} className="text-primary" />
+                          <span>
+                            {currentTrip.startDate} — {currentTrip.endDate}
+                          </span>
                         </div>
-                        <div className="mt-6 flex flex-wrap gap-2">
+                        <div className="mt-5 flex flex-wrap gap-2">
                           {(currentTrip.flights || [])
                             .filter((f) => f.user_id === user?.id)
                             .map((f) => {
-                               // Collect outgoing and returning flight numbers
                                const numbers = [];
                                if (f.outbound?.flightNumber) numbers.push({ num: f.outbound.flightNumber, isReturn: false });
                                if (f.inbound?.flightNumber) numbers.push({ num: f.inbound.flightNumber, isReturn: true });
@@ -1958,10 +2487,10 @@ const App: React.FC = () => {
                             .map((item, i) => (
                             <div
                               key={i}
-                              className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm transition-all hover:scale-105 ${
+                              className={`text-[11px] font-mono font-bold px-3.5 py-1.5 rounded-xl flex items-center gap-2 border transition-all hover:scale-105 tabular-nums ${
                                 item.isReturn
-                                 ? "bg-slate-100 dark:bg-slate-700 text-slate-400"
-                                 : "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg"
+                                 ? "bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 border-slate-200/60 dark:border-white/10"
+                                 : "bg-primary/10 dark:bg-primary/20 text-primary border-primary/20 shadow-sm"
                               }`}
                             >
                               <Plane size={12} className={item.isReturn ? "rotate-180" : ""} /> {item.num}
@@ -1970,9 +2499,19 @@ const App: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-6 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col relative group/budget">
+
+                    {/* Budget Status Card */}
+                    <div className="col-span-6 lg:col-span-3 ios27-card rounded-[28px] p-6 flex flex-col relative group/budget">
                       <div className="flex justify-between items-start mb-4">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 p-2 rounded-xl">
+                        <div
+                          className={`p-2.5 rounded-2xl ${
+                            spentTotal > budgetLimit
+                              ? "bg-rose-500/10 text-rose-500"
+                              : budgetPercent > 80
+                              ? "bg-amber-500/10 text-amber-500"
+                              : "bg-primary/10 dark:bg-primary/20 text-primary"
+                          }`}
+                        >
                           <Wallet size={20} />
                         </div>
                         {!isGuest && (
@@ -1981,101 +2520,144 @@ const App: React.FC = () => {
                               setTempBudget(budgetLimit.toString());
                               setIsEditingBudget(true);
                             }}
-                            className="p-2 text-slate-300 hover:text-indigo-500 rounded-lg transition-all"
+                            className="p-2 text-slate-400 hover:text-primary rounded-lg transition-all cursor-pointer"
                           >
                             <Edit2 size={16} />
                           </button>
                         )}
                       </div>
                       <div className="flex-1 flex flex-col justify-end space-y-1">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em]">
                           {t("budgetStatus")}
                         </div>
                         <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-black text-slate-900 dark:text-white">
+                          <span
+                            className={`text-3xl font-mono font-extrabold tabular-nums ${
+                              spentTotal > budgetLimit
+                                ? "text-rose-500"
+                                : budgetPercent > 80
+                                ? "text-amber-500"
+                                : "text-slate-900 dark:text-white"
+                            }`}
+                          >
                             {Math.round(budgetPercent)}
-                            <span className="text-lg">%</span>
+                            <span className="text-lg font-bold">%</span>
                           </span>
                         </div>
-                        <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full mt-2 mb-2 overflow-hidden">
+                        <div className="w-full h-2 bg-slate-100 dark:bg-white/10 rounded-full mt-2 mb-2 overflow-hidden">
                           <div
-                            className={`h-full ${
+                            className={`h-full rounded-full transition-all duration-500 ${
                               spentTotal > budgetLimit
-                                ? "bg-red-500"
-                                : "bg-indigo-500"
+                                ? "bg-rose-500"
+                                : budgetPercent > 80
+                                ? "bg-amber-500"
+                                : "bg-primary"
                             }`}
                             style={{
                               width: `${Math.min(budgetPercent, 100)}%`,
                             }}
                           />
                         </div>
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+                        <div className="flex justify-between items-center text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 pt-2.5 border-t border-slate-100 dark:border-white/[0.06]">
                           <div>
-                            <div className="text-slate-300 dark:text-slate-600 mb-0.5">
+                            <div className="text-slate-400 dark:text-slate-500 mb-0.5">
                               {t("spent")}
                             </div>
                             <div
-                              className={
+                              className={`font-mono font-bold tabular-nums ${
                                 spentTotal > budgetLimit
-                                  ? "text-red-500"
-                                  : "text-slate-700 dark:text-slate-300"
-                              }
+                                  ? "text-rose-500"
+                                  : "text-slate-700 dark:text-slate-200"
+                              }`}
                             >
                               NT$ {(spentTotal / 1000).toFixed(1)}k
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-slate-300 dark:text-slate-600 mb-0.5">
+                            <div className="text-slate-400 dark:text-slate-500 mb-0.5">
                               {t("limit")}
                             </div>
-                            <div className="text-slate-700 dark:text-slate-300">
+                            <div className="font-mono font-bold tabular-nums text-slate-700 dark:text-slate-200">
                               NT$ {(budgetLimit / 1000).toFixed(1)}k
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-6 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col">
-                      <div className="flex items-center gap-2 mb-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        <PieChartIcon size={14} /> {t("breakdown")}
+
+                    {/* Spending Breakdown Card */}
+                    <div className="col-span-6 lg:col-span-3 ios27-card rounded-[28px] p-6 flex flex-col">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-1.5">
+                          <PieChartIcon size={13} /> {t("breakdown")}
+                        </span>
                       </div>
-                      <div className="flex-1 min-h-0">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={40}
-                              outerRadius={60}
-                              paddingAngle={5}
-                              dataKey="value"
-                              nameKey="displayName"
-                            >
-                              {chartData.map((e, i) => (
-                                <Cell
-                                  key={`cell-${i}`}
-                                  fill={
-                                    CATEGORY_UI[e.category]?.hexColor ||
-                                    CATEGORY_UI["Other"].hexColor
-                                  }
-                                />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
+                      {chartData.length > 0 ? (
+                        <div className="flex-1 flex flex-col justify-between min-h-0">
+                          <div className="h-32 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={chartData}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={34}
+                                  outerRadius={52}
+                                  paddingAngle={4}
+                                  dataKey="value"
+                                  nameKey="displayName"
+                                >
+                                  {chartData.map((e, i) => (
+                                    <Cell
+                                      key={`cell-${i}`}
+                                      fill={
+                                        CATEGORY_UI[e.category]?.hexColor ||
+                                        CATEGORY_UI["Other"].hexColor
+                                      }
+                                    />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip formatter={(value: number) => `NT$ ${Math.round(value).toLocaleString()}`} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
+                            {sortedChartData.slice(0, 4).map((entry) => {
+                              const pct = chartTotal > 0 ? Math.round((entry.value / chartTotal) * 100) : 0;
+                              const color = CATEGORY_UI[entry.category]?.hexColor || CATEGORY_UI["Other"].hexColor;
+                              return (
+                                <div key={entry.category} className="flex items-center justify-between gap-2 text-[11px]">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                    <span className="font-semibold text-slate-700 dark:text-slate-200 truncate">
+                                      {entry.displayName}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                                    {pct}%
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-400 dark:text-slate-500">
+                          {t("noData")}
+                        </div>
+                      )}
                     </div>
-                    <div className="col-span-4 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-8 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col overflow-hidden">
-                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                        <MapPin size={14} /> {t("upcomingSchedule")}
+
+                    {/* Upcoming Schedule */}
+                    <div className="col-span-12 lg:col-span-4 ios27-card rounded-[28px] p-7 flex flex-col overflow-hidden">
+                      <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] mb-5 flex items-center gap-2">
+                        <MapPin size={14} className="text-primary" /> {t("upcomingSchedule")}
                       </div>
-                      <div className="flex-1 space-y-4 overflow-y-auto no-scrollbar">
+                      <div className="flex-1 space-y-3.5 overflow-y-auto no-scrollbar">
                         {upcomingItems.map((item, i) => (
                           <div
                             key={i}
-                            className="flex gap-4 group cursor-pointer"
+                            className="flex gap-3.5 group cursor-pointer p-2 -mx-2 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
                             onClick={() =>
                               window.open(
                                 `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -2085,50 +2667,57 @@ const App: React.FC = () => {
                               )
                             }
                           >
-                            <div className="flex flex-col items-center">
-                              <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+                            <div className="flex flex-col items-center pt-1">
+                              <div className={`w-2.5 h-2.5 rounded-full ${i === 0 ? "bg-primary ring-4 ring-primary/15" : "bg-slate-300 dark:bg-white/25"}`} />
                               {i !== upcomingItems.length - 1 && (
-                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-slate-700 my-1" />
+                                <div className="w-0.5 flex-1 bg-slate-100 dark:bg-white/10 mt-1.5" />
                               )}
                             </div>
-                            <div>
-                              <div className="text-sm font-black text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
-                                {item.placeName}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <span className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 group-hover:text-primary transition-colors">
+                                  {item.placeName}
+                                </span>
+                                <span className="text-[11px] font-mono font-bold text-primary dark:text-sky-400 bg-primary/10 px-2 py-0.5 rounded-md tabular-nums shrink-0">
+                                  {item.time}
+                                </span>
                               </div>
-                              <div className="text-[10px] font-bold text-slate-400">
-                                {item.date} • {item.time}
+                              <div className="text-[11px] font-mono font-medium text-slate-400 tabular-nums">
+                                {item.date}
                               </div>
                             </div>
                           </div>
                         ))}
                         {upcomingItems.length === 0 && (
-                          <div className="text-slate-300 font-bold text-xs uppercase text-center py-8">
+                          <div className="text-slate-400 dark:text-slate-600 font-semibold text-xs uppercase text-center py-8">
                             {t("noUpcoming")}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 bg-white dark:bg-slate-800 rounded-[40px] p-8 border border-slate-100 dark:border-slate-700 shadow-ios flex flex-col">
-                      <div className="flex justify-between items-center mb-6">
-                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <CheckSquare size={14} /> {t("checklistSummary")}
+
+                    {/* Packing Progress */}
+                    <div className="col-span-6 lg:col-span-4 ios27-card rounded-[28px] p-7 flex flex-col">
+                      <div className="flex justify-between items-center mb-5">
+                        <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] flex items-center gap-2">
+                          <CheckSquare size={14} className="text-emerald-500" /> {t("checklistSummary")}
                         </div>
-                        <div className="text-2xl font-black text-slate-900 dark:text-white">
+                        <div className="text-2xl font-mono font-extrabold text-slate-900 dark:text-white tabular-nums">
                           {packingPercent}%
                         </div>
                       </div>
-                      <div className="space-y-3 flex-1 overflow-y-auto no-scrollbar pr-2">
+                      <div className="space-y-3.5 flex-1 overflow-y-auto no-scrollbar pr-1">
                         {checklistStats.map((stat) => (
                           <div
                             key={stat.category}
                             className="flex items-center gap-3"
                           >
-                            <div className="w-20 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            <div className="w-20 text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">
                               {stat.category}
                             </div>
-                            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-green-500 rounded-full"
+                                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                                 style={{
                                   width: `${
                                     (stat.completed / stat.total) * 100
@@ -2136,34 +2725,38 @@ const App: React.FC = () => {
                                 }}
                               />
                             </div>
-                            <div className="text-[10px] font-black text-slate-400 w-8 text-right">
+                            <div className="text-[10px] font-mono font-bold text-slate-400 w-9 text-right tabular-nums">
                               {stat.completed}/{stat.total}
                             </div>
                           </div>
                         ))}
                       </div>
                     </div>
-                    <div className="col-span-4 row-span-1 flex flex-col gap-6">
-                      <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[40px] p-8 shadow-ios flex flex-col justify-center relative overflow-hidden group">
+
+                    {/* Countdown & Trip Actions */}
+                    <div className="col-span-6 lg:col-span-4 flex flex-col gap-4">
+                      <div className="flex-1 ios27-card rounded-[28px] p-7 flex flex-col justify-center relative overflow-hidden group aviation-grid-bg">
                         <div className="relative z-10">
-                          <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                          <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-[0.14em] mb-2">
                             {t("countdown")}
                           </div>
-                          <div className="text-6xl font-black tracking-tighter text-slate-900 dark:text-white">
-                            {displayDays > 0 ? displayDays : 0}
-                          </div>
-                          <div className="text-sm font-bold text-slate-500 dark:text-slate-400 mt-1">
-                            {t("daysLeft")}
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-6xl font-mono font-extrabold tracking-tighter text-slate-900 dark:text-white tabular-nums">
+                              {displayDays > 0 ? displayDays : 0}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+                              {t("daysLeft")}
+                            </span>
                           </div>
                         </div>
-                        <Clock className="absolute -right-4 -bottom-4 text-slate-100 dark:text-slate-700 w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
+                        <Clock className="absolute -right-4 -bottom-4 text-slate-200/70 dark:text-white/[0.04] w-32 h-32 rotate-12 transition-transform group-hover:rotate-45 duration-700" />
                       </div>
                       {isCreator && (
                         <button
                           onClick={handleDeleteTrip}
-                          className="h-16 flex items-center justify-center gap-2 text-red-500 font-black text-xs uppercase tracking-widest bg-white dark:bg-slate-800 border border-red-50 dark:border-red-900/30 hover:bg-red-50 rounded-3xl transition-all shadow-sm"
+                          className="h-12 flex items-center justify-center gap-2 text-rose-500/80 hover:text-rose-600 font-semibold text-xs tracking-wide bg-white/70 dark:bg-white/[0.03] border border-rose-200/60 dark:border-rose-900/30 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all active:scale-95 cursor-pointer"
                         >
-                          <Trash2 size={16} /> {t("deleteTrip")}
+                          <Trash2 size={14} /> {t("deleteTrip")}
                         </button>
                       )}
                     </div>
@@ -2176,39 +2769,42 @@ const App: React.FC = () => {
                   <Loader2 className="animate-spin text-primary w-10 h-10" />
                 </div>
               }>
-                {activeTab === "itinerary" && (
-                  <Itinerary
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "checklist" && (
-                  <Checklist
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "expenses" && (
-                  <Expenses
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
-                {activeTab === "flights" && (
-                  <FlightManager
-                    trip={currentTrip}
-                    currentUser={user!}
-                    onUpdate={updateCurrentTrip}
-                    isGuest={isGuest}
-                  />
-                )}
+                <div key={activeTab} className={tabTransitionClass}>
+                  {activeTab === "itinerary" && (
+                    <Itinerary
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "checklist" && (
+                    <Checklist
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "expenses" && (
+                    <Expenses
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                  {activeTab === "flights" && (
+                    <FlightManager
+                      trip={currentTrip}
+                      currentUser={user!}
+                      onUpdate={updateCurrentTrip}
+                      isGuest={isGuest}
+                    />
+                  )}
+                </div>
               </Suspense>
+              </div>
             </main>
             {isShareModalOpen && user && !isGuest && (
               <ShareModal
@@ -2219,10 +2815,18 @@ const App: React.FC = () => {
                 onRemoveInvite={handleRemoveInvite}
                 copyLink={() => {
                   navigator.clipboard.writeText(
-                    `${window.location.origin}/?tripId=${currentTrip.id}`
+                    buildTripShareUrl(currentTrip.id)
                   );
                   setNotification({ message: t("copied"), type: "success" });
                 }}
+              />
+            )}
+            {isExportModalOpen && currentTrip && (
+              <ExportModal
+                trip={currentTrip}
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onNotify={(message, type) => setNotification({ message, type })}
               />
             )}
             {isEditingBudget && !isGuest && (
@@ -2232,61 +2836,141 @@ const App: React.FC = () => {
                 onSave={saveBudget}
               />
             )}
-            {/* Instagram / Dynamic Island Floating Bottom Navigation Dock */}
-            <div className="md:hidden fixed bottom-[max(0.875rem,env(safe-area-inset-bottom))] inset-x-4 max-w-lg mx-auto z-50 pointer-events-none">
+            {/* Instagram / Threads Style Floating Bottom Navigation Capsule Dock */}
+            <div className="md:hidden fixed bottom-[max(1rem,env(safe-area-inset-bottom))] inset-x-4 max-w-[360px] mx-auto z-50 pointer-events-none">
               <nav 
+                ref={mobileDockNavRef}
                 aria-label="Mobile Navigation"
-                className="pointer-events-auto bg-white/85 dark:bg-[#1C1C1E]/85 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.12] ring-1 ring-white/60 dark:ring-white/10 shadow-[0_16px_36px_-6px_rgba(0,0,0,0.16)] dark:shadow-[0_20px_48px_-8px_rgba(0,0,0,0.7)] rounded-full px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all duration-300"
+                onPointerDown={handleDockPointerDown}
+                onPointerMove={handleDockPointerMove}
+                onPointerUp={handleDockPointerUpOrCancel}
+                onPointerCancel={handleDockPointerUpOrCancel}
+                className="pointer-events-auto ios27-dock rounded-full p-1.5 relative grid grid-cols-6 items-center transition-all duration-200 touch-none select-none"
               >
+                <div
+                  aria-hidden="true"
+                  data-testid="mobile-dock-active-pill"
+                  className={`absolute top-1.5 bottom-1.5 left-1.5 rounded-full dock-pill-active ${
+                    dockDragSlot !== null ? "dock-pill-scrubbing" : ""
+                  } pointer-events-none z-0`}
+                  style={{
+                    width: `calc((100% - 12px) / ${tabs.length + 1})`,
+                    transform: `translate3d(${(effectiveDockSlot * 100).toFixed(2)}%, 0, 0) scale(${
+                      dockDragSlot !== null ? 1.06 : 1
+                    })`,
+                  }}
+                />
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   const isDisabled = isPricePending && tab.id !== "flights";
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => !isDisabled && setActiveTab(tab.id as any)}
+                      onClick={() => {
+                        if (Date.now() - lastScrubEndTimeRef.current < 250) return;
+                        setProfileMenuOpen(null);
+                        !isDisabled && selectTabWithDirection(tab.id as any);
+                      }}
                       disabled={isDisabled}
                       aria-label={tab.label}
-                      className={`relative flex flex-col items-center justify-center flex-1 py-1 rounded-full gap-0.5 transition-all duration-200 ease-spring active:scale-90 select-none cursor-pointer ${
-                        isDisabled ? "opacity-35 cursor-not-allowed active:scale-100" : ""
+                      title={tab.label}
+                      className={`relative z-10 flex items-center justify-center h-11 rounded-full transition-colors duration-200 select-none cursor-pointer active:scale-90 ${
+                        isDisabled ? "opacity-35 cursor-not-allowed" : ""
+                      } ${
+                        isActive && profileMenuOpen !== "mobile"
+                          ? "text-slate-900 dark:text-white"
+                          : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
                       <div
-                        className={`relative flex items-center justify-center w-11 h-7 rounded-full transition-all duration-300 ${
-                          isActive
-                            ? "bg-primary/15 dark:bg-primary/25 text-primary scale-105 shadow-sm"
-                            : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
+                        className={`relative flex items-center justify-center transition-transform duration-300 ease-spring ${
+                          isActive && profileMenuOpen !== "mobile" ? "scale-110" : "scale-100"
                         }`}
                       >
                         {isDisabled ? (
-                          <Lock size={17} />
+                          <Lock size={20} />
                         ) : (
-                          <tab.icon size={19} strokeWidth={isActive ? 2.5 : 1.8} />
+                          <tab.icon
+                            size={21}
+                            strokeWidth={isActive && profileMenuOpen !== "mobile" ? 2.5 : 1.9}
+                          />
                         )}
                         {tab.alert && (
-                          <span className="absolute top-0.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#1C1C1E] animate-pulse" />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full ring-2 ring-white dark:ring-[#18181b]" />
                         )}
                       </div>
-                      <span
-                        className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
-                          isActive
-                            ? "text-primary font-black scale-100"
-                            : "text-slate-400 dark:text-slate-500 scale-95"
-                        }`}
-                      >
-                        {tab.label}
-                      </span>
                     </button>
                   );
                 })}
+
+                {/* 6th Tab: Instagram-Style Profile Avatar Button */}
+                <button
+                  type="button"
+                  data-testid="mobile-dock-profile-btn"
+                  onClick={() => {
+                    if (Date.now() - lastScrubEndTimeRef.current < 250) return;
+                    setProfileMenuOpen((prev) => (prev === "mobile" ? null : "mobile"));
+                  }}
+                  aria-label={user ? (user.name || "User Profile") : t("more")}
+                  aria-expanded={profileMenuOpen === "mobile"}
+                  className={`relative z-10 flex items-center justify-center h-11 rounded-full transition-colors duration-200 select-none cursor-pointer active:scale-90 ${
+                    profileMenuOpen === "mobile"
+                      ? "text-slate-900 dark:text-white"
+                      : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  <div
+                    className={`flex items-center justify-center transition-transform duration-300 ease-spring ${
+                      profileMenuOpen === "mobile" ? "scale-110" : "scale-100"
+                    }`}
+                  >
+                    {user ? (
+                      user.picture ? (
+                        <img
+                          src={user.picture}
+                          alt={user.name || "User"}
+                          referrerPolicy="no-referrer"
+                          className={`w-6 h-6 rounded-full object-cover transition-all ${
+                            profileMenuOpen === "mobile"
+                              ? "ring-2 ring-primary"
+                              : "ring-1 ring-black/10 dark:ring-white/25"
+                          }`}
+                        />
+                      ) : (
+                        <div
+                          className={`w-6 h-6 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-[10px] ${
+                            profileMenuOpen === "mobile"
+                              ? "ring-2 ring-primary"
+                              : "ring-1 ring-black/10 dark:ring-white/25"
+                          }`}
+                        >
+                          {user.name ? user.name[0].toUpperCase() : <UserIcon size={13} />}
+                        </div>
+                      )
+                    ) : (
+                      <UserIcon size={20} strokeWidth={profileMenuOpen === "mobile" ? 2.5 : 1.9} />
+                    )}
+                  </div>
+                </button>
               </nav>
+
+              {/* Mobile Profile Popover floating above dock */}
+              {profileMenuOpen === "mobile" && (
+                <div
+                  ref={mobileProfileMenuRef}
+                  className="pointer-events-auto absolute bottom-full mb-3 right-0 w-64 rounded-3xl p-1.5 shadow-2xl border border-black/[0.08] dark:border-white/[0.12] bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-2xl text-slate-900 dark:text-slate-100 z-50 animate-in slide-in-from-bottom-3 fade-in duration-200 origin-bottom-right select-none"
+                  role="menu"
+                >
+                  <ProfileDropdownContent />
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {view === "detail" && !currentTrip && !isLoading && (
           <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4 shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-400 mb-4 shadow-sm border border-slate-200/60 dark:border-white/10">
               <AlertCircle size={32} />
             </div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">
@@ -2314,12 +2998,11 @@ const App: React.FC = () => {
                 <div className="text-lg font-bold text-primary tracking-tight">
                   {t("appName")}
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.08]">
                   v{APP_VERSION}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <GlobalNav />
                 <UserHeaderProfile />
               </div>
             </header>
@@ -2365,7 +3048,7 @@ const App: React.FC = () => {
                       className={`px-4 py-2.5 rounded-2xl font-bold text-xs sm:text-sm transition-all duration-200 active:scale-95 flex items-center gap-1.5 cursor-pointer border ${
                         isEditMode
                           ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-sm"
-                          : "bg-white/80 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border-slate-200/70 dark:border-slate-700/70"
+                          : "bg-white/80 hover:bg-slate-100 dark:bg-white/[0.06] dark:hover:bg-white/[0.12] text-slate-700 dark:text-slate-200 border-slate-200/70 dark:border-white/10"
                       }`}
                     >
                       {isEditMode ? (
@@ -2423,7 +3106,7 @@ const App: React.FC = () => {
                       value={tripSearchQuery}
                       onChange={(e) => setTripSearchQuery(e.target.value)}
                       placeholder={t("searchTripsPlaceholder")}
-                      className="w-full pl-10 pr-9 py-2.5 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/70 dark:border-slate-700/70 rounded-2xl text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all"
+                      className="w-full pl-10 pr-9 py-2.5 bg-slate-100/90 dark:bg-white/[0.04] border border-slate-200/70 dark:border-white/[0.10] rounded-2xl text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
                     />
                     {tripSearchQuery && (
                       <button
@@ -2438,13 +3121,13 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Filter Pills */}
-                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 self-start md:self-auto overflow-x-auto max-w-full">
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-white/[0.05] rounded-2xl border border-slate-200/60 dark:border-white/[0.08] self-start md:self-auto overflow-x-auto max-w-full">
                     <button
                       type="button"
                       onClick={() => setTripFilter("all")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "all"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2452,8 +3135,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "all"
-                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-slate-100 dark:bg-white/20 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.all}
@@ -2464,7 +3147,7 @@ const App: React.FC = () => {
                       onClick={() => setTripFilter("upcoming")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "upcoming"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2472,8 +3155,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "upcoming"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-primary/10 dark:bg-primary/20 text-primary"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.upcoming}
@@ -2484,7 +3167,7 @@ const App: React.FC = () => {
                       onClick={() => setTripFilter("past")}
                       className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                         tripFilter === "past"
-                          ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm"
+                          ? "bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20"
                           : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                       }`}
                     >
@@ -2492,8 +3175,8 @@ const App: React.FC = () => {
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                           tripFilter === "past"
-                            ? "bg-slate-100 dark:bg-slate-600 text-slate-700 dark:text-slate-200"
-                            : "bg-slate-200/60 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            ? "bg-slate-100 dark:bg-white/20 text-slate-700 dark:text-slate-200"
+                            : "bg-slate-200/60 dark:bg-white/10 text-slate-500 dark:text-slate-400"
                         }`}
                       >
                         {tripCounts.past}
@@ -2529,7 +3212,7 @@ const App: React.FC = () => {
             {/* Filter Empty State: Search or filter has 0 results */}
             {trips.length > 0 && filteredTrips.length === 0 && (
               <div className="py-20 text-center flex flex-col items-center justify-center animate-in fade-in duration-200">
-                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/[0.08] flex items-center justify-center text-slate-400 mb-4 border border-black/[0.04] dark:border-white/[0.08]">
                   <Search size={28} />
                 </div>
                 <h4 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">

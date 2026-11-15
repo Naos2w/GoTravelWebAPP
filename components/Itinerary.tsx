@@ -4,13 +4,16 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation
+  Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation,
+  Sun, Cloud, CloudRain, Snowflake, CloudLightning, GripVertical
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
 import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
+import { DailyWeatherForecast, fetchDayWeather } from '../services/weatherService';
+import { reorderAnchorsWithSmartTime, recalculateTransportSegment } from '../services/itineraryReorderService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -53,21 +56,21 @@ const TimePicker: React.FC<{
   }, []); // Run on mount
 
   return (
-    <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
+    <div ref={ref} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] rounded-[28px] shadow-2xl z-[210] p-4 flex gap-4 animate-in fade-in zoom-in-95 duration-200">
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">H</div>
         <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {hours.map(h => (
-            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{h}</button>
+            <button key={h} onClick={() => onChange(`${h}:${minute}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${h === hour ? 'bg-primary text-white active-hour' : 'hover:bg-slate-50 dark:hover:bg-white/[0.1] text-slate-600 dark:text-slate-300'}`}>{h}</button>
           ))}
         </div>
       </div>
-      <div className="w-px bg-slate-100 dark:bg-slate-700 my-1"></div>
+      <div className="w-px bg-slate-100 dark:bg-white/[0.1] my-1"></div>
       <div className="flex flex-col gap-1">
         <div className="text-[8px] font-black text-slate-400 uppercase text-center tracking-widest">M</div>
         <div className="h-40 overflow-y-auto no-scrollbar space-y-1 scroll-smooth">
           {minutes.map(m => (
-            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>{m}</button>
+            <button key={m} onClick={() => onChange(`${hour}:${m}`)} className={`w-9 h-9 rounded-lg text-xs font-mono font-black flex items-center justify-center transition-all ${m === minute ? 'bg-primary text-white active-minute' : 'hover:bg-slate-50 dark:hover:bg-white/[0.1] text-slate-600 dark:text-slate-300'}`}>{m}</button>
           ))}
         </div>
       </div>
@@ -93,6 +96,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
   const [dragDirection, setDragDirection] = useState<'above' | 'below'>('above');
+  const [dayWeather, setDayWeather] = useState<DailyWeatherForecast | null>(null);
   
   // Inline edit state for transport notes
   const [editingTransportId, setEditingTransportId] = useState<string | null>(null);
@@ -122,6 +126,78 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   const days = trip.itinerary || [];
   const currentDay = days[selectedDayIndex];
+
+  // Resolve representative coordinates for the active day (prefer current day's stops, fall back to trip stops)
+  const dayWeatherCoords = React.useMemo(() => {
+    const findCoords = (items: ItineraryItem[] = []) => {
+      const stop = items.find(
+        (i) =>
+          i.type !== 'Transport' &&
+          i.lat != null &&
+          i.lng != null &&
+          Number.isFinite(Number(i.lat)) &&
+          Number.isFinite(Number(i.lng))
+      );
+      return stop ? { lat: Number(stop.lat), lng: Number(stop.lng) } : null;
+    };
+
+    const currentCoords = findCoords(currentDay?.items);
+    if (currentCoords) return currentCoords;
+
+    for (const d of days) {
+      const fallbackCoords = findCoords(d.items);
+      if (fallbackCoords) return fallbackCoords;
+    }
+    return null;
+  }, [currentDay?.items, days]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDayWeather(null);
+
+    if (!currentDay?.date || !dayWeatherCoords) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchDayWeather(dayWeatherCoords.lat, dayWeatherCoords.lng, currentDay.date).then((forecast) => {
+      if (!cancelled) {
+        setDayWeather(forecast);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDay?.date, dayWeatherCoords]);
+
+  const renderWeatherBadge = () => {
+    if (!dayWeather) return null;
+    const iconMap = {
+      clear: <Sun size={13} className="text-amber-500 shrink-0" />,
+      cloudy: <Cloud size={13} className="text-slate-400 shrink-0" />,
+      rain: <CloudRain size={13} className="text-sky-500 shrink-0" />,
+      snow: <Snowflake size={13} className="text-cyan-400 shrink-0" />,
+      thunderstorm: <CloudLightning size={13} className="text-indigo-400 shrink-0" />,
+    };
+    return (
+      <div
+        data-testid="day-weather-pill"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100/90 dark:bg-white/[0.07] border border-black/[0.04] dark:border-white/[0.08] text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums shrink-0"
+      >
+        {iconMap[dayWeather.condition]}
+        <span>
+          {dayWeather.tempMin}°–{dayWeather.tempMax}°C
+        </span>
+        {dayWeather.precipProb > 0 && (
+          <span className="text-[10px] text-sky-500 dark:text-sky-400">
+            {dayWeather.precipProb}%
+          </span>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (scrollAnchorRef.current) {
@@ -214,23 +290,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   // Recalculates transport times/durations based on neighbor items
   const recalculateTransport = (prev: ItineraryItem, transport: ItineraryItem, next: ItineraryItem): ItineraryItem => {
-     if (transport.transportType === 'Flight') return transport; // Flights are static
-     
-     const [h1, m1] = prev.time.split(':').map(Number);
-     const [h2, m2] = next.time.split(':').map(Number);
-     
-     // Calculate mid-point time
-     const midMin = Math.floor(((h1 * 60 + m1) + (h2 * 60 + m2)) / 2);
-     const midTime = `${Math.floor(midMin/60).toString().padStart(2, '0')}:${(midMin%60).toString().padStart(2, '0')}`;
-     
-     // Calculate duration
-     const durationNote = DateTimeUtils.getDuration(prev.time, next.time);
-
-     return {
-         ...transport,
-         time: midTime,
-         note: durationNote
-     };
+     return recalculateTransportSegment(prev, transport, next);
   };
 
   const maintainListIntegrity = (items: ItineraryItem[]): ItineraryItem[] => {
@@ -382,91 +442,52 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     }
   };
 
+  const applySmartReorder = async (movedId: string, targetId: string, direction: 'above' | 'below') => {
+    if (isGuest || !currentDay) return;
+    const movedItem = displayItems.find((i) => i.id === movedId);
+    if (!movedItem || movedItem.transportType === 'Flight') return;
+
+    const updatedItems = await reorderAnchorsWithSmartTime(
+      displayItems,
+      movedId,
+      targetId,
+      direction,
+      (from, to, tType) =>
+        from.lat != null && from.lng != null && to.lat != null && to.lng != null
+          ? fetchRouteMins(from.lat, from.lng, to.lat, to.lng, tType)
+          : Promise.resolve(30)
+    );
+
+    const newDays = [...days];
+    const updatedMoved = updatedItems.find((i) => i.id === movedId) || movedItem;
+    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+    scrollAnchorRef.current = movedId;
+    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", updatedMoved);
+  };
+
   const handleDrop = async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     setDragOverItemId(null);
     if (isGuest || !draggedItemId || draggedItemId === targetId) {
-       setDraggedItemId(null);
-       return;
-    }
-
-    const currentItems = [...displayItems];
-    const draggedIndex = currentItems.findIndex(i => i.id === draggedItemId);
-    const targetIndex = currentItems.findIndex(i => i.id === targetId);
-
-    if (draggedIndex === -1 || targetIndex === -1) {
       setDraggedItemId(null);
       return;
     }
 
-    const draggedItem = currentItems[draggedIndex];
-    currentItems.splice(draggedIndex, 1);
-    currentItems.splice(targetIndex, 0, draggedItem);
-
-    // Adjust time to maintain DB logical order leveraging OSRM!
-    const anchors = currentItems.filter(i => i.type !== 'Transport');
-    const newIndex = anchors.findIndex(i => i.id === draggedItemId);
-
-    if (newIndex > -1) {
-      const prevAnchor = newIndex > 0 ? anchors[newIndex - 1] : null;
-
-      if (prevAnchor) {
-         let currentCursorMins = 0;
-         for (let i = newIndex; i < anchors.length; i++) {
-            const anchor = anchors[i];
-            const prev = i === newIndex ? prevAnchor : anchors[i - 1];
-            
-            let travelMins = 30;
-            if (prev.lat != null && prev.lng != null && anchor.lat != null && anchor.lng != null) {
-                travelMins = await fetchRouteMins(prev.lat, prev.lng, anchor.lat, anchor.lng);
-            }
-            
-            if (i === newIndex) {
-               const [ph, pm] = prev.time.split(':').map(Number);
-               let pMins = ph * 60 + pm;
-               // dragged item's time = prev time + travel time (rounded to 5-min grid)
-               currentCursorMins = roundTo5(pMins + travelMins);
-               const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
-               const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
-               anchor.time = `${nextHStr}:${nextMStr}`;
-            } else {
-               const [ah, am] = anchor.time.split(':').map(Number);
-               let aMins = ah * 60 + am;
-               // Cascade shift if the newly pushed item overlaps with the next anchor logically.
-               if (aMins < currentCursorMins + travelMins) {
-                  currentCursorMins = roundTo5(currentCursorMins + travelMins);
-                  const nextHStr = Math.floor((currentCursorMins % 1440) / 60).toString().padStart(2, '0');
-                  const nextMStr = (currentCursorMins % 60).toString().padStart(2, '0');
-                  anchor.time = `${nextHStr}:${nextMStr}`;
-               } else {
-                  break; // cascade ends, no collisions ahead.
-               }
-            }
-         }
-      } else {
-         // Inserted as First Item. Inherit next item's start offset backwards.
-         const nextAnchor = anchors[newIndex + 1];
-         if (nextAnchor) {
-            let travelMins = 30;
-            if (draggedItem.lat != null && draggedItem.lng != null && nextAnchor.lat != null && nextAnchor.lng != null) {
-               travelMins = await fetchRouteMins(draggedItem.lat, draggedItem.lng, nextAnchor.lat, nextAnchor.lng);
-            }
-            const [nh, nm] = nextAnchor.time.split(':').map(Number);
-            let nMins = nh * 60 + nm;
-            // Round backwards to nearest 5-min boundary
-            let startMins = Math.floor((nMins - travelMins) / 5) * 5;
-            if (startMins < 0) startMins += 1440;
-            draggedItem.time = `${Math.floor(startMins / 60).toString().padStart(2, '0')}:${(startMins % 60).toString().padStart(2, '0')}`;
-         }
-      }
-    }
-
-    const updatedItems = maintainListIntegrity(currentItems);
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
-
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", draggedItem);
+    const draggedId = draggedItemId;
     setDraggedItemId(null);
+    await applySmartReorder(draggedId, targetId, dragDirection);
+  };
+
+  const handleMoveStop = async (itemId: string, dir: 'up' | 'down') => {
+    if (isGuest) return;
+    const anchors = displayItems.filter((i) => i.type !== 'Transport');
+    const idx = anchors.findIndex((i) => i.id === itemId);
+    if (idx === -1) return;
+
+    const neighbor = dir === 'up' ? anchors[idx - 1] : anchors[idx + 1];
+    if (!neighbor || neighbor.transportType === 'Flight') return;
+
+    await applySmartReorder(itemId, neighbor.id, dir === 'up' ? 'above' : 'below');
   };
 
   const saveTransportNote = (id: string) => {
@@ -665,16 +686,28 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   if (days.length === 0) return <div className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest">{t('noData')}</div>;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8 h-[calc(100dvh-175px)] overflow-hidden animate-in fade-in duration-500">
-      {/* Day Selector — horizontal strip on mobile, vertical column on desktop */}
-      <div className="lg:w-28 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
+    <div className={`flex flex-col lg:flex-row gap-4 lg:gap-6 ${viewMode === 'list' ? 'h-auto pb-28 lg:h-[calc(100dvh-175px)] lg:pb-0' : 'h-[calc(100dvh-175px)]'} overflow-hidden animate-in fade-in duration-500`}>
+      {/* Day Selector — iOS Segmented control on mobile, sleek glass column on desktop */}
+      <div className="lg:w-32 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto no-scrollbar pb-1 lg:pb-0 shrink-0 px-1">
         {days.map((day, idx) => {
           const isSelected = idx === selectedDayIndex;
           const d = new Date(day.date + 'T00:00:00');
           return (
-            <button key={idx} onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); }} className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3.5 rounded-2xl text-center transition-all duration-300 border ${isSelected ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg border-slate-900 dark:border-white' : 'bg-white dark:bg-slate-800 text-slate-500 border-gray-100 dark:border-slate-800 hover:bg-slate-50 shadow-sm'}`}>
-              <div className="text-[9px] font-black uppercase mb-0.5">Day {idx + 1}</div>
-              <div className="font-bold text-xs sm:text-sm leading-tight">{d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}</div>
+            <button 
+              key={idx} 
+              onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); }} 
+              className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3 rounded-2xl text-center transition-all duration-300 cursor-pointer active:scale-95 border ${
+                isSelected 
+                  ? 'bg-primary text-white shadow-md shadow-primary/25 border-primary font-black' 
+                  : 'ios27-card text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 shadow-sm'
+              }`}
+            >
+              <div className={`text-[10px] font-black uppercase tracking-wider mb-0.5 ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
+                Day {idx + 1}
+              </div>
+              <div className="font-bold text-xs sm:text-sm leading-tight font-mono">
+                {d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+              </div>
             </button>
           );
         })}
@@ -683,20 +716,44 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       {/* Main content area */}
       <div className="flex-1 flex flex-col gap-3 overflow-hidden">
 
-        {/* ── Header bar: always visible, contains Day title + toggle ── */}
+        {/* ── Header bar: Day title + View mode switcher ── */}
         <div className="shrink-0 flex justify-between items-center px-1">
-          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">Day {selectedDayIndex + 1}</h2>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+              Day {selectedDayIndex + 1}
+            </h2>
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-mono">
+              {currentDay.date}
+            </span>
+            {renderWeatherBadge()}
+          </div>
           {!isGuest ? (
-            <div className="flex bg-slate-100/60 dark:bg-slate-800 p-1 rounded-xl border border-gray-100 dark:border-slate-700 gap-0.5 lg:hidden">
-              <button onClick={() => setViewMode('list')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+            <div className="flex bg-slate-100 dark:bg-white/[0.06] p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.08] gap-0.5 lg:hidden">
+              <button 
+                onClick={() => setViewMode('list')} 
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'list' 
+                    ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20' 
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
                 <List size={13}/> {isEn ? 'List' : '列表'}
               </button>
-              <button onClick={() => setViewMode('map')} className={`px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${viewMode === 'map' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-400'}`}>
+              <button 
+                onClick={() => setViewMode('map')} 
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'map' 
+                    ? 'bg-white dark:bg-white/[0.18] text-slate-900 dark:text-white shadow-sm border border-transparent dark:border-white/20' 
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
                 <Map size={13}/> {isEn ? 'Map' : '地圖'}
               </button>
             </div>
           ) : (
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 flex items-center gap-1 lg:hidden"><Lock size={10} />{t('readOnly')}</div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 py-1.5 bg-slate-100 dark:bg-white/10 rounded-xl flex items-center gap-1 lg:hidden">
+              <Lock size={11} />{t('readOnly')}
+            </div>
           )}
         </div>
 
@@ -704,11 +761,10 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
         <div className="flex-1 flex gap-3 overflow-hidden">
 
           {/* Map — always visible in map mode; hidden on mobile in list mode */}
-          <div className={`rounded-[24px] sm:rounded-[40px] shadow-sm overflow-hidden border border-slate-100 dark:border-slate-800 transition-all duration-300 relative
+          <div className={`rounded-[28px] sm:rounded-[36px] shadow-sm overflow-hidden border border-black/[0.06] dark:border-white/[0.08] transition-all duration-300 relative
             ${viewMode === 'list' ? 'hidden lg:flex flex-1' : 'flex flex-1'}`}>
-            {/* TODO: [Optimized] Wrap MapView in Suspense for lazy loading */}
             <Suspense fallback={
-              <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50">
+              <div className="flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-[#0c0d12]">
                 <Loader2 className="animate-spin text-primary w-8 h-8" />
               </div>
             }>
@@ -721,9 +777,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               />
             </Suspense>
 
-            {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Instagram / Apple Maps Style) ── */}
+            {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Apple Maps Style) ── */}
             {viewMode === 'map' && (() => {
-              // Use exact same filter as MapView so numbers match map markers 1:1
               const validItems = displayItems.filter(i =>
                 i.lat != null && i.lng != null &&
                 !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
@@ -734,16 +789,16 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
               return (
                 <div className="lg:hidden absolute bottom-3 inset-x-0 z-[1000] pointer-events-none flex flex-col gap-1.5 px-3">
-                  {/* Header toggle pill */}
-                  <div className="flex justify-end pointer-events-auto">
+                  {/* Apple Maps Grabber Handle & Header Toggle */}
+                  <div className="flex justify-end pointer-events-none">
                     <button
                       type="button"
                       onClick={() => setIsMobileCardsCollapsed(!isMobileCardsCollapsed)}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl shadow-md border border-black/[0.06] dark:border-white/[0.1] text-[11px] font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
+                      className="pointer-events-auto h-8 flex items-center gap-1.5 px-3.5 rounded-full bg-white/95 dark:bg-[#121318]/90 ios27-card backdrop-blur-2xl shadow-lg border border-black/[0.06] dark:border-white/[0.12] text-xs font-bold text-slate-700 dark:text-slate-200 active:scale-95 transition-all cursor-pointer"
                     >
-                      <MapPin size={12} className="text-primary" />
+                      <MapPin size={13} className="text-primary" />
                       <span>{validItems.length} {isEn ? 'Stops' : '個景點'}</span>
-                      {isMobileCardsCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      {isMobileCardsCollapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </button>
                   </div>
 
@@ -766,8 +821,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             onClick={() => setHighlightedId(item.id)}
                             className={`snap-center shrink-0 w-[240px] h-[104px] p-2.5 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] flex flex-col justify-between ${
                               isHighlighted
-                                ? 'bg-white/95 dark:bg-slate-800/95 border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
-                                : 'bg-white/85 dark:bg-slate-900/85 border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-slate-800'
+                                ? 'bg-white/95 dark:bg-[#161822] border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
+                                : 'bg-white/85 dark:bg-white/[0.05] border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-white/[0.08]'
                             }`}
                           >
                             <div className="min-w-0">
@@ -787,7 +842,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
                                   title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
-                                  className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700/80 hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
+                                  className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-white/[0.08] hover:bg-primary hover:text-white flex items-center justify-center text-slate-500 dark:text-slate-300 transition-colors ml-auto"
                                 >
                                   <Navigation size={12} />
                                 </a>
@@ -830,10 +885,10 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           </div>
 
           {/* ── Full list panel (list mode on mobile, always on desktop) ── */}
-          <div className={`lg:w-[450px] shrink-0 bg-white dark:bg-slate-900 rounded-[24px] sm:rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 flex flex-col overflow-hidden
+          <div className={`lg:w-[450px] shrink-0 ios27-card rounded-[24px] sm:rounded-[36px] flex flex-col overflow-hidden
             ${viewMode === 'map' ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'}`}>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-0 relative custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 pb-28 sm:pb-6 space-y-0 relative custom-scrollbar">
 
             {displayItems.map((item, idx) => {
               const isTransport = item.type === 'Transport';
@@ -847,6 +902,10 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               const canInsertTransport = nextItem && !isTransport && nextItem.type !== 'Transport' && !isGuest && item.transportType !== 'Flight';
               
               const isHighlighted = highlightedId === item.id;
+              const anchorsOnly = displayItems.filter(i => i.type !== 'Transport');
+              const anchorPos = anchorsOnly.findIndex(i => i.id === item.id);
+              const canMoveUp = !isGuest && !isTransport && !isFlight && anchorPos > 0 && anchorsOnly[anchorPos - 1]?.transportType !== 'Flight';
+              const canMoveDown = !isGuest && !isTransport && !isFlight && anchorPos > -1 && anchorPos < anchorsOnly.length - 1 && anchorsOnly[anchorPos + 1]?.transportType !== 'Flight';
 
               return (
                 <React.Fragment key={item.id}>
@@ -872,19 +931,19 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                         <div className="absolute bottom-4 left-10 sm:left-14 right-4 h-1 bg-primary rounded-full shadow-[0_0_12px_rgba(59,130,246,0.5)] z-20 pointer-events-none" />
                     )}
                     {!isTransport && (
-                    <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-slate-900 z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <div className={`absolute left-[-9px] sm:left-[-12px] top-2.5 w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] bg-white dark:bg-[#121318] z-10 flex items-center justify-center shadow-sm transition-all ${isFlight ? 'border-blue-400' : 'border-slate-200 dark:border-white/[0.15]'}`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${isFlight ? 'bg-blue-500' : item.type === 'Place' ? 'bg-primary' : 'bg-orange-500'}`} />
                     </div>
                   )}
-                  <div className={`absolute left-[-0.5px] top-8 bottom-0 w-0.5 ${isTransport ? 'border-l-2 border-dashed border-slate-100 dark:border-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'} last:hidden`} />
+                  <div className={`absolute left-[-0.5px] top-8 bottom-0 w-0.5 ${isTransport ? 'border-l-2 border-dashed border-slate-200 dark:border-white/[0.08]' : 'bg-slate-100 dark:bg-white/[0.06]'} last:hidden`} />
                   
                   {isTransport ? (
-                    <div className={`group bg-slate-50 dark:bg-slate-800/40 rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all ${isHighlighted ? 'ring-2 ring-primary bg-primary/5 border-primary shadow-lg' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}>
+                    <div className={`group bg-slate-50 dark:bg-white/[0.03] rounded-xl px-3 py-1.5 border border-dashed flex items-center justify-center h-auto min-h-[40px] relative transition-all ${isHighlighted ? 'ring-2 ring-primary bg-primary/10 border-primary shadow-lg' : 'border-slate-200 dark:border-white/[0.08] hover:border-slate-400'}`}>
                        <div className="flex items-center gap-2 relative max-w-full px-12 sm:px-4 justify-center sm:justify-start w-full">
                           <button 
                             disabled={isGuest || isFlight} // Lock flight transport type switching
                             onClick={() => !isGuest && !isFlight && setShowTransportPickerId(item.id)}
-                            className={`flex items-center gap-2 p-1 rounded-lg transition-colors shrink-0 ${isGuest || isFlight ? 'cursor-default' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                            className={`flex items-center gap-2 p-1 rounded-lg transition-colors shrink-0 ${isGuest || isFlight ? 'cursor-default' : 'hover:bg-slate-100 dark:hover:bg-white/[0.08]'}`}
                           >
                             {transportOpt ? <transportOpt.icon size={13} className={transportOpt.color} /> : null}
                           </button>
@@ -898,18 +957,18 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                           </div>
                           
                           {showTransportPickerId === item.id && !isGuest && !isFlight && (
-                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 rounded-2xl shadow-xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
+                            <div ref={editRef} className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] rounded-2xl shadow-xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
                                {TRANSPORT_OPTIONS.filter(o => o.type !== 'Flight').map(opt => (
                                  <button 
                                     key={opt.type} 
                                     onClick={() => { setShowTransportPickerId(null); handleChangeTransportType(item.id, opt.type); }} 
-                                    className={`p-2 rounded-xl transition-all shrink-0 ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-700 opacity-60 hover:opacity-100'}`}
+                                    className={`p-2 rounded-xl transition-all shrink-0 ${item.transportType === opt.type ? 'bg-slate-100 dark:bg-white/[0.15]' : 'hover:bg-slate-100 dark:hover:bg-white/[0.08] opacity-60 hover:opacity-100'}`}
                                  >
                                    <opt.icon size={16} className={opt.color} />
                                  </button>
                                ))}
-                               <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
-                               <button onClick={(e) => { e.stopPropagation(); setShowTransportPickerId(null); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all">
+                               <div className="w-px h-6 bg-slate-100 dark:bg-white/[0.1] mx-1" />
+                               <button onClick={(e) => { e.stopPropagation(); setShowTransportPickerId(null); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl transition-all">
                                  <X size={16} />
                                </button>
                             </div>
@@ -918,16 +977,45 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                        
                        {!isGuest && !isFlight && (
                          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 bg-white/80 dark:bg-slate-700 text-red-500/80 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-slate-600 active:scale-90"><Trash2 size={12}/></button>
+                            <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 bg-white/80 dark:bg-white/[0.08] text-red-500 hover:text-red-600 rounded-lg shadow-sm border border-slate-100 dark:border-white/[0.1] active:scale-90"><Trash2 size={12}/></button>
                          </div>
                        )}
                     </div>
                   ) : (
                     <div 
-                      className={`group bg-white dark:bg-slate-800/80 p-3 sm:p-3.5 rounded-2xl border transition-all relative shadow-ios sm:hover:shadow-ios ${isHighlighted ? 'ring-2 ring-primary border-primary bg-primary/5 shadow-2xl scale-[1.02] z-10' : isFlight ? 'ring-1 ring-blue-500/20 bg-blue-50/20 border-blue-100/50 dark:border-blue-900/30' : 'border-transparent'}`}
+                      className={`group p-3 sm:p-3.5 rounded-2xl border transition-all relative shadow-ios ${
+                        isHighlighted 
+                          ? 'ring-2 ring-primary border-primary bg-primary/10 shadow-2xl scale-[1.02] z-10' 
+                          : isFlight 
+                            ? 'ring-1 ring-blue-500/30 bg-blue-500/[0.08] border-blue-500/20' 
+                            : 'bg-white dark:bg-white/[0.04] border-black/[0.05] dark:border-white/[0.08] hover:border-black/[0.1] dark:hover:border-white/[0.14]'
+                      }`}
                     >
                       <div className="flex items-center gap-2 sm:gap-4">
-                        <div className="shrink-0 w-10 sm:w-14">
+                        <div className="shrink-0 w-12 sm:w-16 flex items-center gap-1">
+                          {!isGuest && !isFlight && (
+                            <div className="flex flex-col items-center shrink-0">
+                              <button
+                                type="button"
+                                disabled={!canMoveUp}
+                                onClick={(e) => { e.stopPropagation(); handleMoveStop(item.id, 'up'); }}
+                                aria-label={isEn ? `Move ${item.placeName} up` : `上移 ${item.placeName}`}
+                                className="p-0.5 text-slate-400 hover:text-primary disabled:opacity-20 cursor-pointer disabled:cursor-default transition-colors"
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <GripVertical size={11} className="hidden sm:block text-slate-300 dark:text-slate-600 cursor-grab active:cursor-grabbing" />
+                              <button
+                                type="button"
+                                disabled={!canMoveDown}
+                                onClick={(e) => { e.stopPropagation(); handleMoveStop(item.id, 'down'); }}
+                                aria-label={isEn ? `Move ${item.placeName} down` : `下移 ${item.placeName}`}
+                                className="p-0.5 text-slate-400 hover:text-primary disabled:opacity-20 cursor-pointer disabled:cursor-default transition-colors"
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                            </div>
+                          )}
                           <div className={`font-mono font-black text-[10px] sm:text-sm ${isFlight ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}>
                             {item.time}
                           </div>
@@ -937,7 +1025,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                            onClick={() => {
                              setHighlightedId(item.id);
                            }}
-                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                           className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-white/[0.06]"
                         >
                            <div className="flex items-center gap-1.5 w-full justify-start">
                               {isFlight && <Plane size={11} className="text-blue-500 shrink-0" />}
@@ -945,43 +1033,47 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                                  {item.placeName}
                               </div>
                            </div>
-                           <div className="text-[9px] sm:text-xs font-medium text-slate-400 whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 w-full text-left">
-                             {item.note || '...'}
-                           </div>
+                           {item.note && (
+                             <div className="text-[10px] sm:text-xs font-medium text-slate-400 whitespace-nowrap sm:whitespace-normal px-1 sm:px-0 w-full text-left mt-0.5">
+                               {item.note}
+                             </div>
+                           )}
                         </div>
 
-                        <div className="shrink-0 flex flex-col gap-1 w-[72px] sm:w-24 items-end pl-1 sm:pl-3">
+                        <div className="shrink-0 flex items-center gap-1 pl-1 sm:pl-3">
                            {isFlight ? (
-                              <div className="flex gap-1 w-full justify-end">
-                                  <div className="p-1.5 text-slate-300 dark:text-slate-600 flex items-center justify-center">
+                              <div className="flex gap-1 justify-end">
+                                  <div className="p-1.5 text-slate-300 dark:text-slate-500 flex items-center justify-center">
                                     <Lock size={13} />
                                   </div>
                               </div>
                            ) : (
-                             <>
+                             <div className="flex items-center gap-1">
                                <button 
                                  onClick={() => handleEditItem(item)}
                                  disabled={isGuest}
-                                 className={`hidden sm:flex w-full py-1.5 items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-slate-700/80 text-slate-500 hover:text-primary'}`}
+                                 aria-label={`${t('edit')} ${item.placeName}`}
+                                 className={`p-1.5 sm:p-2 flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 hover:text-primary cursor-pointer'}`}
                                >
                                  <Edit2 size={13} />
                                </button>
-                               <div className="flex gap-1 w-full transition-opacity">
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank'); }} 
-                                    className="flex-1 py-1.5 flex items-center justify-center bg-slate-50 dark:bg-slate-700/80 text-slate-400 hover:text-primary rounded-lg border border-slate-100 dark:border-slate-700 active:scale-95 transition-all"
-                                  >
-                                    <Map size={13} />
-                                  </button>
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} 
-                                    disabled={isGuest}
-                                    className={`flex-1 py-1.5 flex items-center justify-center rounded-lg border border-slate-100 dark:border-slate-700 transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-slate-700/80 text-red-400 hover:text-red-500'}`}
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                             </>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.placeName)}`, '_blank'); }} 
+                                 aria-label={isEn ? `Navigate to ${item.placeName}` : `導航前往 ${item.placeName}`}
+                                 title={isEn ? "Open Google Maps Navigation" : "開啟 Google Maps 導航"}
+                                 className="p-1.5 sm:p-2 flex items-center justify-center bg-slate-50 dark:bg-white/[0.06] text-slate-400 hover:text-primary rounded-xl border border-slate-200/80 dark:border-white/[0.08] active:scale-95 transition-all cursor-pointer"
+                               >
+                                 <Map size={13} />
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); handleDeleteItem(item.id); }} 
+                                 disabled={isGuest}
+                                 aria-label={isEn ? `Delete ${item.placeName}` : `刪除 ${item.placeName}`}
+                                 className={`p-1.5 sm:p-2 flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-white/[0.08] transition-all active:scale-95 ${isGuest ? 'opacity-30 cursor-default' : 'bg-slate-50 dark:bg-white/[0.06] text-red-400 hover:text-red-500 cursor-pointer'}`}
+                               >
+                                 <Trash2 size={13} />
+                               </button>
+                             </div>
                            )}
                         </div>
                       </div>
@@ -991,21 +1083,21 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
                 {canInsertTransport && !isGuest && (
                   <div className="relative flex items-center justify-center py-2 group/btn">
-                    <div className="absolute left-[-0.5px] w-0.5 bg-slate-50 dark:bg-slate-800/50 h-full" />
+                    <div className="absolute left-[-0.5px] w-0.5 bg-slate-100 dark:bg-white/[0.06] h-full" />
                     {insertingAt === idx ? (
-                      <div ref={editRef} className="z-10 bg-white dark:bg-slate-800 border border-indigo-100 dark:border-indigo-900 shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
+                      <div ref={editRef} className="z-10 bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.14] shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in zoom-in-95 duration-200">
                         {TRANSPORT_OPTIONS.filter(o => o.type !== 'Flight').map(opt => (
-                          <button key={opt.type} onClick={() => handleInsertTransport(idx, opt.type)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-all active:scale-90 shrink-0">
+                          <button key={opt.type} onClick={() => handleInsertTransport(idx, opt.type)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-xl transition-all active:scale-90 shrink-0">
                             <opt.icon size={16} className={opt.color} />
                           </button>
                         ))}
-                        <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
-                        <button onClick={() => setInsertingAt(null)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-xl transition-all">
+                        <div className="w-px h-6 bg-slate-100 dark:bg-white/[0.1] mx-1" />
+                        <button onClick={() => setInsertingAt(null)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl transition-all">
                           <X size={16} />
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-300 dark:text-slate-500 hover:text-indigo-600 hover:border-indigo-100 p-1.5 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-0 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95">
+                      <button onClick={() => setInsertingAt(idx)} className="z-10 bg-white dark:bg-[#161822] border border-slate-200 dark:border-white/[0.12] hover:border-primary/40 text-slate-400 dark:text-slate-400 hover:text-primary px-2.5 py-1 rounded-full text-[9px] font-black flex items-center gap-1 transition-all sm:opacity-65 group-hover/btn:opacity-100 shadow-sm hover:shadow-md active:scale-95 cursor-pointer">
                         <Plus size={14} /> <span className="hidden sm:inline font-black ml-1 uppercase">{t('selectTransport')}</span>
                       </button>
                     )}
@@ -1022,14 +1114,14 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
 
       {isFormOpen && editingItem && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-slate-800 p-6 sm:p-10 rounded-[40px] shadow-2xl w-full max-w-lg border border-slate-100 dark:border-slate-700 overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[80px] -mr-32 -mt-32" />
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl p-6 sm:p-10 rounded-[36px] shadow-2xl w-full max-w-lg border border-black/[0.08] dark:border-white/[0.14] overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
             
             <div className="relative z-10">
               <div className="flex justify-between items-center mb-6 sm:mb-8">
                 <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">{isAddingNew ? t('newActivity') : t('editActivity')}</h3>
-                <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-400 transition-colors">
+                <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-full text-slate-400 transition-colors">
                   <X size={24} />
                 </button>
               </div>
@@ -1037,16 +1129,16 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               <div className="space-y-6 sm:space-y-8">
                 <div className="space-y-2">
                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('type')}</label>
-                  <div className="flex bg-slate-50 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex bg-slate-50 dark:bg-white/[0.04] p-1.5 rounded-2xl border border-slate-100 dark:border-white/[0.08]">
                     <button 
                       onClick={() => setEditingItem({ ...editingItem, type: 'Place' })}
-                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Place' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Place' ? 'bg-white dark:bg-white/[0.15] text-primary shadow-sm' : 'text-slate-400'}`}
                     >
                       <MapPin size={13}/> {t('typePlace')}
                     </button>
                     <button 
                       onClick={() => setEditingItem({ ...editingItem, type: 'Food' })}
-                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Food' ? 'bg-white dark:bg-slate-700 text-orange-500 shadow-sm' : 'text-slate-400'}`}
+                      className={`flex-1 py-2.5 rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-2 ${editingItem.type === 'Food' ? 'bg-white dark:bg-white/[0.15] text-orange-500 shadow-sm' : 'text-slate-400'}`}
                     >
                       <Coffee size={13}/> {t('typeFood')}
                     </button>
@@ -1058,7 +1150,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('placeName')}</label>
                     {!isAddingNew ? (
                       // Read-only when editing existing item — name cannot be changed
-                      <div className="w-full bg-slate-100 dark:bg-slate-900/60 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-400 border-2 border-transparent select-none cursor-default">
+                      <div className="w-full bg-slate-100 dark:bg-white/[0.04] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold text-slate-500 dark:text-slate-300 border border-slate-200/50 dark:border-white/[0.06] select-none cursor-default">
                         {editingItem.placeName}
                       </div>
                     ) : (
@@ -1082,7 +1174,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                           setNameError(false);
                         }}
                         placeholder="..."
-                        className={`w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
+                        className={`w-full bg-slate-50 dark:bg-white/[0.05] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-bold border-2 outline-none shadow-sm transition-all ${nameError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-slate-100 dark:border-white/[0.08] focus:ring-2 focus:ring-primary/20 dark:text-white'}`}
                       />
                     )}
                   </div>
@@ -1090,7 +1182,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('time')}</label>
                     <button 
                       onClick={() => setShowTimePicker(!showTimePicker)}
-                      className="w-full bg-slate-50 dark:bg-slate-900 p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-mono font-black text-center flex items-center justify-center gap-2 border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
+                      className="w-full bg-slate-50 dark:bg-white/[0.05] p-4 sm:p-5 rounded-2xl sm:rounded-3xl font-mono font-black text-center flex items-center justify-center gap-2 border border-slate-100 dark:border-white/[0.08] outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm"
                     >
                       <Clock size={15} className="text-slate-400" />
                       {editingItem.time}
@@ -1112,7 +1204,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                     onChange={e => setEditingItem({ ...editingItem, note: e.target.value })}
                     rows={2}
                     placeholder="..."
-                    className="w-full bg-slate-50 dark:bg-slate-900 p-5 sm:p-6 rounded-[24px] sm:rounded-[32px] font-bold border-none outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm resize-none"
+                    className="w-full bg-slate-50 dark:bg-white/[0.05] p-5 sm:p-6 rounded-[24px] sm:rounded-[32px] font-bold border border-slate-100 dark:border-white/[0.08] outline-none focus:ring-2 focus:ring-primary/20 dark:text-white shadow-sm resize-none"
                   />
                 </div>
 
@@ -1127,7 +1219,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                   </button>
                   <button 
                     onClick={() => setIsFormOpen(false)}
-                    className="order-2 sm:order-1 flex-1 py-4 sm:py-5 bg-slate-100 dark:bg-slate-700 text-slate-500 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 transition-all active:scale-95"
+                    className="order-2 sm:order-1 flex-1 py-4 sm:py-5 bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 rounded-2xl sm:rounded-3xl font-black hover:bg-slate-200 dark:hover:bg-white/[0.12] transition-all active:scale-95"
                   >
                     {t('cancel')}
                   </button>

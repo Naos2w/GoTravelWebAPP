@@ -39,6 +39,9 @@ export interface Expense {
   createdAt?: string;
   note: string;
   exchangeRate: number;
+  paidBy?: string; // 實際代墊人 ID
+  paidByName?: string; // 實際代墊人名稱
+  splitWith?: string[]; // 參與分攤的成員 ID 列表（預設全員平分）
 }
 
 export interface FlightSegment {

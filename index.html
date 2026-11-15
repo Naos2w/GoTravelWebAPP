@@ -2,9 +2,21 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#007AFF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Go Travel" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
     <title>Go Travel - Your Journey Starts Here</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
@@ -17,11 +29,11 @@
               secondary: "#5856D6",
               background: {
                 light: "#F2F2F7",
-                dark: "#1C1C1E",
+                dark: "#060709",
               },
               surface: {
                 light: "#FFFFFF",
-                dark: "#2C2C2E",
+                dark: "#121318",
               },
               fill: {
                 primary: "#007AFF",
@@ -36,9 +48,17 @@
                 "BlinkMacSystemFont",
                 "SF Pro Display",
                 "SF Pro Text",
+                "Plus Jakarta Sans",
+                "Inter",
                 "Helvetica Neue",
-                "Arial",
                 "sans-serif",
+              ],
+              mono: [
+                "JetBrains Mono",
+                "SF Mono",
+                "ui-monospace",
+                "SFMono-Regular",
+                "monospace",
               ],
             },
             boxShadow: {
@@ -46,6 +66,8 @@
               "ios-md": "0 4px 14px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
               "ios-lg": "0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.04)",
               "ios-xl": "0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05)",
+              "vision-glass": "0 16px 40px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.14)",
+              "vision-glow": "0 0 30px rgba(0,122,255,0.25), 0 16px 40px rgba(0,0,0,0.65)",
             },
             borderRadius: {
               "ios": "14px",
@@ -61,7 +83,7 @@
       };
     </script>
     <style>
-      /* === Apple Human Interface Guideline Design System === */
+      /* === Apple Human Interface Guideline & iOS 27 Liquid Glass System === */
       :root {
         color-scheme: light;
         --radius-xs: 10px;
@@ -78,9 +100,9 @@
         --shadow-xl: 0 20px 50px rgba(0,0,0,0.10), 0 8px 16px rgba(0,0,0,0.05);
 
         --glass-light: rgba(255, 255, 255, 0.82);
-        --glass-dark: rgba(28, 28, 30, 0.82);
+        --glass-dark: rgba(255, 255, 255, 0.05);
         --glass-border-light: rgba(255, 255, 255, 0.6);
-        --glass-border-dark: rgba(255, 255, 255, 0.08);
+        --glass-border-dark: rgba(255, 255, 255, 0.12);
       }
       .dark {
         color-scheme: dark;
@@ -99,7 +121,7 @@
         transition: background-color 0.4s ease, color 0.4s ease;
       }
       .dark body {
-        background-color: #1c1c1e;
+        background-color: #060709;
         color: #f5f5f7;
       }
 
@@ -114,7 +136,7 @@
         border-radius: 99px;
       }
       .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.10);
       }
       .custom-thin-scrollbar::-webkit-scrollbar { height: 2px; }
       .custom-thin-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.02); }
@@ -147,7 +169,127 @@
       }
       .animate-dash { animation: dash 1s linear infinite; }
 
-      /* === Apple Frosted Glass === */
+      @keyframes enter-slide-up-sm {
+        from { opacity: 0; transform: translate3d(0, 10px, 0); }
+        to   { opacity: 1; transform: translate3d(0, 0, 0); }
+      }
+      @keyframes enter-zoom-sm {
+        from { opacity: 0; transform: scale(0.95); }
+        to   { opacity: 1; transform: scale(1); }
+      }
+      .animate-in.slide-in-from-bottom-2,
+      .animate-in.slide-in-from-bottom-3 {
+        animation: enter-slide-up-sm 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      .animate-in.zoom-in-95 {
+        animation: enter-zoom-sm 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+
+      @keyframes tab-slide-from-right {
+        from { opacity: 0; transform: translate3d(40px, 0, 0); }
+        to   { opacity: 1; transform: translate3d(0, 0, 0); }
+      }
+      @keyframes tab-slide-from-left {
+        from { opacity: 0; transform: translate3d(-40px, 0, 0); }
+        to   { opacity: 1; transform: translate3d(0, 0, 0); }
+      }
+      .animate-tab-slide-right {
+        animation: tab-slide-from-right 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        will-change: transform, opacity;
+      }
+      .animate-tab-slide-left {
+        animation: tab-slide-from-left 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        will-change: transform, opacity;
+      }
+
+      /* === iOS 27 Liquid Glass Cards & Materials === */
+      .ios27-card {
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(28px) saturate(190%);
+        -webkit-backdrop-filter: blur(28px) saturate(190%);
+        border: 1px solid rgba(15, 23, 42, 0.07);
+        box-shadow: 0 8px 28px -6px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      }
+      .dark .ios27-card {
+        background: rgba(18, 20, 28, 0.72);
+        backdrop-filter: blur(32px) saturate(200%);
+        -webkit-backdrop-filter: blur(32px) saturate(200%);
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      }
+      .dark .ios27-card:hover {
+        border-color: rgba(255, 255, 255, 0.20);
+        box-shadow: 0 20px 50px -8px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+      }
+
+      .ios27-subcard {
+        background: rgba(15, 23, 42, 0.025);
+        border: 1px solid rgba(15, 23, 42, 0.05);
+      }
+      .dark .ios27-subcard {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+      }
+
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .aviation-grid-bg {
+        background-image: radial-gradient(rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+        background-size: 16px 16px;
+      }
+      .dark .aviation-grid-bg {
+        background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+        background-size: 16px 16px;
+      }
+
+      /* === Instagram / Threads Style Floating Dock === */
+      .ios27-dock {
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.12);
+      }
+      .dark .ios27-dock {
+        background: rgba(24, 24, 27, 0.80);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+      }
+
+      /* Instagram / Threads Style Selected Pill */
+      .dock-pill-active {
+        background: rgba(15, 23, 42, 0.08);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 2px 8px rgba(15, 23, 42, 0.06);
+        transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.25s ease, box-shadow 0.25s ease;
+        will-change: transform;
+      }
+      .dark .dock-pill-active {
+        background: rgba(255, 255, 255, 0.16);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 12px rgba(0, 0, 0, 0.4);
+      }
+      .dock-pill-scrubbing {
+        transition: transform 0.05s linear, background-color 0.2s ease, box-shadow 0.2s ease !important;
+        box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), 0 6px 16px rgba(0, 122, 255, 0.18);
+      }
+      .dark .dock-pill-scrubbing {
+        background: rgba(255, 255, 255, 0.24);
+        box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.38), 0 6px 20px rgba(0, 0, 0, 0.55);
+      }
+
+      /* Flat Indicator for desktop tabs */
+      .ios27-dock-active {
+        background: rgba(0, 122, 255, 0.10);
+        border: 1px solid rgba(0, 122, 255, 0.20);
+      }
+      .dark .ios27-dock-active {
+        background: rgba(0, 122, 255, 0.18);
+        border: 1px solid rgba(0, 122, 255, 0.30);
+      }
+
       .glass {
         background: var(--glass-light);
         backdrop-filter: saturate(180%) blur(20px);
@@ -166,7 +308,8 @@
         padding: 2px;
       }
       .dark .apple-segment {
-        background: rgba(116,116,128,0.20);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
       .apple-segment-item {
         border-radius: calc(var(--radius-sm) - 2px);
@@ -181,8 +324,10 @@
         color: #1d1d1f;
       }
       .dark .apple-segment-item.active {
-        background: #3a3a3c;
-        color: #f5f5f7;
+        background: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
       }
 
       /* === Leaflet Overrides & Dark Mode Basemap === */
@@ -191,16 +336,18 @@
         font-family: inherit;
       }
       .dark .leaflet-container {
-        background-color: #1c1c1e !important;
+        background-color: #12161f !important;
       }
       .leaflet-tile {
+        filter: saturate(85%) contrast(98%);
         transition: filter 0.3s ease;
       }
       .dark .leaflet-tile {
-        filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.15) saturate(1.1);
+        filter: invert(92%) hue-rotate(195deg) saturate(28%) brightness(88%) contrast(96%);
       }
       .dark .leaflet-control-attribution {
-        background: rgba(28, 28, 30, 0.8) !important;
+        background: rgba(12, 14, 20, 0.75) !important;
+        backdrop-filter: blur(8px);
         color: #94a3b8 !important;
       }
       .dark .leaflet-control-attribution a {
@@ -216,11 +363,11 @@
         border: 1px solid rgba(0,0,0,0.06) !important;
       }
       .dark .leaflet-popup-content-wrapper {
-        background: rgba(44,44,46,0.96) !important;
-        border-color: rgba(255,255,255,0.08) !important;
+        background: rgba(18,20,28,0.95) !important;
+        border-color: rgba(255,255,255,0.12) !important;
       }
       .dark .leaflet-popup-tip {
-        background: rgba(44,44,46,0.96) !important;
+        background: rgba(18,20,28,0.95) !important;
       }
       .leaflet-popup-content { margin: 8px !important; }
 
@@ -276,5 +423,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

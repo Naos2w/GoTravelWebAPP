@@ -279,14 +279,14 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     onSubmit(newTrip);
   };
 
-  const inputClass = (isError: boolean) => `w-full p-3 bg-gray-50 dark:bg-slate-900 rounded-xl font-black border-2 outline-none transition-all ${isError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-transparent focus:border-primary/20'}`;
+  const inputClass = (isError: boolean) => `w-full p-3 bg-gray-50 dark:bg-white/[0.05] dark:text-white rounded-xl font-black border-2 outline-none transition-all ${isError ? 'border-red-500 bg-red-50/10 focus:ring-4 focus:ring-red-500/20 animate-pulse-soft' : 'border-slate-100 dark:border-white/[0.08] focus:border-primary/20'}`;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-8 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
+      <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-8 border-b border-gray-100 dark:border-white/[0.08] flex justify-between items-center">
           <div><h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">{labels.title}</h2></div>
-          <button onClick={onClose} className="p-3 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full text-slate-400"><X size={20} /></button>
+          <button onClick={onClose} className="p-3 hover:bg-gray-100 dark:hover:bg-white/[0.08] rounded-full text-slate-400"><X size={20} /></button>
         </div>
         <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
            {step === 'outbound-search' && (
@@ -298,10 +298,10 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.outboundSelected}</label>
                     <div className="space-y-2">
                       {outboundSegments.map((seg, idx) => (
-                        <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-slate-850">
+                        <div key={idx} className="bg-slate-50 dark:bg-white/[0.05] p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-white/[0.08]">
                           <div>
                             <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
-                            <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                            <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
@@ -323,7 +323,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     >
                       {labels.nextToInbound} <ArrowRight size={14} />
                     </button>
-                    <div className="w-full h-px bg-slate-100 dark:bg-slate-700 my-4" />
+                    <div className="w-full h-px bg-slate-100 dark:bg-white/[0.08] my-4" />
                   </div>
                 )}
 
@@ -363,9 +363,9 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                       setOrigin(f.arrivalAirport);
                       setDestination('');
                       setOutboundDate(f.arrivalTime.split('T')[0]);
-                      setOutboundFlightNumber('');
+                      setInboundFlightNumber('');
                       setStep('outbound-search');
-                    }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-slate-800">
+                    }} className="bg-gray-50 dark:bg-white/[0.04] p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-white/[0.08]">
                       <div className="flex justify-between items-center mb-1"><span className="font-black text-sm">{f.airline}</span><span className="text-xs font-black text-slate-400">{f.flightNumber}</span></div>
                       <div className="flex justify-between text-xs font-black"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
                     </div>
@@ -382,10 +382,10 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{labels.inboundSelected}</label>
                     <div className="space-y-2">
                       {inboundSegments.map((seg, idx) => (
-                        <div key={idx} className="bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-slate-800">
+                        <div key={idx} className="bg-slate-50 dark:bg-white/[0.05] p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-white/[0.08]">
                           <div>
                             <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
-                            <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                            <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
@@ -407,7 +407,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                     >
                       {labels.nextToReview} <ArrowRight size={14} />
                     </button>
-                    <div className="w-full h-px bg-slate-100 dark:bg-slate-700 my-4" />
+                    <div className="w-full h-px bg-slate-100 dark:bg-white/[0.08] my-4" />
                   </div>
                 )}
 
@@ -456,7 +456,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                       setInboundDate(f.arrivalTime.split('T')[0]);
                       setInboundFlightNumber('');
                       setStep('inbound-search');
-                    }} className="bg-gray-50 dark:bg-slate-900 p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-slate-800">
+                    }} className="bg-gray-50 dark:bg-white/[0.04] p-4 rounded-2xl cursor-pointer hover:ring-2 hover:ring-primary border border-slate-100 dark:border-white/[0.08]">
                       <div className="flex justify-between items-center mb-1"><span className="font-black text-sm">{f.airline}</span><span className="text-xs font-black text-slate-400">{f.flightNumber}</span></div>
                       <div className="flex justify-between text-xs font-black"><span>{DateTimeUtils.formatTime24(f.departureTime)} {f.departureAirport}</span><span>{DateTimeUtils.formatTime24(f.arrivalTime)} {f.arrivalAirport}</span></div>
                     </div>
@@ -472,10 +472,10 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                   <div className="space-y-1.5">
                     <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{labels.outboundSelected}</div>
                     {outboundSegments.map((seg, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-850 font-black text-xs flex justify-between items-center">
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-white/[0.05] rounded-2xl border border-slate-100 dark:border-white/[0.08] font-black text-xs flex justify-between items-center">
                         <div>
                           <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
-                          <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                          <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
                         </div>
                         <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
                       </div>
@@ -485,10 +485,10 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
                   <div className="space-y-1.5">
                     <div className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{labels.inboundSelected}</div>
                     {inboundSegments.map((seg, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-850 font-black text-xs flex justify-between items-center">
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-white/[0.05] rounded-2xl border border-slate-100 dark:border-white/[0.08] font-black text-xs flex justify-between items-center">
                         <div>
                           <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
-                          <span>{seg.departureAirport} → {seg.arrivalAirport}</span>
+                          <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
                         </div>
                         <span className="text-slate-400">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
                       </div>

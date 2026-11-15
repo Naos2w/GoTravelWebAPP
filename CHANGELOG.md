@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.5.1] - 2026-10-14
+
+### 💎 Header & Footer 跨裝置極簡現代化 (Instagram/iOS Style Modernization)
+
+#### Added & Improved
+- **行動端底欄個人頭像整合 (Instagram-Style Mobile Dock Avatar)**：
+  - 行動端懸浮導航列（Dock）最右側新增第 6 個標籤：個人圓形大頭貼（未登入為極簡圖示），點擊時平滑向上展開 Liquid Glass 浮動功能選單（向上彈出 Action Sheet）。
+  - 行動端頂部 Header 徹底解放：僅保留 `[返回鍵]`、`[旅程名稱 & 目的地]` 與 `[分享鍵]`，旅程名稱享用 100% 橫向呼吸空間，絕不被截斷。
+  - 桌面端與大螢幕（`md:` 以上）自動無縫保留在頂部 Header 右側，兼顧各裝置操作習慣。
+- **動態頂部狀態微膠囊 (Dynamic Header Pill - 僅限較寬裝置)**：
+  - 在較寬螢幕的旅程目的地旁新增極簡動態同步狀態（`● 即時同步`），手機端維持極致乾淨不顯示，杜絕多餘視覺干擾。
+- **分頁平滑轉場微動態 (Smooth Tab View Transitions)**：
+  - 各分頁（Dashboard、Itinerary、Checklist、Expenses、Flights）切換時採用平滑的淡入向上滑動動態（`animate-in fade-in slide-in-from-bottom-2 duration-200`），操作順暢如 Native App。
+  - 底欄圖示按鈕加入 Apple 觸感縮放動態（`active:scale-90`）。
+- **🧪 測試套件擴充**：
+  - `test/smoke/App.smoke.test.tsx` 擴充行動端 Dock 頭像開合向上彈出選單測試。
+  - 全專案測試套件擴充至 **21 個檔案、103 項測試 100% 通過**。
+
+---
+
+## [v1.5.0] - 2026-10-05
+
+### 📱 各模組 iOS 18 風格重構與手機原生功能聯動 (iOS 18 UI/UX & Native Apple Integrations)
+
+#### Added
+- **📲 手機原生功能聯動 (iOS Native Integrations)**：
+  - **一鍵匯出至 iOS 備忘錄 (`Apple Notes`)**：
+    - 建立 `services/exportService.ts`，整合 Web Share API，在 iPhone Safari 點擊直接彈出 iOS 系統原生 Share Sheet，點選「備忘錄」自動排版寫入。
+    - 生成排版精緻的旅行筆記：含目的地、日期、航班代號與起降航廈、每日時間軸景點、行李打勾清單與預算開銷。
+    - 非 Safari 或不支援環境自動無縫回退為「一鍵複製 Markdown 格式」，可直接貼入 Apple Notes、Notion 或 Obsidian。
+  - **加入 Apple / 系統行事曆 (`.ics` iCalendar)**：
+    - 動態生成 RFC 5545 標準 `.ics` 日曆資料，將旅程景點與航班起降時間打包，支援在 iPhone 點開一鍵「全部加入行事曆」，並自帶景點 GPS 座標、備註說明與出發前 30/120 分鐘鬧鈴通知。
+  - **iOS Action Sheet 匯出彈窗 (`components/ExportModal.tsx`)**：
+    - 旅程詳情頂部導航列新增「匯出」快捷按鈕，支援毛玻璃遮罩、流暢滑入動畫、選項卡片與 iPhone 小訣竅指引。
+- **🎨 各模組 iOS 18 風格 UI/UX 重構 (Native Apple HIG Aesthetics)**：
+  - **待辦清單 (Checklist - Apple Reminders 風格)**：
+    - 圓形空心 Checkbox 支援彈簧墨水填色微動態 (`active:scale-75`) 與平滑劃線漸隱。
+    - 淘汰過往未完成紅框警示，改用 Apple 質感 Inset Grouped 卡片與五大分類彩色圓形小徽章。
+    - 新增「全部 / 未完成 / 已完成」三態切換膠囊，以及常見行李推薦按鈕（護照、萬用轉接插頭、行動電源等一鍵加入）。
+  - **記帳與預算 (Expenses - Apple Wallet 風格)**：
+    - 頂部升級為 Apple Card 鈦金漸變磨砂卡片，支援高光漫射光暈，醒目顯示總開銷與機票/當地消費拆分。
+    - 類別統計採用 Apple Health 圓角進度長條與百分比膠囊。
+    - 交易紀錄採用 Inset Grouped Table 質感，金額使用 Tabular 等寬字體。
+  - **航班管理 (BoardingPass - Apple Wallet PKPass 風格)**：
+    - 電子登機證票卡加入 Apple Wallet PKPass 經典鋸齒撕票打孔邊緣、條碼與 QR Code 擬真排版。
+  - **行程與地圖 (Itinerary - Apple Maps 抽屜卡片)**：
+    - 天數切換器升級為 iOS 18 Segmented Control 膠囊切換與日期標註。
+    - 行動端地圖模式增強 Apple Maps 抽屜式卡片輪播與全螢幕展開/收合切換。
+- **🧪 測試套件擴充**：
+  - 新增 `test/unit/exportService.test.ts`（4 項測試，涵蓋 Markdown 生成、RFC 5545 日曆格式與 Web Share API fallback）。
+  - 新增 `test/smoke/ExportModal.smoke.test.tsx`（3 項測試）。
+  - 全專案測試套件擴充至 **21 個檔案、101 項測試 100% 通過**。
+
+---
+
 ## [v1.4.0] - 2026-10-04
 
 ### 🧳 旅程總覽管理全面優化與管理模式 (Your Trips UI/UX & Trip Management)

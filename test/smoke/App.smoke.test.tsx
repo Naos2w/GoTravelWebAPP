@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
@@ -44,6 +44,7 @@ import App from "../../App";
 describe("App Component (Smoke Test)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, "", "/");
   });
 
   it("should mount and transition from loading to landing page when unauthenticated", async () => {
@@ -210,4 +211,241 @@ describe("App Component (Smoke Test)", () => {
       expect(screen.queryByText("Osaka Food Tour")).not.toBeInTheDocument();
     });
   });
+
+  it("toggles profile dropdown menu with theme, language, and logout options", async () => {
+    const { supabase, getTrips } = await import("../../services/storageService");
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-123",
+            email: "traveler@example.com",
+            user_metadata: { full_name: "Modern Voyager", avatar_url: "https://example.com/avatar.jpg" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Modern Voyager" })).toBeInTheDocument();
+    });
+
+    const profileBtn = screen.getByRole("button", { name: "Modern Voyager" });
+
+    // Menu should be closed initially
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Click to open menu
+    act(() => {
+      profileBtn.click();
+    });
+
+    // Menu should open displaying theme, language, and logout
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("traveler@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/外觀模式|Appearance/i)).toBeInTheDocument();
+    expect(screen.getByText(/語言|Language/i)).toBeInTheDocument();
+    expect(screen.getByText(/登出|Log Out/i)).toBeInTheDocument();
+  });
+
+  it("renders Instagram-style mobile dock profile button and toggles upward popover in trip detail view", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-dock-1",
+      user_id: "user-dock-123",
+      name: "Tokyo Adventure",
+      destination: "Tokyo, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-dock-123",
+            email: "dockuser@example.com",
+            user_metadata: { full_name: "Dock Voyager" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    render(<App />);
+
+    // Wait for trip to render and click to enter detail view
+    await waitFor(() => {
+      expect(screen.getByText("Tokyo Adventure")).toBeInTheDocument();
+    });
+
+    const tripCardTitle = screen.getByText("Tokyo Adventure");
+    act(() => {
+      tripCardTitle.click();
+    });
+
+    // In detail view, mobile dock profile button must be present
+    await waitFor(() => {
+      expect(screen.getByTestId("mobile-dock-profile-btn")).toBeInTheDocument();
+    });
+
+    const mobileDockProfileBtn = screen.getByTestId("mobile-dock-profile-btn");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
+    // Click mobile dock profile button
+    act(() => {
+      mobileDockProfileBtn.click();
+    });
+
+    // Popover opens with user info and settings
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("dockuser@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/外觀模式|Appearance/i)).toBeInTheDocument();
+    expect(screen.getByText(/匯出行程|Export Trip/i)).toBeInTheDocument();
+  });
+
+  it("supports press-and-slide scrubbing on mobile dock with synchronized screen follow and tab switching", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-scrub-1",
+      user_id: "user-scrub-123",
+      name: "Kyoto Spring",
+      destination: "Kyoto, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-scrub-123",
+            email: "scrub@example.com",
+            user_metadata: { full_name: "Scrub Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Kyoto Spring")).toBeInTheDocument();
+    });
+
+    act(() => {
+      screen.getByText("Kyoto Spring").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Mobile Navigation")).toBeInTheDocument();
+    });
+
+    const mobileNav = screen.getByLabelText("Mobile Navigation");
+    const activePill = screen.getByTestId("mobile-dock-active-pill");
+    const screenFollowWrapper = screen.getByTestId("tab-screen-follow-wrapper");
+
+    vi.spyOn(mobileNav, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      width: 312,
+      top: 0,
+      right: 312,
+      bottom: 56,
+      height: 56,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    // Start on slot 0 (clientX = 31) -> drag to slot 2.2 (clientX = 141, checklist)
+    act(() => {
+      fireEvent.pointerDown(mobileNav, { pointerId: 1, clientX: 31 });
+      fireEvent.pointerMove(mobileNav, { pointerId: 1, clientX: 141 });
+    });
+
+    // While scrubbing, pill follows fractional position and screen wrapper tracks sub-slot drag
+    expect(activePill.style.transform).toContain("translate3d(220.00%");
+    expect(activePill.style.transform).toContain("scale(1.06)");
+    expect(screenFollowWrapper.style.transform).toContain("translate3d(-11.2px");
+
+    // Release pointer -> snaps to slot 2 (200%) and clears temporary drag offset
+    act(() => {
+      fireEvent.pointerUp(mobileNav, { pointerId: 1, clientX: 141 });
+    });
+
+    expect(activePill.style.transform).toContain("translate3d(200.00%");
+    expect(activePill.style.transform).toContain("scale(1)");
+    expect(screenFollowWrapper.style.transform).toBe("");
+  });
+
+  it("synchronizes URL path across /trips, /trips/:tripId, and upgrades legacy ?tripId= links", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-route-42",
+      user_id: "user-route-1",
+      name: "Zurich Alps",
+      destination: "Zurich, Switzerland",
+      startDate: "2026-12-01",
+      endDate: "2026-12-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-route-1",
+            email: "router@example.com",
+            user_metadata: { full_name: "Route Explorer" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    // 1. Authenticated user lands on / -> redirected to /trips
+    const { unmount } = render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("Zurich Alps")).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/trips");
+    });
+
+    // 2. Selecting trip navigates URL to /trips/:tripId
+    act(() => {
+      screen.getByText("Zurich Alps").click();
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-route-42");
+    });
+
+    unmount();
+
+    // 3. Opening legacy /?tripId=... upgrades URL cleanly to /trips/:tripId
+    window.history.replaceState(null, "", "/?tripId=trip-route-42");
+    render(<App />);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-route-42");
+      expect(window.location.search).toBe("");
+    });
+  });
 });
+

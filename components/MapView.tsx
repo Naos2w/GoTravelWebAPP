@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
@@ -19,7 +19,7 @@ interface Props {
   hasBottomCards?: boolean;
 }
 
-const createCustomIcon = (index: number, type: string) => {
+const createCustomIcon = (index: number, type: string, isActive = false) => {
   const isFood = type === 'Food';
   const isFlight = type === 'Flight';
   
@@ -27,14 +27,17 @@ const createCustomIcon = (index: number, type: string) => {
   const bgClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
   const pulseClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
   const shadowClass = isFlight ? 'shadow-blue-500/50' : isFood ? 'shadow-orange-500/50' : 'shadow-primary/50';
+  const sizeClass = isActive
+    ? 'w-8 h-8 ring-4 ring-white/30 dark:ring-primary/40 scale-110 -translate-y-1'
+    : 'w-7 h-7';
 
   const html = `
     <div class="relative group cursor-pointer">
-      <div class="absolute -inset-2 ${pulseClass} rounded-full opacity-20 group-hover:opacity-40 animate-ping-soft transition-opacity"></div>
-      <div class="relative w-8 h-8 ${bgClass} rounded-full border-[3px] border-white dark:border-slate-800 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
-        <span class="text-white text-xs font-black">${index + 1}</span>
+      ${isActive ? `<div class="absolute -inset-2 ${pulseClass} rounded-full opacity-35 animate-pulse-soft"></div>` : ''}
+      <div class="relative ${sizeClass} ${bgClass} rounded-full border-[2.5px] border-white dark:border-slate-900 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
+        <span class="text-white ${isActive ? 'text-xs' : 'text-[11px]'} font-black font-mono tabular-nums">${index + 1}</span>
       </div>
-      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] ${
+      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] ${
         isFlight ? 'border-t-blue-500' : isFood ? 'border-t-orange-500' : 'border-t-primary'
       }"></div>
     </div>
@@ -43,9 +46,9 @@ const createCustomIcon = (index: number, type: string) => {
   return L.divIcon({
     html,
     className: 'custom-leaflet-marker',
-    iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -40]
+    iconSize: isActive ? [32, 40] : [28, 36],
+    iconAnchor: isActive ? [16, 40] : [14, 36],
+    popupAnchor: isActive ? [0, -40] : [0, -36]
   });
 };
 
@@ -200,6 +203,33 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   }[]>([]);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
+  const [isRoutingMenuOpen, setIsRoutingMenuOpen] = useState(false);
+  const routingMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isRoutingMenuOpen) return;
+    const handlePointerDownOutside = (e: MouseEvent | PointerEvent) => {
+      if (routingMenuRef.current && !routingMenuRef.current.contains(e.target as Node)) {
+        setIsRoutingMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDownOutside);
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
+  }, [isRoutingMenuOpen]);
+
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const updateTheme = () => setIsDarkMode(root.classList.contains('dark'));
+    updateTheme();
+    const observer = new MutationObserver(updateTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -422,7 +452,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   const activeItem = validItems.find(i => i.id === activeItemId);
 
   return (
-    <div className="w-full h-full rounded-2xl sm:rounded-[32px] overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 relative z-0 bg-slate-50 dark:bg-slate-900 group">
+    <div className="w-full h-full rounded-2xl sm:rounded-[32px] overflow-hidden shadow-sm border border-slate-100 dark:border-white/[0.08] relative z-0 bg-slate-50 dark:bg-[#0c0d12] group">
       
       {/* Search Overlay */}
       <div className="absolute top-4 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:w-[340px] z-[1000] flex flex-col gap-2 pointer-events-none transition-all duration-300">
@@ -432,23 +462,23 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
               value={searchQuery} 
               onChange={e => setSearchQuery(e.target.value)}
               placeholder={isEn ? "Search places to add..." : "搜尋地點以快速加入..."} 
-              className="flex-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-lg rounded-2xl pl-10 pr-4 py-3 sm:py-3.5 text-xs sm:text-sm font-bold border transform transition-all focus:scale-[1.02] border-slate-100 dark:border-slate-700 outline-none focus:ring-4 focus:ring-primary/20 dark:text-white"
+              className="flex-1 bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl shadow-lg rounded-2xl pl-10 pr-4 py-3 sm:py-3.5 text-xs sm:text-sm font-bold border transform transition-all focus:scale-[1.02] border-slate-100 dark:border-white/[0.12] outline-none focus:ring-4 focus:ring-primary/20 dark:text-white"
             />
             <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
               {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
             </div>
          </form>
          {searchResults.length > 0 && (
-           <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-2xl shadow-black/10 rounded-2xl p-2 overflow-hidden pointer-events-auto max-h-72 overflow-y-auto custom-scrollbar flex flex-col gap-1 border border-slate-100 dark:border-slate-700 animate-in fade-in slide-in-from-top-2">
-             <div className="flex justify-between items-center px-3 pt-1 pb-2 border-b border-slate-100 dark:border-slate-800 mb-1">
+           <div className="bg-white/95 dark:bg-[#121318]/95 backdrop-blur-2xl shadow-2xl shadow-black/10 rounded-2xl p-2 overflow-hidden pointer-events-auto max-h-72 overflow-y-auto custom-scrollbar flex flex-col gap-1 border border-slate-100 dark:border-white/[0.12] animate-in fade-in slide-in-from-top-2">
+             <div className="flex justify-between items-center px-3 pt-1 pb-2 border-b border-slate-100 dark:border-white/[0.08] mb-1">
                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{isEn ? 'Search Results' : '搜尋結果'}</span>
-               <button onClick={() => setSearchResults([])} className="text-slate-400 hover:text-slate-600 text-[10px] uppercase font-bold">{isEn ? 'Close' : '關閉'}</button>
+               <button onClick={() => setSearchResults([])} className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-[10px] uppercase font-bold">{isEn ? 'Close' : '關閉'}</button>
              </div>
              {searchResults.map((r, i) => (
                <button 
                  key={i} 
                  onClick={() => handleAddResult(r)} 
-                 className={`text-left px-3 py-2.5 rounded-xl transition-all flex flex-col ${r.isErrorHint ? 'bg-amber-50/60 dark:bg-amber-950/20 cursor-default' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50 active:scale-95'}`}
+                 className={`text-left px-3 py-2.5 rounded-xl transition-all flex flex-col ${r.isErrorHint ? 'bg-amber-50/60 dark:bg-amber-950/20 cursor-default' : 'hover:bg-slate-50 dark:hover:bg-white/[0.06] active:scale-95'}`}
                >
                  <div className="flex items-center justify-between gap-2">
                    <span className="font-black text-sm text-slate-800 dark:text-slate-100 line-clamp-1">{r.display_name.split(',')[0]}</span>
@@ -485,8 +515,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_40px_rgba(0,0,0,0.05)] z-10" />
 
       {validItems.length === 0 ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-slate-900/50 z-20">
-          <div className="w-16 h-16 bg-white dark:bg-slate-800 rounded-full shadow-lg flex items-center justify-center border border-slate-100 dark:border-slate-700 mb-4 animate-bounce-soft">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100/50 dark:bg-black/60 z-20">
+          <div className="w-16 h-16 bg-white dark:bg-[#161822] rounded-full shadow-lg flex items-center justify-center border border-slate-100 dark:border-white/[0.1] mb-4 animate-bounce-soft">
             <MapPin size={24} className="text-slate-400" />
           </div>
           <p className="text-xs text-slate-400 mt-2 max-w-[200px] text-center">
@@ -495,53 +525,85 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         </div>
       ) : (
       <>
-        {/* Travel Mode Selector Overlay */}
-        <div className={`absolute ${hasBottomCards ? 'bottom-[148px] sm:bottom-4' : 'bottom-4'} left-3 sm:left-4 z-[1000] pointer-events-auto flex items-center gap-1 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md shadow-lg rounded-2xl p-1 border border-slate-100 dark:border-slate-700 transition-all duration-300`}>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('auto')}
-            title={isEn ? "Auto (by Itinerary)" : "自動 (依行程)"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'auto' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Route size={15} />
-          </button>
-          <div className="w-px h-5 bg-slate-100 dark:bg-slate-700" />
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('driving')}
-            title={isEn ? "Always Driving" : "全域開車"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'driving' ? 'bg-slate-600 dark:bg-slate-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Car size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('walking')}
-            title={isEn ? "Always Walking" : "全域走路"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'walking' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Footprints size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('transit')}
-            title={isEn ? "Always Transit" : "全域大眾運輸"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'transit' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <TrainFront size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoutingModeOverride('bicycling')}
-            title={isEn ? "Always Cycling" : "全域自行車"}
-            className={`p-2 rounded-xl transition-all flex items-center justify-center ${routingModeOverride === 'bicycling' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-          >
-            <Bike size={15} />
-          </button>
+        {/* Travel Mode Selector Overlay (Collapsed by default, horizontally aligned with mobile stops pill) */}
+        <div
+          ref={routingMenuRef}
+          data-testid="routing-mode-selector"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className={`absolute ${
+            hasBottomCards ? 'bottom-[130px] lg:bottom-4' : 'bottom-3 lg:bottom-4'
+          } left-3 lg:left-4 z-[1000] pointer-events-auto h-8 flex items-center gap-1 bg-white/95 dark:bg-[#121318]/90 backdrop-blur-2xl shadow-lg rounded-full p-[3px] border border-black/[0.06] dark:border-white/[0.12] transition-all duration-200`}
+        >
+          {[
+            {
+              mode: 'auto' as const,
+              icon: Route,
+              title: isEn ? 'Auto (by Itinerary)' : '自動 (依行程)',
+              activeClass: 'bg-violet-600 text-white shadow-sm',
+            },
+            {
+              mode: 'driving' as const,
+              icon: Car,
+              title: isEn ? 'Always Driving' : '全域開車',
+              activeClass: 'bg-slate-600 dark:bg-white/[0.2] text-white shadow-sm',
+            },
+            {
+              mode: 'walking' as const,
+              icon: Footprints,
+              title: isEn ? 'Always Walking' : '全域走路',
+              activeClass: 'bg-amber-500 text-white shadow-sm',
+            },
+            {
+              mode: 'transit' as const,
+              icon: TrainFront,
+              title: isEn ? 'Always Transit' : '全域大眾運輸',
+              activeClass: 'bg-indigo-500 text-white shadow-sm',
+            },
+            {
+              mode: 'bicycling' as const,
+              icon: Bike,
+              title: isEn ? 'Always Cycling' : '全域自行車',
+              activeClass: 'bg-emerald-500 text-white shadow-sm',
+            },
+          ]
+            .filter((opt) => isRoutingMenuOpen || opt.mode === routingModeOverride)
+            .map((opt, idx) => {
+              const Icon = opt.icon;
+              const isActive = routingModeOverride === opt.mode;
+              return (
+                <React.Fragment key={opt.mode}>
+                  {isRoutingMenuOpen && idx === 1 && (
+                    <div className="w-px h-4 bg-slate-200 dark:bg-white/[0.12] mx-0.5" />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isRoutingMenuOpen) {
+                        setIsRoutingMenuOpen(true);
+                      } else {
+                        setRoutingModeOverride(opt.mode);
+                        setIsRoutingMenuOpen(false);
+                      }
+                    }}
+                    title={opt.title}
+                    aria-label={opt.title}
+                    aria-expanded={isActive ? isRoutingMenuOpen : undefined}
+                    className={`w-6 h-6 rounded-full transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                      isActive
+                        ? opt.activeClass
+                        : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Icon size={14} />
+                  </button>
+                </React.Fragment>
+              );
+            })}
         </div>
 
         <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
-        {/* High-Performance 60 FPS Basemap with Smooth Dark/Light Adaptation (Zero Lag & 100% Free) */}
+        {/* 100% Free Watermark-Free OpenStreetMap Basemap (Dark Mode Styled via Calibrated Slate-Navy Filter) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -550,57 +612,77 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         <MapResizer />
         {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
         
-        {/* Draw the connected route legs */}
+        {/* Draw the connected route legs with dual-layer Flighty glowing casing */}
         {legsRouteInfo && legsRouteInfo.length > 0 ? (
           legsRouteInfo.map((leg, idx) => {
-            let color = '#64748B'; // Slate (Driving / default)
+            let color = isDarkMode ? '#38BDF8' : '#0284C7'; // Sky Blue (Driving / default)
             let dashArray = undefined;
             let weight = 4;
-            let opacity = 0.8;
+            let opacity = 0.92;
 
             if (leg.mode === 'walking') {
-              color = '#F59E0B'; // Amber
+              color = isDarkMode ? '#FBBF24' : '#F59E0B'; // Amber
               dashArray = '5, 8'; // Dotted/dashed
               weight = 4;
             } else if (leg.mode === 'transit') {
-              color = '#6366F1'; // Indigo
+              color = isDarkMode ? '#818CF8' : '#6366F1'; // Indigo
               dashArray = '10, 10';
               weight = 4;
             } else if (leg.mode === 'bicycling') {
-              color = '#10B981'; // Emerald
+              color = isDarkMode ? '#34D399' : '#10B981'; // Emerald
               weight = 4;
             } else if (leg.mode === 'flight') {
-              color = '#3B82F6'; // Blue
+              color = isDarkMode ? '#60A5FA' : '#3B82F6'; // Blue
               dashArray = '5, 10';
               weight = 3;
-              opacity = 0.6;
+              opacity = 0.78;
             }
 
             return (
-              <Polyline
-                key={`leg-route-${idx}`}
-                positions={leg.geometry}
-                color={color}
-                weight={weight}
-                opacity={opacity}
-                dashArray={dashArray}
-              />
+              <React.Fragment key={`leg-route-${idx}`}>
+                <Polyline
+                  positions={leg.geometry}
+                  color={color}
+                  weight={weight + 3}
+                  opacity={isDarkMode ? 0.18 : 0.12}
+                />
+                <Polyline
+                  positions={leg.geometry}
+                  color={color}
+                  weight={weight}
+                  opacity={opacity}
+                  dashArray={dashArray}
+                />
+              </React.Fragment>
             );
           })
         ) : pathPositions.length > 1 ? (
-          <Polyline 
-            positions={pathPositions} 
-            color="#64748B" 
-            weight={3} 
-            opacity={0.8} 
-            dashArray="10, 10" 
-          />
+          <>
+            <Polyline
+              positions={pathPositions}
+              color={isDarkMode ? '#38BDF8' : '#0284C7'}
+              weight={6}
+              opacity={isDarkMode ? 0.18 : 0.12}
+            />
+            <Polyline 
+              positions={pathPositions} 
+              color={isDarkMode ? '#38BDF8' : '#0284C7'} 
+              weight={3} 
+              opacity={0.92} 
+              dashArray="10, 10" 
+            />
+          </>
         ) : null}
 
-        {/* Draw Driving Times between stops if we have routing data */}
+        {/* Draw Driving Times between stops (decluttered on multi-stop days > 4 stops unless connected to active stop) */}
         {legsRouteInfo && legsRouteInfo.length > 0 && validItems.length > 1 && validItems.map((item, idx) => {
            if (idx === validItems.length - 1) return null;
            const nextItem = validItems[idx + 1];
+           const isConnectedToActive =
+             activeItemId != null &&
+             (item.id === activeItemId || nextItem?.id === activeItemId);
+           if (validItems.length > 4 && !isConnectedToActive) return null;
+
            const leg = legsRouteInfo[idx];
            if (!leg || !leg.geometry || leg.geometry.length < 2) return null;
            
@@ -613,24 +695,24 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            
            let modeIcon = '';
            let modeText = isEn ? 'Drive' : '車程';
-           let bgClass = 'bg-slate-500 border-slate-400/30 text-white';
+           let iconColorClass = 'text-sky-400';
            
            if (leg.mode === 'walking') {
              modeIcon = renderToString(<Footprints size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Walk' : '步行';
-             bgClass = 'bg-amber-500 border-amber-400/30 text-white';
+             iconColorClass = 'text-amber-400';
            } else if (leg.mode === 'transit') {
              modeIcon = renderToString(<TrainFront size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Transit' : '乘車';
-             bgClass = 'bg-indigo-500 border-indigo-400/30 text-white';
+             iconColorClass = 'text-indigo-400';
            } else if (leg.mode === 'bicycling') {
              modeIcon = renderToString(<Bike size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Bike' : '騎車';
-             bgClass = 'bg-emerald-500 border-emerald-400/30 text-white';
+             iconColorClass = 'text-emerald-400';
            } else if (leg.mode === 'flight') {
              modeIcon = renderToString(<Plane size={11} strokeWidth={2.5} />);
              modeText = isEn ? 'Flight' : '飛行';
-             bgClass = 'bg-blue-500 border-blue-400/30 text-white';
+             iconColorClass = 'text-blue-400';
            } else {
              modeIcon = renderToString(<Car size={11} strokeWidth={2.5} />);
            }
@@ -656,15 +738,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                position={[midLat, midLng]}
                zIndexOffset={100}
                icon={L.divIcon({
-                 html: `<div class="${bgClass} backdrop-blur-md px-2 py-1 rounded-xl shadow-lg border text-[9px] sm:text-[10px] font-black whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="text-white/80 group-hover/time:text-white transition-colors">
+                 html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
+                          <div class="${iconColorClass} transition-colors">
                             ${modeIcon}
                           </div>
                           ${displayStr}
                         </div>`,
                  className: 'custom-leaflet-marker z-[999]',
-                 iconSize: [100, 26],
-                 iconAnchor: [50, 13]
+                 iconSize: [108, 26],
+                 iconAnchor: [54, 13]
                })}
              />
            );
@@ -675,15 +757,16 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           <Marker 
             key={item.id} 
             position={[Number(item.lat!), Number(item.lng!)]}
-            icon={createCustomIcon(idx, item.type)}
+            icon={createCustomIcon(idx, item.type, item.id === activeItemId)}
+            zIndexOffset={item.id === activeItemId ? 1000 : idx * 10}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(item.id)
             }}
           >
             <Popup className="custom-popup" closeButton={false}>
               <div className="p-1 px-2 min-w-[120px]">
-                <div className="flex items-center gap-2 mb-1.5 border-b border-slate-100 dark:border-slate-700/50 pb-1.5">
-                  <div className={`px-1.5 py-0.5 rounded text-[10px] font-black ${item.transportType === 'Flight' ? 'bg-blue-100 text-blue-600' : item.type === 'Food' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-primary'}`}>
+                <div className="flex items-center gap-2 mb-1.5 border-b border-slate-100 dark:border-white/[0.1] pb-1.5">
+                  <div className={`px-1.5 py-0.5 rounded text-[10px] font-black font-mono tabular-nums ${item.transportType === 'Flight' ? 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300' : item.type === 'Food' ? 'bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-300' : 'bg-indigo-100 text-primary dark:bg-primary/20 dark:text-sky-300'}`}>
                     {item.time}
                   </div>
                   <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-auto">

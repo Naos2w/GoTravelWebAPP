@@ -3,14 +3,23 @@ name: Go-Travel CI
 on:
   pull_request:
     branches:
-      - master
       - main
+      - staging
       - develop
+      - master
   push:
     branches:
-      - master
       - main
+      - staging
       - develop
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gotravel-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

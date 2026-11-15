@@ -9,6 +9,7 @@ import {
   FlightInfo,
   Collaborator,
 } from "../types";
+import { decodeExpenseSplitMeta, encodeExpenseSplitMeta } from "./splitwiseService";
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL || "https://placeholder-project.supabase.co";
@@ -178,20 +179,26 @@ export const transformTripRow = (row: DbTripRow): Trip => {
       isCompleted: ci.is_completed,
       category: ci.category,
     })),
-    expenses: (row.expenses || []).map((ex: any) => ({
-      id: ex.id,
-      user_id: ex.user_id,
-      user_name: ex.user_name,
-      // TODO: [Type Safety] Prevent parseFloat crash if amount is already a parsed number from DB
-      amount: typeof ex.amount === "string" ? parseFloat(ex.amount) : ex.amount,
-      currency: ex.currency,
-      category: ex.category,
-      date: ex.date,
-      note: ex.note,
-      // TODO: [Type Safety] Prevent parseFloat crash if exchange_rate is already a parsed number from DB
-      exchangeRate: typeof ex.exchange_rate === "string" ? parseFloat(ex.exchange_rate) : ex.exchange_rate,
-      createdAt: ex.created_at,
-    })),
+    expenses: (row.expenses || []).map((ex: any) => {
+      const splitMeta = decodeExpenseSplitMeta(ex.note);
+      return {
+        id: ex.id,
+        user_id: ex.user_id,
+        user_name: ex.user_name,
+        // TODO: [Type Safety] Prevent parseFloat crash if amount is already a parsed number from DB
+        amount: typeof ex.amount === "string" ? parseFloat(ex.amount) : ex.amount,
+        currency: ex.currency,
+        category: ex.category,
+        date: ex.date,
+        note: splitMeta.note,
+        ...(splitMeta.paidBy ? { paidBy: splitMeta.paidBy } : {}),
+        ...(splitMeta.paidByName ? { paidByName: splitMeta.paidByName } : {}),
+        ...(splitMeta.splitWith ? { splitWith: splitMeta.splitWith } : {}),
+        // TODO: [Type Safety] Prevent parseFloat crash if exchange_rate is already a parsed number from DB
+        exchangeRate: typeof ex.exchange_rate === "string" ? parseFloat(ex.exchange_rate) : ex.exchange_rate,
+        createdAt: ex.created_at,
+      };
+    }),
     itinerary,
   };
 };
@@ -573,7 +580,7 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
       currency: e.currency,
       category: e.category,
       date: e.date,
-      note: e.note,
+      note: encodeExpenseSplitMeta(e),
       exchange_rate: e.exchangeRate,
     }));
     const { error: eErr } = await supabase.from("expenses").upsert(expensePayloads);
@@ -798,7 +805,7 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
       currency: e.currency,
       category: e.category,
       date: e.date,
-      note: e.note,
+      note: encodeExpenseSplitMeta(e),
       exchange_rate: e.exchangeRate,
     }));
     const { error: eErr } = await supabase.from("expenses").insert(expensePayloads);

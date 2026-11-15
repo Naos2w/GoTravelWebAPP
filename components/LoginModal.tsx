@@ -115,7 +115,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-800 w-full max-w-md rounded-[32px] p-7 shadow-2xl flex flex-col gap-6 relative overflow-hidden"
+        className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] w-full max-w-md rounded-[32px] p-7 shadow-2xl flex flex-col gap-6 relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Glow ambient background */}
@@ -150,7 +150,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700/60 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-white/[0.08] rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
           >
             <CloseIcon size={20} />
           </button>
@@ -241,7 +241,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t("enterEmail")}
                   disabled={isGoogleLoading || isEmailSending}
-                  className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                  className="w-full pl-10 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-white/[0.1] bg-slate-50 dark:bg-white/[0.05] text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                   required
                 />
               </div>

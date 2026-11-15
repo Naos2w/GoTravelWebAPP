@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MapView } from "../../components/MapView";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { ItineraryItem } from "../../types";
@@ -79,5 +79,34 @@ describe("MapView Component Smoke Test", () => {
 
     expect(screen.getByPlaceholderText(/搜尋地點/)).toBeInTheDocument();
     expect(screen.getByText(/新增帶有坐標的地點即可在地圖上查看/)).toBeInTheDocument();
+  });
+
+  it("keeps routing mode selector collapsed by default and toggles on click", () => {
+    render(
+      <LocalizationProvider>
+        <MapView
+          items={mockItems}
+          hasBottomCards={true}
+        />
+      </LocalizationProvider>
+    );
+
+    const selector = screen.getByTestId("routing-mode-selector");
+    expect(selector).toHaveClass("bottom-[130px]");
+
+    // Default collapsed: only the active auto button is shown inside selector
+    expect(selector.querySelectorAll("button")).toHaveLength(1);
+    const autoBtn = screen.getByRole("button", { name: /自動 \(依行程\)/i });
+    expect(autoBtn).toHaveAttribute("aria-expanded", "false");
+
+    // Click to expand all 5 routing options
+    fireEvent.click(autoBtn);
+    expect(selector.querySelectorAll("button")).toHaveLength(5);
+
+    // Select walking mode -> updates active button and collapses menu
+    const walkBtn = screen.getByRole("button", { name: /全域走路/i });
+    fireEvent.click(walkBtn);
+    expect(selector.querySelectorAll("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /全域走路/i })).toHaveAttribute("aria-expanded", "false");
   });
 });

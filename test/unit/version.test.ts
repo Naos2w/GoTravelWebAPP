@@ -8,9 +8,9 @@ describe("version", () => {
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$/);
   });
 
-  it("is set to version 1.4.0 or higher", () => {
+  it("is set to version 1.5.0 or higher", () => {
     const [major, minor] = APP_VERSION.split(".").map(Number);
     expect(major).toBeGreaterThanOrEqual(1);
-    expect(minor).toBeGreaterThanOrEqual(4);
+    expect(minor).toBeGreaterThanOrEqual(5);
   });
 });
