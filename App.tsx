@@ -36,6 +36,12 @@ import {
   isSupabaseConfigured,
 } from "./services/authService";
 import {
+  AppView,
+  parseRouteFromLocation,
+  buildTripShareUrl,
+  syncUrlWithRoute,
+} from "./services/routerService";
+import {
   useTranslation,
   LocalizationProvider,
   translations,
@@ -151,7 +157,7 @@ const getGradient = (str: string) => {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const [view, setView] = useState<"landing" | "list" | "detail">("landing");
+  const [view, setView] = useState<AppView>("landing");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -704,37 +710,40 @@ const App: React.FC = () => {
     };
   }, [user, currentTripId]);
 
-  // View persistence and handle share links from URL
+  // View persistence and URL path synchronization (/, /trips, /trips/:tripId)
   useEffect(() => {
     // CRITICAL FIX: Do not touch the URL until loading is complete to prevent clearing invite links
     if (isLoading) return;
 
-    const url = new URL(window.location.href);
-
     if (view === "detail" && currentTripId) {
       sessionStorage.setItem("currentTripId", currentTripId);
-      url.searchParams.set("tripId", currentTripId);
-      window.history.replaceState({}, "", url);
+      const mode = window.location.pathname === "/trips" ? "push" : "replace";
+      syncUrlWithRoute("detail", currentTripId, mode);
     } else if (view === "list") {
       sessionStorage.removeItem("currentTripId");
-      if (url.searchParams.has("tripId")) {
-        url.searchParams.delete("tripId");
-        window.history.replaceState({}, "", url);
+      const mode = window.location.pathname.startsWith("/trips/") ? "push" : "replace";
+      syncUrlWithRoute("list", null, mode);
+    } else if (view === "landing") {
+      sessionStorage.removeItem("currentTripId");
+      if (!window.location.hash.includes("access_token")) {
+        syncUrlWithRoute("landing", null, "replace");
       }
     }
   }, [currentTripId, view, isLoading]);
 
-  // Handle browser back button (Popstate)
+  // Handle browser back/forward button (Popstate)
   useEffect(() => {
     const handlePopState = () => {
-      const url = new URL(window.location.href);
-      const urlTripId = url.searchParams.get("tripId");
-      if (!urlTripId && view === "detail") {
-        setView("list");
-        setCurrentTripId(null);
-      } else if (urlTripId && view === "list") {
-        setCurrentTripId(urlTripId);
+      const route = parseRouteFromLocation();
+      if (route.view === "detail" && route.tripId) {
+        setCurrentTripId(route.tripId);
         setView("detail");
+      } else if (route.view === "list") {
+        setCurrentTripId(null);
+        setView(userRef.current ? "list" : "landing");
+      } else {
+        setCurrentTripId(null);
+        setView("landing");
       }
     };
     window.addEventListener("popstate", handlePopState);
@@ -750,9 +759,9 @@ const App: React.FC = () => {
     const parsedUser = parseSupabaseUser(supabaseUser);
     setSafeUser(parsedUser);
 
-    // Read the URL param directly here, or restore from sessionStorage deep link
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlTripId = urlParams.get("tripId") || consumeRedirectTripId();
+    // Read target tripId from /trips/:tripId, legacy ?tripId=..., or sessionStorage deep link
+    const parsedRoute = parseRouteFromLocation();
+    const urlTripId = parsedRoute.tripId || consumeRedirectTripId();
 
     if (urlTripId) {
       // Do not flash full-screen loading spinner if the user is already actively viewing this trip
@@ -775,18 +784,12 @@ const App: React.FC = () => {
               const exists = prev.some((t) => t.id === trip.id);
               return exists ? prev : [trip, ...prev];
             });
-            // Keep ?tripId in URL bar so user permalinks and reloads work seamlessly
-            if (!window.location.search.includes(urlTripId)) {
-              window.history.replaceState(
-                null,
-                "",
-                `${window.location.pathname}?tripId=${urlTripId}`
-              );
-            }
+            // Keep canonical /trips/:tripId in URL bar (upgrades legacy ?tripId=... automatically)
+            syncUrlWithRoute("detail", urlTripId, "replace");
             setView("detail");
           } else {
             // 有登入但無權限：清除無效參數，跳出訊息，跳轉到自己的行程頁面
-            window.history.replaceState(null, "", window.location.pathname);
+            syncUrlWithRoute("list", null, "replace");
             setNotification({
               message:
                 translations[language].noPermissionRedirect ||
@@ -797,7 +800,7 @@ const App: React.FC = () => {
           }
         } else {
           // 找不到此行程：清除無效參數，跳出訊息，跳轉到自己的行程頁面
-          window.history.replaceState(null, "", window.location.pathname);
+          syncUrlWithRoute("list", null, "replace");
           setNotification({
             message:
               translations[language].tripNotFoundRedirect ||
@@ -807,12 +810,13 @@ const App: React.FC = () => {
           setView("list");
         }
       } catch (e) {
-        window.history.replaceState(null, "", window.location.pathname);
+        syncUrlWithRoute("list", null, "replace");
         setView("list");
       } finally {
         setIsLoading(false);
       }
     } else {
+      syncUrlWithRoute("list", null, "replace");
       setView("list");
       setIsLoading(false);
     }
@@ -843,12 +847,12 @@ const App: React.FC = () => {
           await handleAuthUser(session.user);
         } else if (!window.location.hash.includes("access_token")) {
           // 2. 沒登入：跳出訊息提示，跳轉到登入主頁 (landing)
-          const params = new URLSearchParams(window.location.search);
-          const urlTripId = params.get("tripId");
+          const parsedRoute = parseRouteFromLocation();
+          const urlTripId = parsedRoute.tripId;
           if (urlTripId) {
             saveRedirectTripId(urlTripId);
             setPendingTripId(urlTripId);
-            window.history.replaceState(null, "", window.location.pathname);
+            syncUrlWithRoute("landing", null, "replace");
             setNotification({
               message:
                 translations[language].loginRequiredRedirect ||
@@ -856,6 +860,9 @@ const App: React.FC = () => {
               type: "info",
             });
             setLoginReason("trip_access");
+            setIsLoginModalOpen(true);
+          } else if (parsedRoute.view === "list") {
+            syncUrlWithRoute("landing", null, "replace");
             setIsLoginModalOpen(true);
           }
 
@@ -898,10 +905,11 @@ const App: React.FC = () => {
       } else if (event === "TOKEN_REFRESHED" && session?.user) {
         setSafeUser(parseSupabaseUser(session.user));
       } else if (event === "SIGNED_OUT") {
-        window.history.replaceState(null, "", window.location.pathname);
-        if (currentTripId) {
-          saveRedirectTripId(currentTripId);
-          setPendingTripId(currentTripId);
+        const activeTripId = currentTripIdRef.current;
+        syncUrlWithRoute("landing", null, "replace");
+        if (activeTripId) {
+          saveRedirectTripId(activeTripId);
+          setPendingTripId(activeTripId);
         }
         setUser(null);
         setView("landing");
@@ -2807,7 +2815,7 @@ const App: React.FC = () => {
                 onRemoveInvite={handleRemoveInvite}
                 copyLink={() => {
                   navigator.clipboard.writeText(
-                    `${window.location.origin}/?tripId=${currentTrip.id}`
+                    buildTripShareUrl(currentTrip.id)
                   );
                   setNotification({ message: t("copied"), type: "success" });
                 }}
