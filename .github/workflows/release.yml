@@ -9,20 +9,39 @@ on:
       version:
         description: 'Version tag to release (e.g. v1.3.0)'
         required: true
-        default: 'v1.3.0'
+
+concurrency:
+  group: gotravel-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
     name: Verify, Build & Publish Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Code
+      - name: Checkout exact release tag
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref }}
           fetch-depth: 0
+
+      - name: Verify release tag and checked-out commit
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+(\.[0-9]+)*([.-][[:alnum:].-]+)?$ ]]; then
+            echo "::error::Expected a version tag beginning with v and a version number."
+            exit 1
+          fi
+          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+          test "$(git rev-parse HEAD)" = "$tag_commit"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -48,6 +67,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || github.event.inputs.version }}
-          name: Release ${{ github.ref_name || github.event.inputs.version }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
+          name: Release ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}
           generate_release_notes: true

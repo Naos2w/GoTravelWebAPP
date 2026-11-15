@@ -3,19 +3,30 @@ name: Go-Travel CI
 on:
   pull_request:
     branches:
-      - master
       - main
+      - staging
       - develop
+      - master
   push:
     branches:
-      - master
       - main
+      - staging
       - develop
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gotravel-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci-pipeline:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     name: Type Check, Test & Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout Code
