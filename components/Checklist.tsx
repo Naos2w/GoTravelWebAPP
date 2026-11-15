@@ -56,8 +56,77 @@ const QUICK_SUGGESTIONS: { text: string; category: ChecklistItem['category'] }[]
   { text: '牙刷常備藥物', category: 'Toiletries' }
 ];
 
+type SmartTemplateKey = 'shopping' | 'island' | 'business';
+
+const SMART_TEMPLATES: Record<
+  SmartTemplateKey,
+  {
+    zh: { text: string; category: ChecklistItem['category'] }[];
+    en: { text: string; category: ChecklistItem['category'] }[];
+  }
+> = {
+  shopping: {
+    zh: [
+      { text: '護照正本與入境 QR Code', category: 'Documents' },
+      { text: '海外回饋信用卡 / 交通 IC 卡', category: 'Documents' },
+      { text: '行李秤重器與摺疊購物袋', category: 'Gear' },
+      { text: 'eSIM / 漫遊開通與行動電源', category: 'Gear' },
+      { text: '好走耐站運動鞋', category: 'Clothing' },
+      { text: '休足時間與常備腸胃藥', category: 'Toiletries' },
+      { text: '戰利品壓縮夾鏈袋', category: 'Other' },
+    ],
+    en: [
+      { text: 'Passport & Entry QR Code', category: 'Documents' },
+      { text: 'Travel Credit Cards & Transit Card', category: 'Documents' },
+      { text: 'Luggage Scale & Foldable Tote Bag', category: 'Gear' },
+      { text: 'eSIM / Roaming & Power Bank', category: 'Gear' },
+      { text: 'Comfortable Walking Sneakers', category: 'Clothing' },
+      { text: 'Foot Cooling Patches & Basic Meds', category: 'Toiletries' },
+      { text: 'Compression Ziplock Bags', category: 'Other' },
+    ],
+  },
+  island: {
+    zh: [
+      { text: '護照與電子飯店確認單', category: 'Documents' },
+      { text: '防水手機袋與運動相機', category: 'Gear' },
+      { text: '泳衣 / 海灘褲與速乾大毛巾', category: 'Clothing' },
+      { text: '偏光太陽眼鏡與寬簷遮陽帽', category: 'Clothing' },
+      { text: '海洋友善防曬乳與蘆薈凝露', category: 'Toiletries' },
+      { text: '防蚊液與暈船藥', category: 'Toiletries' },
+      { text: '防水夾腳拖鞋', category: 'Other' },
+    ],
+    en: [
+      { text: 'Passport & Hotel Confirmation', category: 'Documents' },
+      { text: 'Waterproof Phone Pouch & Action Cam', category: 'Gear' },
+      { text: 'Swimwear & Quick-Dry Beach Towel', category: 'Clothing' },
+      { text: 'Polarized Sunglasses & Sun Hat', category: 'Clothing' },
+      { text: 'Reef-Safe Sunscreen & After-Sun Gel', category: 'Toiletries' },
+      { text: 'Insect Repellent & Motion Sickness Meds', category: 'Toiletries' },
+      { text: 'Waterproof Flip-Flops', category: 'Other' },
+    ],
+  },
+  business: {
+    zh: [
+      { text: '護照、名片盒與會議通行證', category: 'Documents' },
+      { text: '筆電與簡報轉接器 (Type-C Hub)', category: 'Gear' },
+      { text: '萬用國際轉接頭', category: 'Gear' },
+      { text: '正式西裝 / 襯衫與皮鞋', category: 'Clothing' },
+      { text: '衣物除皺噴霧與個人修容組', category: 'Toiletries' },
+      { text: '發票報帳專用收納資料夾', category: 'Other' },
+    ],
+    en: [
+      { text: 'Passport, Business Cards & Event Badge', category: 'Documents' },
+      { text: 'Laptop & Presentation USB-C Hub', category: 'Gear' },
+      { text: 'Universal Travel Power Adapter', category: 'Gear' },
+      { text: 'Business Suit / Blazer & Dress Shoes', category: 'Clothing' },
+      { text: 'Wrinkle Release Spray & Grooming Kit', category: 'Toiletries' },
+      { text: 'Expense Receipt Folder', category: 'Other' },
+    ],
+  },
+};
+
 export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [newItemText, setNewItemText] = useState('');
   const [category, setCategory] = useState<ChecklistItem['category']>('Other');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -167,7 +236,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   };
 
   const addItemWithText = (text: string, cat: ChecklistItem['category'] = category) => {
-    if (!text.trim() || !currentUser) return;
+    if (!text.trim() || !currentUser || isGuest) return;
     const newItem: ChecklistItem = {
       id: crypto.randomUUID(),
       user_id: currentUser.id,
@@ -179,6 +248,30 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     setOptimisticChecklist(updatedList);
     onUpdate({ ...trip, checklist: updatedList }, "ADD_CHECKLIST_ITEM", newItem);
     setNewItemText('');
+    setIsFormOpen(false);
+  };
+
+  const applySmartTemplate = (templateKey: SmartTemplateKey) => {
+    if (!currentUser || isGuest) return;
+    const localeKey = language === 'en' ? 'en' : 'zh';
+    const templateItems = SMART_TEMPLATES[templateKey][localeKey];
+    const existingTexts = new Set(myItems.map(i => i.text.trim().toLowerCase()));
+
+    const newItems: ChecklistItem[] = templateItems
+      .filter(item => !existingTexts.has(item.text.trim().toLowerCase()))
+      .map(item => ({
+        id: crypto.randomUUID(),
+        user_id: currentUser.id,
+        text: item.text,
+        isCompleted: false,
+        category: item.category,
+      }));
+
+    if (newItems.length === 0) return;
+
+    const updatedList = [...optimisticChecklist, ...newItems];
+    setOptimisticChecklist(updatedList);
+    onUpdate({ ...trip, checklist: updatedList }, "ADD_CHECKLIST_ITEM", newItems);
     setIsFormOpen(false);
   };
 
@@ -207,6 +300,26 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const completedCount = myItems.filter(i => i.isCompleted).length;
   const globalProgress = myItems.length === 0 ? 0 : Math.round((completedCount / myItems.length) * 100);
   const categories: ChecklistItem['category'][] = ['Documents', 'Gear', 'Clothing', 'Toiletries', 'Other'];
+
+  const renderSmartTemplateButtons = (centered = false) => (
+    <div className={`flex flex-wrap gap-2 ${centered ? 'justify-center' : ''}`}>
+      {(['shopping', 'island', 'business'] as SmartTemplateKey[]).map((key) => (
+        <button
+          key={key}
+          type="button"
+          disabled={isGuest}
+          onClick={() => applySmartTemplate(key)}
+          className={`text-xs px-3.5 py-1.5 font-bold transition-all active:scale-95 cursor-pointer disabled:opacity-40 border border-primary/20 bg-primary/10 hover:bg-primary hover:text-white text-primary dark:text-blue-300 dark:hover:text-white ${
+            centered
+              ? 'rounded-full dark:bg-primary/20 shadow-sm'
+              : 'rounded-xl dark:bg-primary/15'
+          }`}
+        >
+          {key === 'shopping' ? t('templateShopping') : key === 'island' ? t('templateIsland') : t('templateBusiness')}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 pb-16">
@@ -294,7 +407,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             </button>
           </div>
           
-          <div className={`transition-all duration-300 ease-in-out ${isFormOpen ? 'max-h-[400px] opacity-100 p-5 sm:p-7' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+          <div className={`transition-all duration-300 ease-in-out ${isFormOpen ? 'max-h-[640px] opacity-100 p-5 sm:p-7' : 'max-h-0 opacity-0 pointer-events-none'}`}>
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                 {labels.addItem}
@@ -325,9 +438,13 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 <select 
                   value={category} 
                   onChange={(e) => setCategory(e.target.value as any)} 
-                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-white/[0.04] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 appearance-none font-semibold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                  className="w-full h-full pl-5 pr-10 py-3 bg-white dark:bg-[#161822] dark:text-white rounded-2xl border border-slate-200/80 dark:border-white/10 appearance-none font-semibold text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-[#1E2130] transition-colors outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
                 >
-                  {categories.map(c => <option key={c} value={c}>{getCatName(c)}</option>)}
+                  {categories.map(c => (
+                    <option key={c} value={c} className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white">
+                      {getCatName(c)}
+                    </option>
+                  ))}
                 </select>
               </div>
               
@@ -338,6 +455,14 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               >
                 {labels.confirm}
               </button>
+            </div>
+
+            {/* Smart Template Bar (1-click scenario packs) */}
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-2">
+                {t('smartTemplatesLabel')}
+              </span>
+              {renderSmartTemplateButtons(false)}
             </div>
 
             {/* Quick Suggestion Chips */}
@@ -471,6 +596,12 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               <p className="text-xs text-slate-400 mb-4 max-w-xs mx-auto">
                 {t('emptyChecklistDesc')}
               </p>
+              <div className="mb-4">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-2">
+                  {t('smartTemplatesLabel')}
+                </span>
+                {renderSmartTemplateButtons(true)}
+              </div>
               <div className="flex flex-wrap justify-center gap-2">
                 {QUICK_SUGGESTIONS.slice(0, 3).map((sug, i) => (
                   <button

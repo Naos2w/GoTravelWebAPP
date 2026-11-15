@@ -1105,7 +1105,9 @@ const App: React.FC = () => {
     }
 
     if (action === "ADD_CHECKLIST_ITEM" && payload) {
-       addChecklistItem(payload, updatedTrip.id)
+       const items = Array.isArray(payload) ? payload : [payload];
+       if (items.length === 0) return;
+       Promise.all(items.map((item) => addChecklistItem(item, updatedTrip.id)))
           .catch(err => {
               console.error("[App] Add checklist item failed:", err);
               setTrips(previousTrips);

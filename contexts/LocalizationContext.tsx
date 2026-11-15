@@ -243,6 +243,11 @@ export const translations = {
     expenseCountLabel: "筆消費",
     flightReadyBadge: "航班動態與智慧登機證",
     gateLabel: "登機門",
+    smartTemplatesLabel: "智慧清單範本（一鍵載入）：",
+    templateShopping: "🛍️ 日韓購物",
+    templateIsland: "🏝️ 海島渡假",
+    templateBusiness: "💼 商務差旅",
+    templateAddedCount: "已載入範本項目",
   },
   en: {
     appName: "Go Travel",
@@ -484,6 +489,11 @@ export const translations = {
     expenseCountLabel: "items",
     flightReadyBadge: "Flight Pass & Smart Itinerary",
     gateLabel: "Gate",
+    smartTemplatesLabel: "Smart Templates (1-Click Load):",
+    templateShopping: "🛍️ Shopping Trip",
+    templateIsland: "🏝️ Island Resort",
+    templateBusiness: "💼 Business Trip",
+    templateAddedCount: "Template items added",
   },
 };
 
