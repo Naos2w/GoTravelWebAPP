@@ -4,13 +4,15 @@ import { Trip, DayPlan, ItineraryItem, TransportType, User } from '../types';
 import { 
   MapPin, Coffee, Trash2, Map, Plane, Clock, 
   Car, Bike, Footprints, TrainFront, Plus,
-  Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation
+  Loader2, Check, X, Lock, ChevronDown, ChevronUp, ChevronLeft, Edit2, List, Navigation,
+  Sun, Cloud, CloudRain, Snowflake, CloudLightning
 } from 'lucide-react';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from '../services/storageService';
 import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
+import { DailyWeatherForecast, fetchDayWeather } from '../services/weatherService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -93,6 +95,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
   const [dragDirection, setDragDirection] = useState<'above' | 'below'>('above');
+  const [dayWeather, setDayWeather] = useState<DailyWeatherForecast | null>(null);
   
   // Inline edit state for transport notes
   const [editingTransportId, setEditingTransportId] = useState<string | null>(null);
@@ -122,6 +125,78 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
   const days = trip.itinerary || [];
   const currentDay = days[selectedDayIndex];
+
+  // Resolve representative coordinates for the active day (prefer current day's stops, fall back to trip stops)
+  const dayWeatherCoords = React.useMemo(() => {
+    const findCoords = (items: ItineraryItem[] = []) => {
+      const stop = items.find(
+        (i) =>
+          i.type !== 'Transport' &&
+          i.lat != null &&
+          i.lng != null &&
+          Number.isFinite(Number(i.lat)) &&
+          Number.isFinite(Number(i.lng))
+      );
+      return stop ? { lat: Number(stop.lat), lng: Number(stop.lng) } : null;
+    };
+
+    const currentCoords = findCoords(currentDay?.items);
+    if (currentCoords) return currentCoords;
+
+    for (const d of days) {
+      const fallbackCoords = findCoords(d.items);
+      if (fallbackCoords) return fallbackCoords;
+    }
+    return null;
+  }, [currentDay?.items, days]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDayWeather(null);
+
+    if (!currentDay?.date || !dayWeatherCoords) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    fetchDayWeather(dayWeatherCoords.lat, dayWeatherCoords.lng, currentDay.date).then((forecast) => {
+      if (!cancelled) {
+        setDayWeather(forecast);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDay?.date, dayWeatherCoords]);
+
+  const renderWeatherBadge = () => {
+    if (!dayWeather) return null;
+    const iconMap = {
+      clear: <Sun size={13} className="text-amber-500 shrink-0" />,
+      cloudy: <Cloud size={13} className="text-slate-400 shrink-0" />,
+      rain: <CloudRain size={13} className="text-sky-500 shrink-0" />,
+      snow: <Snowflake size={13} className="text-cyan-400 shrink-0" />,
+      thunderstorm: <CloudLightning size={13} className="text-indigo-400 shrink-0" />,
+    };
+    return (
+      <div
+        data-testid="day-weather-pill"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100/90 dark:bg-white/[0.07] border border-black/[0.04] dark:border-white/[0.08] text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200 tabular-nums shrink-0"
+      >
+        {iconMap[dayWeather.condition]}
+        <span>
+          {dayWeather.tempMin}°–{dayWeather.tempMax}°C
+        </span>
+        {dayWeather.precipProb > 0 && (
+          <span className="text-[10px] text-sky-500 dark:text-sky-400">
+            {dayWeather.precipProb}%
+          </span>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (scrollAnchorRef.current) {
@@ -697,13 +772,14 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
         {/* ── Header bar: Day title + View mode switcher ── */}
         <div className="shrink-0 flex justify-between items-center px-1">
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
               Day {selectedDayIndex + 1}
             </h2>
             <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 font-mono">
               {currentDay.date}
             </span>
+            {renderWeatherBadge()}
           </div>
           {!isGuest ? (
             <div className="flex bg-slate-100 dark:bg-white/[0.06] p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.08] gap-0.5 lg:hidden">
