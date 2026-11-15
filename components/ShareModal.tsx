@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { X as CloseIcon, Users, Clock as PendingIcon } from "lucide-react";
 import { Trip, User } from "../types";
 import { useTranslation } from "../contexts/LocalizationContext";
+import { buildTripShareUrl } from "../services/routerService";
 
 interface ShareModalProps {
   trip: Trip;
@@ -49,7 +50,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               {t("shareLink")}
             </label>
             <div className="flex gap-2">
-              <div className="flex-1 bg-slate-50 dark:bg-white/[0.05] p-3 rounded-xl text-xs font-mono text-slate-500 dark:text-slate-300 truncate select-all border border-black/[0.04] dark:border-white/[0.08]">{`${window.location.origin}/?tripId=${trip.id}`}</div>
+              <div className="flex-1 bg-slate-50 dark:bg-white/[0.05] p-3 rounded-xl text-xs font-mono text-slate-500 dark:text-slate-300 truncate select-all border border-black/[0.04] dark:border-white/[0.08]">{buildTripShareUrl(trip.id)}</div>
               <button
                 onClick={copyLink}
                 className="bg-slate-100 dark:bg-white/[0.08] text-slate-600 dark:text-slate-200 px-4 py-2 rounded-xl font-black text-xs transition-all hover:bg-slate-200 dark:hover:bg-white/[0.12]"

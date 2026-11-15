@@ -392,5 +392,60 @@ describe("App Component (Smoke Test)", () => {
     expect(activePill.style.transform).toContain("scale(1)");
     expect(screenFollowWrapper.style.transform).toBe("");
   });
+
+  it("synchronizes URL path across /trips, /trips/:tripId, and upgrades legacy ?tripId= links", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const mockTrip = {
+      id: "trip-route-42",
+      user_id: "user-route-1",
+      name: "Zurich Alps",
+      destination: "Zurich, Switzerland",
+      startDate: "2026-12-01",
+      endDate: "2026-12-05",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-route-1",
+            email: "router@example.com",
+            user_metadata: { full_name: "Route Explorer" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip);
+
+    // 1. Authenticated user lands on / -> redirected to /trips
+    const { unmount } = render(<App />);
+    await waitFor(() => {
+      expect(screen.getByText("Zurich Alps")).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/trips");
+    });
+
+    // 2. Selecting trip navigates URL to /trips/:tripId
+    act(() => {
+      screen.getByText("Zurich Alps").click();
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-route-42");
+    });
+
+    unmount();
+
+    // 3. Opening legacy /?tripId=... upgrades URL cleanly to /trips/:tripId
+    window.history.replaceState(null, "", "/?tripId=trip-route-42");
+    render(<App />);
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-route-42");
+      expect(window.location.search).toBe("");
+    });
+  });
 });
 

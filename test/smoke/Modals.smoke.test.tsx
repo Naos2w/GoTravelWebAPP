@@ -73,6 +73,9 @@ describe("Modals & Input Components Smoke Tests", () => {
       );
 
       expect(screen.getByText("collab@test.com")).toBeInTheDocument();
+      expect(
+        screen.getByText((text) => text.endsWith("/trips/5bf223d6-4053-4a75-a38f-1c51596b1c5c"))
+      ).toBeInTheDocument();
     });
   });
 
