@@ -42,6 +42,11 @@ import {
   syncUrlWithRoute,
 } from "./services/routerService";
 import {
+  fetchLiveRatesToTwd,
+  getRateToTwd,
+  resolveHistoricalFlightRate,
+} from "./services/exchangeRateService";
+import {
   useTranslation,
   LocalizationProvider,
   translations,
@@ -116,19 +121,17 @@ import {
 } from "recharts";
 
 const calculateTripTotal = (trip: Trip): number => {
-  const rates: Record<string, number> = {
-    TWD: 1,
-    USD: 31.5,
-    JPY: 0.21,
-    EUR: 34.2,
-    KRW: 0.024,
-  };
   const expensesSum = trip.expenses.reduce(
-    (sum, item) => sum + item.amount * (item.exchangeRate || 1),
+    (sum, item) =>
+      sum +
+      item.amount *
+        (item.exchangeRate && item.exchangeRate > 0
+          ? item.exchangeRate
+          : getRateToTwd(item.currency)),
     0
   );
   const flightsSum = (trip.flights || []).reduce(
-    (sum, f) => sum + f.price * (rates[f.currency] || 1),
+    (sum, f) => sum + f.price * resolveHistoricalFlightRate(f),
     0
   );
   return expensesSum + flightsSum;
@@ -754,6 +757,10 @@ const App: React.FC = () => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    fetchLiveRatesToTwd();
+  }, []);
 
   const handleAuthUser = async (supabaseUser: any) => {
     const parsedUser = parseSupabaseUser(supabaseUser);
@@ -1531,19 +1538,16 @@ const App: React.FC = () => {
   const chartData = useMemo(() => {
     if (!currentTrip) return [];
     const dataMap: Record<string, number> = {};
-    const rates: Record<string, number> = {
-      TWD: 1,
-      USD: 31.5,
-      JPY: 0.21,
-      EUR: 34.2,
-      KRW: 0.024,
-    };
     currentTrip.expenses.forEach((e) => {
-      const twdVal = e.amount * (e.exchangeRate || 1);
+      const rate =
+        e.exchangeRate && e.exchangeRate > 0
+          ? e.exchangeRate
+          : getRateToTwd(e.currency);
+      const twdVal = e.amount * rate;
       dataMap[e.category] = (dataMap[e.category] || 0) + twdVal;
     });
     const flightsSum = (currentTrip.flights || []).reduce(
-      (sum, f) => sum + f.price * (rates[f.currency] || 1),
+      (sum, f) => sum + f.price * resolveHistoricalFlightRate(f),
       0
     );
     if (flightsSum > 0)

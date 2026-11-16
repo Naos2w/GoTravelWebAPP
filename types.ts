@@ -4,6 +4,13 @@ export enum Currency {
   JPY = "JPY",
   EUR = "EUR",
   KRW = "KRW",
+  CHF = "CHF",
+  GBP = "GBP",
+  HKD = "HKD",
+  THB = "THB",
+  SGD = "SGD",
+  AUD = "AUD",
+  CAD = "CAD",
 }
 
 export type Theme = "light" | "dark";
@@ -69,6 +76,7 @@ export interface FlightInfo {
   inbound?: FlightSegment;
   price: number;
   currency: Currency;
+  exchangeRate?: number;
   cabinClass: string;
   seat?: string;
   baggage: BaggageInfo;
