@@ -12,6 +12,12 @@ import { DateTimeUtils } from '../services/dateTimeUtils';
 import { supabase } from '../services/storageService';
 import { CATEGORY_UI, getCategoryName } from './ExpenseCategories';
 import { calculateSplitwiseSettlement, SplitMember } from '../services/splitwiseService';
+import {
+  getCachedRatesToTwd,
+  fetchLiveRatesToTwd,
+  getRateToTwd,
+  resolveHistoricalFlightRate,
+} from '../services/exchangeRateService';
 
 interface Props {
   trip: Trip;
@@ -207,13 +213,43 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     return dates;
   }, [trip.startDate, trip.endDate]);
 
-  const rates: Record<Currency, number> = { 
-    [Currency.TWD]: 1, 
-    [Currency.USD]: 31.5, 
-    [Currency.JPY]: 0.21, 
-    [Currency.EUR]: 34.2, 
-    [Currency.KRW]: 0.024 
-  };
+  const [liveRates, setLiveRates] = useState<Record<Currency, number>>(() => getCachedRatesToTwd());
+
+  useEffect(() => {
+    let active = true;
+    fetchLiveRatesToTwd().then((rates) => {
+      if (!active) return;
+      setLiveRates((prev) => {
+        const changed = (Object.keys(rates) as Currency[]).some(
+          (k) => prev[k] !== rates[k]
+        );
+        return changed ? rates : prev;
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const editingExpense = useMemo(
+    () => (editingExpenseId ? trip.expenses.find((e) => e.id === editingExpenseId) : undefined),
+    [editingExpenseId, trip.expenses]
+  );
+
+  const activeRateForForm = useMemo(() => {
+    if (currency === Currency.TWD) return 1;
+    if (
+      editingExpense &&
+      editingExpense.currency === currency &&
+      typeof editingExpense.exchangeRate === 'number' &&
+      editingExpense.exchangeRate > 0
+    ) {
+      return editingExpense.exchangeRate;
+    }
+    return getRateToTwd(currency, liveRates);
+  }, [currency, editingExpense, liveRates]);
+
+  const parsedFormAmount = parseFloat(amount) || 0;
 
   const saveExpense = () => {
     const newErrors: Record<string, boolean> = {};
@@ -231,6 +267,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     const activePaidBy = paidBy || currentUser.id;
     const paidByMember = members.find((m) => m.id === activePaidBy);
     const activeSplitWith = splitWith.length > 0 ? splitWith : members.map((m) => m.id);
+    const lockedRate = activeRateForForm;
 
     if (editingExpenseId) {
       const exp = trip.expenses.find(e => e.id === editingExpenseId);
@@ -245,7 +282,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
               category,
               date: selectedDate,
               note,
-              exchangeRate: rates[currency],
+              exchangeRate: lockedRate,
               paidBy: activePaidBy,
               paidByName: paidByMember?.name || currentUser.name,
               splitWith: activeSplitWith,
@@ -264,7 +301,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
         date: selectedDate,
         createdAt: new Date().toISOString(),
         note,
-        exchangeRate: rates[currency],
+        exchangeRate: lockedRate,
         paidBy: activePaidBy,
         paidByName: paidByMember?.name || currentUser.name,
         splitWith: activeSplitWith,
@@ -310,8 +347,15 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     onUpdate({ ...trip, expenses: trip.expenses.filter(e => e.id !== id) }, "DELETE_EXPENSE", id);
   };
 
-  const flightsTotal = (trip.flights || []).reduce((sum, f) => sum + (f.price * (rates[f.currency] || 1)), 0);
-  const expensesOnlyTotal = trip.expenses.reduce((sum, e) => sum + (e.amount * (e.exchangeRate || 1)), 0);
+  const flightsTotal = (trip.flights || []).reduce(
+    (sum, f) => sum + f.price * resolveHistoricalFlightRate(f, liveRates),
+    0
+  );
+  const expensesOnlyTotal = trip.expenses.reduce(
+    (sum, e) =>
+      sum + e.amount * (e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, liveRates)),
+    0
+  );
   const totalTWD = flightsTotal + expensesOnlyTotal;
 
   const flightExpenses: Expense[] = useMemo(() => {
@@ -327,10 +371,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       note: f.inbound?.flightNumber 
         ? `${t('flight')}: ${f.outbound.flightNumber} ⇄ ${f.inbound.flightNumber}` 
         : `${t('flight')}: ${f.outbound.flightNumber}`,
-      exchangeRate: rates[f.currency] || 1,
+      exchangeRate: resolveHistoricalFlightRate(f, liveRates),
       isFlight: true
     } as any));
-  }, [trip.flights, trip.startDate, t]);
+  }, [trip.flights, trip.startDate, t, liveRates]);
 
   const processedExpenses = useMemo(() => {
     let list = [...trip.expenses, ...flightExpenses];
@@ -362,7 +406,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const chartData = useMemo(() => {
     const dataMap: Record<string, number> = {};
     trip.expenses.forEach(e => {
-      const val = e.amount * (e.exchangeRate || 1);
+      const rate = e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, liveRates);
+      const val = e.amount * rate;
       dataMap[e.category] = (dataMap[e.category] || 0) + val;
     });
     if (flightsTotal > 0) {
@@ -403,10 +448,6 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-white/70 uppercase tracking-[0.14em]">
                 <CreditCard size={15} className="text-primary" />
                 <span>{t('totalCost')}</span>
-              </div>
-              {/* Metallic EMV Chip Graphic */}
-              <div className="w-9 h-6 rounded-md border border-amber-500/30 bg-gradient-to-br from-amber-300/60 via-amber-200/40 to-amber-500/50 dark:from-amber-300/30 dark:to-amber-500/20 flex items-center justify-center shadow-inner">
-                <div className="w-5 h-3 border border-amber-700/25 dark:border-amber-200/25 rounded-[2px]" />
               </div>
             </div>
 
@@ -636,6 +677,27 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                   placeholder={t('descRequired') + "..."} 
                 />
               </div>
+
+              {currency !== Currency.TWD && (
+                <div
+                  data-testid="exchange-rate-preview"
+                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-2xl bg-primary/[0.06] dark:bg-primary/[0.12] border border-primary/15 text-xs"
+                >
+                  <span className="font-mono font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
+                    1 {currency} ≈ NT$ {activeRateForForm.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {parsedFormAmount > 0 && (
+                      <span className="font-mono font-bold text-primary tabular-nums">
+                        ≈ NT$ {Math.round(parsedFormAmount * activeRateForForm).toLocaleString()}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                      ({t('rateLockedHint')})
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {members.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">

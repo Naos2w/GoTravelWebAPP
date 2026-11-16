@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Trip,
   FlightInfo,
@@ -34,6 +34,7 @@ import { SegmentedDateInput } from "./SegmentedDateInput";
 import { DateTimeUtils } from "../services/dateTimeUtils";
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from "../services/storageService";
+import { fetchLiveRatesToTwd, getRateToTwd } from "../services/exchangeRateService";
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -631,6 +632,10 @@ export const FlightManager: React.FC<Props> = ({
   const isOwner = trip.user_id === currentUser?.id || !trip.user_id;
   const [isSyncingWithOwner, setIsSyncingWithOwner] = useState(false);
 
+  useEffect(() => {
+    fetchLiveRatesToTwd();
+  }, []);
+
   const ownerFlight = useMemo(() => {
     if (!trip.flights || trip.flights.length === 0) return null;
     return (
@@ -1123,10 +1128,26 @@ export const FlightManager: React.FC<Props> = ({
     let newFlights = [...(trip.flights || [])];
     const actualId =
       editingFlightId === "sync-temp" ? tempFlightData.id : editingFlightId;
+    const existingFlight = trip.flights?.find((f) => f.id === actualId);
+    const lockedFlightRate =
+      tempFlightData.currency === Currency.TWD
+        ? 1
+        : existingFlight &&
+          existingFlight.currency === tempFlightData.currency &&
+          typeof existingFlight.exchangeRate === "number" &&
+          existingFlight.exchangeRate > 0
+        ? existingFlight.exchangeRate
+        : getRateToTwd(tempFlightData.currency);
+
+    const flightToSave: FlightInfo = {
+      ...tempFlightData,
+      exchangeRate: lockedFlightRate,
+    };
+
     const idx = newFlights.findIndex((f) => f.id === actualId);
 
-    if (idx > -1) newFlights[idx] = tempFlightData;
-    else newFlights.push(tempFlightData);
+    if (idx > -1) newFlights[idx] = flightToSave;
+    else newFlights.push(flightToSave);
 
     let newItinerary = [...(trip.itinerary || [])];
     if (!isSyncingWithOwner) {

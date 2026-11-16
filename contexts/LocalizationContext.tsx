@@ -256,6 +256,7 @@ export const translations = {
     addSplitMemberPlaceholder: "新增分帳旅伴姓名...",
     addMemberBtn: "新增",
     netBalance: "淨餘額",
+    rateLockedHint: "依當下匯率自動折算並鎖定",
   },
   en: {
     appName: "Go Travel",
@@ -510,6 +511,7 @@ export const translations = {
     addSplitMemberPlaceholder: "Add split buddy name...",
     addMemberBtn: "Add",
     netBalance: "Net",
+    rateLockedHint: "Converted & locked at current rate",
   },
 };
 
