@@ -1,7 +1,23 @@
 import { Currency } from "../types";
 
 export const EXCHANGE_RATE_STORAGE_KEY = "go_travel_exchange_rates_v1";
+export const TRIP_LOCKED_RATES_PREFIX = "go_travel_trip_locked_rates_";
 export const EXCHANGE_RATE_TTL_MS = 6 * 60 * 60 * 1000;
+
+export const CURRENCY_SYMBOLS: Record<Currency, string> = {
+  [Currency.TWD]: "NT$",
+  [Currency.USD]: "US$",
+  [Currency.JPY]: "¥",
+  [Currency.EUR]: "€",
+  [Currency.KRW]: "₩",
+  [Currency.CHF]: "CHF",
+  [Currency.GBP]: "£",
+  [Currency.HKD]: "HK$",
+  [Currency.THB]: "฿",
+  [Currency.SGD]: "S$",
+  [Currency.AUD]: "A$",
+  [Currency.CAD]: "C$",
+};
 
 export const FALLBACK_RATES_TO_TWD: Record<Currency, number> = {
   [Currency.TWD]: 1,
@@ -152,4 +168,108 @@ export const fetchLiveRatesToTwd = async (
   } catch {
     return getCachedRatesToTwd();
   }
+};
+
+/**
+ * Formats a numeric amount cleanly for display according to currency precision conventions.
+ */
+export const formatCurrencyAmount = (amount: number, currency: Currency): string => {
+  if (!Number.isFinite(amount)) return "0";
+  if (currency === Currency.TWD || currency === Currency.JPY || currency === Currency.KRW) {
+    return Math.round(amount).toLocaleString();
+  }
+  const rounded = Math.round(amount * 100) / 100;
+  return rounded.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
+/**
+ * Formats an amount prefixed with its currency symbol (e.g. NT$ 1,200 or CHF 35.5).
+ */
+export const formatWithCurrencySymbol = (amount: number, currency: Currency): string => {
+  const symbol = CURRENCY_SYMBOLS[currency] || currency;
+  return `${symbol} ${formatCurrencyAmount(amount, currency)}`;
+};
+
+const readTripLockedRatesStorage = (tripId: string): Partial<Record<Currency, number>> => {
+  try {
+    const raw = localStorage.getItem(`${TRIP_LOCKED_RATES_PREFIX}${tripId}`);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Locks a currency-to-TWD rate snapshot for a specific trip in localStorage if not already locked,
+ * ensuring future views of this trip keep consistent historical conversion rates.
+ */
+export const lockTripRate = (tripId: string, currency: Currency, rate: number): void => {
+  if (!tripId || currency === Currency.TWD || !Number.isFinite(rate) || rate <= 0) return;
+  try {
+    const existing = readTripLockedRatesStorage(tripId);
+    if (typeof existing[currency] === "number" && (existing[currency] as number) > 0) {
+      return;
+    }
+    const next = { ...existing, [currency]: rate };
+    localStorage.setItem(`${TRIP_LOCKED_RATES_PREFIX}${tripId}`, JSON.stringify(next));
+  } catch {
+    // Ignore quota/storage errors
+  }
+};
+
+/**
+ * Resolves the effective currency-to-TWD rate table for a trip, prioritizing:
+ * 1. Explicit per-trip locked snapshots saved in localStorage
+ * 2. Historical exchangeRate values already saved on trip expenses/flights
+ * 3. Live / cached global rates merged over fallbacks
+ */
+export const getTripLockedRates = (
+  tripId: string,
+  expenses: { currency: Currency; exchangeRate?: number }[],
+  flights: { currency: Currency; exchangeRate?: number }[],
+  liveRates?: Record<Currency, number>
+): Record<Currency, number> => {
+  const baseRates: Record<Currency, number> = {
+    ...(liveRates || getCachedRatesToTwd()),
+  };
+  baseRates[Currency.TWD] = 1;
+
+  // Recover locked rates synced via Supabase expenses & flights
+  [...flights, ...expenses].forEach((item) => {
+    if (
+      item.currency &&
+      item.currency !== Currency.TWD &&
+      typeof item.exchangeRate === "number" &&
+      Number.isFinite(item.exchangeRate) &&
+      item.exchangeRate > 0
+    ) {
+      baseRates[item.currency] = item.exchangeRate;
+    }
+  });
+
+  // Apply explicit per-trip locked display rates from localStorage
+  const storedLocked = readTripLockedRatesStorage(tripId);
+  (Object.keys(storedLocked) as Currency[]).forEach((cur) => {
+    const val = storedLocked[cur];
+    if (cur !== Currency.TWD && typeof val === "number" && Number.isFinite(val) && val > 0) {
+      baseRates[cur] = val;
+    }
+  });
+
+  return baseRates;
+};
+
+/**
+ * Converts a TWD-normalized amount into the selected target currency using locked/effective rates.
+ */
+export const convertFromTwd = (
+  twdAmount: number,
+  targetCurrency: Currency,
+  tripRates: Record<Currency, number>
+): number => {
+  if (targetCurrency === Currency.TWD) return twdAmount;
+  const rate = tripRates[targetCurrency] || getRateToTwd(targetCurrency);
+  return rate > 0 ? twdAmount / rate : twdAmount;
 };

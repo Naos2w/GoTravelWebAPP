@@ -188,4 +188,39 @@ describe("Expenses Component Smoke Test", () => {
     expect(savedExpense.amount).toBe(100);
     expect(savedExpense.exchangeRate).toBe(37.5);
   });
+
+  it("allows switching display currency directly from the Total Cost card selector using locked trip rates", () => {
+    localStorage.setItem(
+      EXCHANGE_RATE_STORAGE_KEY,
+      JSON.stringify({
+        updatedAt: Date.now(),
+        rates: {
+          CHF: 33.0,
+        },
+      })
+    );
+
+    render(
+      <LocalizationProvider>
+        <Expenses
+          trip={mockTrip}
+          currentUser={mockUser}
+          onUpdate={vi.fn()}
+        />
+      </LocalizationProvider>
+    );
+
+    const heroTotal = screen.getByTestId("hero-total-amount");
+    expect(heroTotal.textContent).toBe("NT$ 330");
+
+    // Switch display currency to JPY via top-right selector -> uses exp-1's locked 0.22 rate (330 / 0.22 = 1,500)
+    fireEvent.click(screen.getByTestId("display-currency-select"));
+    fireEvent.click(screen.getByRole("button", { name: "JPY" }));
+    expect(screen.getByTestId("hero-total-amount").textContent).toBe("¥ 1,500");
+
+    // Switch display currency to CHF -> 330 / 33.0 = CHF 10
+    fireEvent.click(screen.getByTestId("display-currency-select"));
+    fireEvent.click(screen.getByRole("button", { name: "CHF" }));
+    expect(screen.getByTestId("hero-total-amount").textContent).toBe("CHF 10");
+  });
 });
