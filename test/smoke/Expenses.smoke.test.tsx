@@ -1,9 +1,10 @@
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Expenses } from "../../components/Expenses";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { Trip, User, Currency } from "../../types";
+import { EXCHANGE_RATE_STORAGE_KEY } from "../../services/exchangeRateService";
 
 vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
@@ -14,6 +15,16 @@ vi.mock("recharts", () => ({
 }));
 
 describe("Expenses Component Smoke Test", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Offline test")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
   const mockUser: User = {
     id: "user-123",
     email: "test@example.com",
@@ -122,5 +133,59 @@ describe("Expenses Component Smoke Test", () => {
     expect(settlementCard).toBeInTheDocument();
     expect(settlementCard.textContent).toContain("NT$ 500");
     expect(settlementCard.textContent).toContain("bob");
+  });
+
+  it("keeps historical expenses locked at their saved exchangeRate and locks current live rate when adding CHF expense", async () => {
+    localStorage.setItem(
+      EXCHANGE_RATE_STORAGE_KEY,
+      JSON.stringify({
+        updatedAt: Date.now(),
+        rates: {
+          JPY: 0.3, // Different from exp-1's locked 0.22
+          CHF: 37.5,
+        },
+      })
+    );
+
+    const onUpdate = vi.fn();
+    render(
+      <LocalizationProvider>
+        <Expenses
+          trip={mockTrip}
+          currentUser={mockUser}
+          onUpdate={onUpdate}
+        />
+      </LocalizationProvider>
+    );
+
+    // 1. Existing 1500 JPY expense was locked at 0.22 (NT$ 330), NOT recalculated with current 0.30 (450)
+    expect(screen.getAllByText(/NT\$ 330/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/NT\$ 450/)).not.toBeInTheDocument();
+
+    // 2. Open Add Entry form, select CHF, enter amount 100 -> shows live rate & locks 37.5 on save
+    fireEvent.click(screen.getByRole("button", { name: /新增支出|Add Entry/i }));
+    fireEvent.click(screen.getByRole("button", { name: "TWD" }));
+    fireEvent.click(screen.getByRole("button", { name: "CHF" }));
+
+    const amountInput = screen.getByPlaceholderText("0");
+    fireEvent.change(amountInput, { target: { value: "100" } });
+
+    const noteInput = screen.getByPlaceholderText(/請輸入備註|Description/i);
+    fireEvent.change(noteInput, { target: { value: "Geneva Train" } });
+
+    await waitFor(() => {
+      const preview = screen.getByTestId("exchange-rate-preview");
+      expect(preview.textContent).toContain("1 CHF ≈ NT$ 37.5");
+      expect(preview.textContent).toContain("NT$ 3,750");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^確認$|^Save$/i }));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const updatedTripArg = onUpdate.mock.calls[0][0] as Trip;
+    const savedExpense = updatedTripArg.expenses[0];
+    expect(savedExpense.currency).toBe(Currency.CHF);
+    expect(savedExpense.amount).toBe(100);
+    expect(savedExpense.exchangeRate).toBe(37.5);
   });
 });

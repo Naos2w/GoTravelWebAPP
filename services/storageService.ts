@@ -168,6 +168,10 @@ export const transformTripRow = (row: DbTripRow): Trip => {
       inbound: f.inbound,
       price: f.price,
       currency: f.currency,
+      exchangeRate:
+        typeof f.baggage?.exchangeRate === "number" && f.baggage.exchangeRate > 0
+          ? f.baggage.exchangeRate
+          : undefined,
       cabinClass: f.cabin_class,
       baggage: f.baggage,
       budget: f.budget,
@@ -440,6 +444,27 @@ export const saveExpenseOnly = async (
   if (error) throw error;
 };
 
+const buildFlightRowPayload = (
+  f: FlightInfo,
+  tripId: string,
+  fallbackUserId: string
+) => ({
+  id: f.id,
+  trip_id: tripId,
+  user_id: f.user_id || fallbackUserId,
+  traveler_name: f.traveler_name,
+  outbound: f.outbound,
+  inbound: f.inbound,
+  price: f.price || 0,
+  currency: f.currency,
+  cabin_class: f.cabinClass,
+  baggage:
+    f.exchangeRate && f.exchangeRate > 0
+      ? { ...(f.baggage || {}), exchangeRate: f.exchangeRate }
+      : f.baggage,
+  budget: f.budget || 0,
+});
+
 export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
   if (!userId || SUPABASE_URL.includes("placeholder"))
     throw new Error("Database configuration missing.");
@@ -547,19 +572,9 @@ export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
     }
 
     if (trip.flights.length > 0) {
-      const flightPayloads = trip.flights.map((f) => ({
-        id: f.id,
-        trip_id: trip.id,
-        user_id: f.user_id || userId,
-        traveler_name: f.traveler_name,
-        outbound: f.outbound,
-        inbound: f.inbound,
-        price: f.price || 0,
-        currency: f.currency,
-        cabin_class: f.cabinClass,
-        baggage: f.baggage,
-        budget: f.budget || 0,
-      }));
+      const flightPayloads = trip.flights.map((f) =>
+        buildFlightRowPayload(f, trip.id, userId)
+      );
       const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
       if (fErr) {
         console.error("Failed to upsert flights:", fErr);
@@ -723,19 +738,9 @@ export const createFullTrip = async (trip: Trip, userId: string): Promise<void> 
 
   // 2. Save Flights
   if (trip.flights && trip.flights.length > 0) {
-    const flightPayloads = trip.flights.map((f) => ({
-      id: f.id,
-      trip_id: trip.id,
-      user_id: f.user_id || userId,
-      traveler_name: f.traveler_name,
-      outbound: f.outbound,
-      inbound: f.inbound,
-      price: f.price || 0,
-      currency: f.currency,
-      cabin_class: f.cabinClass,
-      baggage: f.baggage,
-      budget: f.budget || 0,
-    }));
+    const flightPayloads = trip.flights.map((f) =>
+      buildFlightRowPayload(f, trip.id, userId)
+    );
     const { error: fErr } = await supabase.from("flights").insert(flightPayloads);
     if (fErr) {
       console.error("Failed to insert flights:", fErr);
