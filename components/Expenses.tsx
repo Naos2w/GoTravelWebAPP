@@ -118,10 +118,21 @@ const CustomFilterSelect = <T extends string>({
 
 export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest = false }) => {
   const { t } = useTranslation();
+
+  const lastCurrencyKey = `go-travel-last-currency-${trip.id}`;
+  const getRememberedFormCurrency = (): Currency => {
+    try {
+      const saved = localStorage.getItem(lastCurrencyKey);
+      if (saved && (Object.values(Currency) as string[]).includes(saved)) {
+        return saved as Currency;
+      }
+    } catch {}
+    return Currency.TWD;
+  };
   
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<Expense['category']>('Food');
-  const [currency, setCurrency] = useState<Currency>(Currency.TWD);
+  const [currency, setCurrency] = useState<Currency>(() => getRememberedFormCurrency());
   const [selectedDate, setSelectedDate] = useState(trip.startDate);
   const [note, setNote] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -252,6 +263,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     }
   }, [displayCurrencyKey]);
 
+  useEffect(() => {
+    setCurrency(getRememberedFormCurrency());
+  }, [lastCurrencyKey]);
+
   const [liveRates, setLiveRates] = useState<Record<Currency, number>>(() => getCachedRatesToTwd());
 
   useEffect(() => {
@@ -325,6 +340,11 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     if (currency !== Currency.TWD) {
       lockTripRate(trip.id, currency, lockedRate);
     }
+    if (!editingExpenseId) {
+      try {
+        localStorage.setItem(lastCurrencyKey, currency);
+      } catch {}
+    }
 
     if (editingExpenseId) {
       const exp = trip.expenses.find(e => e.id === editingExpenseId);
@@ -371,6 +391,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const resetForm = () => { 
     setAmount(''); 
     setNote(''); 
+    setCurrency(getRememberedFormCurrency());
     setPaidBy(currentUser?.id || '');
     setSplitWith(members.map((m) => m.id));
     setEditingExpenseId(null); 
@@ -417,6 +438,17 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const displayTotal = convertFromTwd(totalTWD, displayCurrency, tripRates);
   const displayFlightsTotal = convertFromTwd(flightsTotal, displayCurrency, tripRates);
   const displayExpensesOnlyTotal = convertFromTwd(expensesOnlyTotal, displayCurrency, tripRates);
+
+  const foreignCurrenciesInTrip = useMemo(() => {
+    const set = new Set<Currency>();
+    (trip.expenses || []).forEach((e) => {
+      if (e.currency && e.currency !== Currency.TWD) set.add(e.currency);
+    });
+    (trip.flights || []).forEach((f) => {
+      if (f.currency && f.currency !== Currency.TWD) set.add(f.currency);
+    });
+    return Array.from(set);
+  }, [trip.expenses, trip.flights]);
 
   const flightExpenses: Expense[] = useMemo(() => {
     return (trip.flights || []).map(f => ({
@@ -530,6 +562,18 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
               {displayCurrency !== Currency.TWD && (
                 <div className="text-[11px] font-mono font-semibold text-primary/90 dark:text-blue-400 mt-1 tabular-nums">
                   ≈ NT$ {Math.round(totalTWD).toLocaleString()} • 1 {displayCurrency} = NT$ {(tripRates[displayCurrency] || 1).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                </div>
+              )}
+              {displayCurrency === Currency.TWD && foreignCurrenciesInTrip.length > 0 && (
+                <div
+                  data-testid="trip-locked-rates-summary"
+                  className="text-[11px] font-mono font-semibold text-primary/90 dark:text-blue-400 mt-1 tabular-nums flex flex-wrap gap-x-2.5 gap-y-0.5"
+                >
+                  {foreignCurrenciesInTrip.map((cur) => (
+                    <span key={cur}>
+                      1 {cur} = NT$ {(tripRates[cur] || 1).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                    </span>
+                  ))}
                 </div>
               )}
               <div className="text-xs text-slate-500 dark:text-white/60 mt-1.5 flex items-center gap-1.5 font-medium font-mono tabular-nums">
@@ -690,6 +734,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
           <div className={`${isFormOpen ? 'hidden' : 'block'}`}>
             <button 
               onClick={() => {
+                setEditingExpenseId(null);
+                setCurrency(getRememberedFormCurrency());
                 setPaidBy(currentUser?.id || members[0]?.id || '');
                 setSplitWith(members.map((m) => m.id));
                 setIsFormOpen(true);
@@ -735,7 +781,15 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                   variant="form"
                   icon={DollarSign}
                   value={currency} 
-                  onChange={(val: any) => setCurrency(val as Currency)} 
+                  onChange={(val: any) => {
+                    const nextCur = val as Currency;
+                    setCurrency(nextCur);
+                    if (!editingExpenseId) {
+                      try {
+                        localStorage.setItem(lastCurrencyKey, nextCur);
+                      } catch {}
+                    }
+                  }} 
                   options={Object.values(Currency).map(c => ({ value: c, label: c }))} 
                 />
                 <CustomFilterSelect 
