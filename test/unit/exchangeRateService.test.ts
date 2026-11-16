@@ -7,6 +7,11 @@ import {
   getRateToTwd,
   resolveHistoricalFlightRate,
   fetchLiveRatesToTwd,
+  getTripLockedRates,
+  lockTripRate,
+  convertFromTwd,
+  formatCurrencyAmount,
+  formatWithCurrencySymbol,
 } from "../../services/exchangeRateService";
 
 describe("exchangeRateService (Unit Tests)", () => {
@@ -94,5 +99,31 @@ describe("exchangeRateService (Unit Tests)", () => {
     expect(
       resolveHistoricalFlightRate({ currency: Currency.JPY }, currentMarketRates)
     ).toBe(0.25);
+  });
+
+  it("maintains per-trip locked exchange rate snapshots and converts from TWD accurately", () => {
+    const tripId = "trip-rate-lock-1";
+    lockTripRate(tripId, Currency.CHF, 36.0);
+
+    const rates = getTripLockedRates(
+      tripId,
+      [{ currency: Currency.JPY, exchangeRate: 0.215 }],
+      [],
+      { ...FALLBACK_RATES_TO_TWD, [Currency.CHF]: 40.0, [Currency.JPY]: 0.25 }
+    );
+
+    // Explicitly locked CHF rate in localStorage and saved JPY expense rate override newer live rates
+    expect(rates[Currency.CHF]).toBe(36.0);
+    expect(rates[Currency.JPY]).toBe(0.215);
+    expect(rates[Currency.TWD]).toBe(1);
+
+    // 3600 TWD at locked 36.0 CHF = 100 CHF
+    expect(convertFromTwd(3600, Currency.CHF, rates)).toBe(100);
+    expect(convertFromTwd(3600, Currency.TWD, rates)).toBe(3600);
+
+    expect(formatCurrencyAmount(1000.6, Currency.JPY)).toBe("1,001");
+    expect(formatCurrencyAmount(123.456, Currency.CHF)).toBe("123.46");
+    expect(formatWithCurrencySymbol(3600, Currency.TWD)).toBe("NT$ 3,600");
+    expect(formatWithCurrencySymbol(100, Currency.CHF)).toBe("CHF 100");
   });
 });

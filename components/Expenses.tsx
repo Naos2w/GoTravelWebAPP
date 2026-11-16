@@ -17,6 +17,10 @@ import {
   fetchLiveRatesToTwd,
   getRateToTwd,
   resolveHistoricalFlightRate,
+  formatWithCurrencySymbol,
+  getTripLockedRates,
+  lockTripRate,
+  convertFromTwd,
 } from '../services/exchangeRateService';
 
 interface Props {
@@ -39,8 +43,10 @@ interface CustomFilterSelectProps<T = string> {
   options: SelectOption<T>[];
   icon: React.ComponentType<{ size: number; className?: string }>;
   wrapperClass?: string;
-  variant?: "filter" | "form";
+  variant?: "filter" | "form" | "pill";
   isError?: boolean;
+  testId?: string;
+  ariaLabel?: string;
 }
 
 const CustomFilterSelect = <T extends string>({
@@ -51,6 +57,8 @@ const CustomFilterSelect = <T extends string>({
   wrapperClass = "",
   variant = "filter",
   isError = false,
+  testId,
+  ariaLabel,
 }: CustomFilterSelectProps<T>) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
@@ -72,22 +80,28 @@ const CustomFilterSelect = <T extends string>({
   return (
     <div className={`relative ${wrapperClass} shrink-0`} ref={selectRef}>
       <button 
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
+        data-testid={testId}
+        aria-label={ariaLabel}
         className={`flex items-center transition-all cursor-pointer group outline-none ${
           variant === 'filter' 
             ? `gap-1.5 py-1.5 px-3 rounded-xl shrink-0 text-xs font-bold text-slate-700 dark:text-slate-200 ${isOpen ? 'bg-slate-200 dark:bg-white/[0.15] shadow-inner' : 'bg-slate-100/80 dark:bg-white/[0.06] hover:bg-slate-200/80 dark:hover:bg-white/[0.1] border border-black/[0.04] dark:border-white/[0.06]'}`
+            : variant === 'pill'
+            ? `gap-1.5 py-1.5 px-3 rounded-xl shrink-0 text-xs font-mono font-bold text-slate-800 dark:text-white ${isOpen ? 'bg-white dark:bg-white/[0.18] ring-2 ring-primary/30 shadow-sm' : 'bg-white/80 dark:bg-white/[0.08] hover:bg-white dark:hover:bg-white/[0.14] border border-black/[0.08] dark:border-white/[0.14] shadow-sm'}`
             : `w-full gap-3 px-4 py-3 rounded-2xl text-sm font-bold bg-slate-50 dark:bg-white/[0.05] border ${isError ? 'border-red-500 ring-2 ring-red-500/20' : (isOpen ? 'border-primary ring-2 ring-primary/20 bg-white dark:bg-white/[0.1]' : 'border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.08]')}`
         }`}
       >
-        <Icon size={variant === 'filter' ? 13 : 16} className={`${isOpen || (variant === 'filter' && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
-        <span className={`${variant === 'filter' ? 'hidden sm:block truncate sm:max-w-[100px]' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
-        <ChevronDown size={variant === 'filter' ? 11 : 14} className={`${variant === 'filter' ? 'hidden sm:block' : ''} text-slate-400 opacity-60 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        <Icon size={variant === 'filter' || variant === 'pill' ? 13 : 16} className={`${isOpen || ((variant === 'filter' || variant === 'pill') && value !== options[0]?.value) ? 'text-primary' : 'text-slate-400 group-hover:text-primary'} shrink-0 transition-colors`} />
+        <span className={`${variant === 'filter' ? 'hidden sm:block truncate sm:max-w-[100px]' : variant === 'pill' ? 'truncate' : 'flex-1'} text-left`}>{selectedOption?.label}</span>
+        <ChevronDown size={variant === 'filter' || variant === 'pill' ? 11 : 14} className={`${variant === 'filter' ? 'hidden sm:block' : ''} text-slate-400 opacity-60 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-max min-w-[150px] max-w-[240px] max-h-[300px] overflow-y-auto bg-white/95 dark:bg-[#161822]/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 p-1.5">
           {options.map((opt) => (
             <button
+              type="button"
               key={opt.value}
               onClick={() => { onChange(opt.value); setIsOpen(false); }}
               className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer ${value === opt.value ? 'bg-primary text-white shadow-sm' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.08]'}`}
@@ -213,6 +227,31 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     return dates;
   }, [trip.startDate, trip.endDate]);
 
+  const displayCurrencyKey = `go-travel-display-currency-${trip.id}`;
+  const [displayCurrency, setDisplayCurrency] = useState<Currency>(() => {
+    try {
+      const saved = localStorage.getItem(displayCurrencyKey);
+      return saved && (Object.values(Currency) as string[]).includes(saved)
+        ? (saved as Currency)
+        : Currency.TWD;
+    } catch {
+      return Currency.TWD;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(displayCurrencyKey);
+      if (saved && (Object.values(Currency) as string[]).includes(saved)) {
+        setDisplayCurrency(saved as Currency);
+      } else {
+        setDisplayCurrency(Currency.TWD);
+      }
+    } catch {
+      setDisplayCurrency(Currency.TWD);
+    }
+  }, [displayCurrencyKey]);
+
   const [liveRates, setLiveRates] = useState<Record<Currency, number>>(() => getCachedRatesToTwd());
 
   useEffect(() => {
@@ -231,6 +270,21 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     };
   }, []);
 
+  const tripRates = useMemo(
+    () => getTripLockedRates(trip.id, trip.expenses || [], trip.flights || [], liveRates),
+    [trip.id, trip.expenses, trip.flights, liveRates]
+  );
+
+  const handleDisplayCurrencyChange = (nextCurrency: Currency) => {
+    setDisplayCurrency(nextCurrency);
+    try {
+      localStorage.setItem(displayCurrencyKey, nextCurrency);
+    } catch {}
+    if (nextCurrency !== Currency.TWD) {
+      lockTripRate(trip.id, nextCurrency, tripRates[nextCurrency] || getRateToTwd(nextCurrency, liveRates));
+    }
+  };
+
   const editingExpense = useMemo(
     () => (editingExpenseId ? trip.expenses.find((e) => e.id === editingExpenseId) : undefined),
     [editingExpenseId, trip.expenses]
@@ -246,8 +300,8 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     ) {
       return editingExpense.exchangeRate;
     }
-    return getRateToTwd(currency, liveRates);
-  }, [currency, editingExpense, liveRates]);
+    return tripRates[currency] || getRateToTwd(currency, liveRates);
+  }, [currency, editingExpense, tripRates, liveRates]);
 
   const parsedFormAmount = parseFloat(amount) || 0;
 
@@ -268,6 +322,9 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
     const paidByMember = members.find((m) => m.id === activePaidBy);
     const activeSplitWith = splitWith.length > 0 ? splitWith : members.map((m) => m.id);
     const lockedRate = activeRateForForm;
+    if (currency !== Currency.TWD) {
+      lockTripRate(trip.id, currency, lockedRate);
+    }
 
     if (editingExpenseId) {
       const exp = trip.expenses.find(e => e.id === editingExpenseId);
@@ -348,15 +405,18 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   };
 
   const flightsTotal = (trip.flights || []).reduce(
-    (sum, f) => sum + f.price * resolveHistoricalFlightRate(f, liveRates),
+    (sum, f) => sum + f.price * resolveHistoricalFlightRate(f, tripRates),
     0
   );
   const expensesOnlyTotal = trip.expenses.reduce(
     (sum, e) =>
-      sum + e.amount * (e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, liveRates)),
+      sum + e.amount * (e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, tripRates)),
     0
   );
   const totalTWD = flightsTotal + expensesOnlyTotal;
+  const displayTotal = convertFromTwd(totalTWD, displayCurrency, tripRates);
+  const displayFlightsTotal = convertFromTwd(flightsTotal, displayCurrency, tripRates);
+  const displayExpensesOnlyTotal = convertFromTwd(expensesOnlyTotal, displayCurrency, tripRates);
 
   const flightExpenses: Expense[] = useMemo(() => {
     return (trip.flights || []).map(f => ({
@@ -371,10 +431,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       note: f.inbound?.flightNumber 
         ? `${t('flight')}: ${f.outbound.flightNumber} ⇄ ${f.inbound.flightNumber}` 
         : `${t('flight')}: ${f.outbound.flightNumber}`,
-      exchangeRate: resolveHistoricalFlightRate(f, liveRates),
+      exchangeRate: resolveHistoricalFlightRate(f, tripRates),
       isFlight: true
     } as any));
-  }, [trip.flights, trip.startDate, t, liveRates]);
+  }, [trip.flights, trip.startDate, t, tripRates]);
 
   const processedExpenses = useMemo(() => {
     let list = [...trip.expenses, ...flightExpenses];
@@ -406,7 +466,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
   const chartData = useMemo(() => {
     const dataMap: Record<string, number> = {};
     trip.expenses.forEach(e => {
-      const rate = e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, liveRates);
+      const rate = e.exchangeRate && e.exchangeRate > 0 ? e.exchangeRate : getRateToTwd(e.currency, tripRates);
       const val = e.amount * rate;
       dataMap[e.category] = (dataMap[e.category] || 0) + val;
     });
@@ -444,26 +504,45 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
           <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 dark:bg-white/[0.03] rounded-full blur-2xl pointer-events-none" />
           
           <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-white/70 uppercase tracking-[0.14em]">
                 <CreditCard size={15} className="text-primary" />
                 <span>{t('totalCost')}</span>
               </div>
+              <CustomFilterSelect
+                variant="pill"
+                testId="display-currency-select"
+                ariaLabel="Display currency"
+                icon={DollarSign}
+                value={displayCurrency}
+                onChange={(val: any) => handleDisplayCurrencyChange(val as Currency)}
+                options={Object.values(Currency).map((c) => ({ value: c, label: c }))}
+              />
             </div>
 
             <div className="my-4">
-              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white font-mono tabular-nums">
-                NT$ {totalTWD.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              <div
+                data-testid="hero-total-amount"
+                className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white font-mono tabular-nums"
+              >
+                {formatWithCurrencySymbol(displayTotal, displayCurrency)}
               </div>
+              {displayCurrency !== Currency.TWD && (
+                <div className="text-[11px] font-mono font-semibold text-primary/90 dark:text-blue-400 mt-1 tabular-nums">
+                  ≈ NT$ {Math.round(totalTWD).toLocaleString()} • 1 {displayCurrency} = NT$ {(tripRates[displayCurrency] || 1).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                </div>
+              )}
               <div className="text-xs text-slate-500 dark:text-white/60 mt-1.5 flex items-center gap-1.5 font-medium font-mono tabular-nums">
                 <Plane size={13} className="text-primary" />
-                <span>{t('includesFlight')} (NT$ {Math.round(flightsTotal).toLocaleString()})</span>
+                <span>{t('includesFlight')} ({formatWithCurrencySymbol(displayFlightsTotal, displayCurrency)})</span>
               </div>
             </div>
 
             <div className="pt-3 border-t border-black/[0.06] dark:border-white/10 flex items-center justify-between text-xs text-slate-600 dark:text-white/70 font-medium">
               <span>{t('localSpending')}</span>
-              <span className="font-bold text-slate-900 dark:text-white font-mono tabular-nums">NT$ {Math.round(expensesOnlyTotal).toLocaleString()}</span>
+              <span className="font-bold text-slate-900 dark:text-white font-mono tabular-nums">
+                {formatWithCurrencySymbol(displayExpensesOnlyTotal, displayCurrency)}
+              </span>
             </div>
           </div>
         </div>
@@ -489,7 +568,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-slate-500 dark:text-slate-400 tabular-nums">
-                          NT$ {Math.round(entry.value).toLocaleString()}
+                          {formatWithCurrencySymbol(
+                            convertFromTwd(entry.value, displayCurrency, tripRates),
+                            displayCurrency
+                          )}
                         </span>
                         <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 tabular-nums">
                           {Math.round(percent)}%
@@ -585,7 +667,10 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                     <span className="truncate">{tr.toName}</span>
                   </div>
                   <span className="font-mono font-extrabold text-primary tabular-nums shrink-0 pl-2">
-                    NT$ {tr.amount.toLocaleString()}
+                    {formatWithCurrencySymbol(
+                      convertFromTwd(tr.amount, displayCurrency, tripRates),
+                      displayCurrency
+                    )}
                   </span>
                 </div>
               ))}
@@ -678,24 +763,42 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                 />
               </div>
 
-              {currency !== Currency.TWD && (
+              {(currency !== Currency.TWD || displayCurrency !== Currency.TWD) && (
                 <div
                   data-testid="exchange-rate-preview"
                   className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-2xl bg-primary/[0.06] dark:bg-primary/[0.12] border border-primary/15 text-xs"
                 >
-                  <span className="font-mono font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
-                    1 {currency} ≈ NT$ {activeRateForForm.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {parsedFormAmount > 0 && (
-                      <span className="font-mono font-bold text-primary tabular-nums">
-                        ≈ NT$ {Math.round(parsedFormAmount * activeRateForForm).toLocaleString()}
+                  {currency !== Currency.TWD ? (
+                    <>
+                      <span className="font-mono font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
+                        1 {currency} ≈ NT$ {activeRateForForm.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                       </span>
-                    )}
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                      ({t('rateLockedHint')})
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {parsedFormAmount > 0 && (
+                          <span className="font-mono font-bold text-primary tabular-nums">
+                            ≈ NT$ {Math.round(parsedFormAmount * activeRateForForm).toLocaleString()}
+                            {displayCurrency !== Currency.TWD && displayCurrency !== currency && (
+                              <> • {formatWithCurrencySymbol(convertFromTwd(parsedFormAmount * activeRateForForm, displayCurrency, tripRates), displayCurrency)}</>
+                            )}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                          ({t('rateLockedHint')})
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-mono font-semibold text-slate-600 dark:text-slate-300 tabular-nums">
+                        1 {displayCurrency} ≈ NT$ {(tripRates[displayCurrency] || 1).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                      </span>
+                      {parsedFormAmount > 0 && (
+                        <span className="font-mono font-bold text-primary tabular-nums">
+                          ≈ {formatWithCurrencySymbol(convertFromTwd(parsedFormAmount, displayCurrency, tripRates), displayCurrency)}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -847,41 +950,63 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0 pl-3">
-                  <div className="text-right">
-                    <div className="font-mono font-bold text-sm sm:text-base text-slate-800 dark:text-white tabular-nums">
-                      {item.currency} {item.amount.toLocaleString()}
-                    </div>
-                    {item.currency !== Currency.TWD && (
-                      <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 tabular-nums">
-                        ≈ NT$ {Math.round(item.amount * item.exchangeRate).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
+                {(() => {
+                  const itemRate =
+                    item.exchangeRate && item.exchangeRate > 0
+                      ? item.exchangeRate
+                      : getRateToTwd(item.currency, tripRates);
+                  const itemTwdValue = item.amount * itemRate;
+                  const convertedValue = convertFromTwd(itemTwdValue, displayCurrency, tripRates);
+                  const showSecondary =
+                    item.currency !== displayCurrency || item.currency !== Currency.TWD;
 
-                  {!isFlightItem && (item.user_id === currentUser?.id || trip.user_id === currentUser?.id) ? (
-                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => startEdit(item)} 
-                        className="p-1.5 text-slate-400 hover:text-primary rounded-lg transition-colors cursor-pointer"
-                        aria-label="Edit expense"
-                      >
-                        <Edit2 size={15} />
-                      </button>
-                      <button 
-                        onClick={() => deleteExpense(item.id)} 
-                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
-                        aria-label="Delete expense"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                  return (
+                    <div className="flex items-center gap-4 shrink-0 pl-3">
+                      <div className="text-right">
+                        <div className="font-mono font-bold text-sm sm:text-base text-slate-800 dark:text-white tabular-nums">
+                          {item.currency} {item.amount.toLocaleString()}
+                        </div>
+                        {showSecondary && (
+                          <div className="text-[10px] font-mono text-slate-400 dark:text-slate-500 tabular-nums">
+                            {item.currency !== displayCurrency ? (
+                              <>
+                                ≈ {formatWithCurrencySymbol(convertedValue, displayCurrency)}
+                                {item.currency !== Currency.TWD && ` (@ ${itemRate})`}
+                              </>
+                            ) : (
+                              <>
+                                ≈ NT$ {Math.round(itemTwdValue).toLocaleString()} (@ {itemRate})
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {!isFlightItem && (item.user_id === currentUser?.id || trip.user_id === currentUser?.id) ? (
+                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => startEdit(item)} 
+                            className="p-1.5 text-slate-400 hover:text-primary rounded-lg transition-colors cursor-pointer"
+                            aria-label="Edit expense"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button 
+                            onClick={() => deleteExpense(item.id)} 
+                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg transition-colors cursor-pointer"
+                            aria-label="Delete expense"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-1.5 text-slate-300 dark:text-slate-600">
+                          <Lock size={14} />
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="p-1.5 text-slate-300 dark:text-slate-600">
-                      <Lock size={14} />
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             );
           })}
