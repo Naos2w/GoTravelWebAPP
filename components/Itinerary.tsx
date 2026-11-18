@@ -105,6 +105,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const scrollAnchorRef = useRef<string | null>(null);
   const editRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const selectionSourceRef = useRef<'map' | 'list' | null>(null);
 
   // Auto-scroll mobile bottom cards when highlighted item changes
   useEffect(() => {
@@ -210,9 +211,14 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     }
   }, [trip, selectedDayIndex]);
 
-  // Synchronize map & list viewing interactions
+  // Synchronize map & list viewing interactions (scroll list only when triggered by a map marker click)
   useEffect(() => {
-    if (highlightedId && viewMode === 'list' && window.innerWidth >= 1024) {
+    if (
+      highlightedId &&
+      viewMode === 'list' &&
+      selectionSourceRef.current === 'map' &&
+      window.innerWidth >= 1024
+    ) {
       // Small timeout to ensure DOM layout is updated
       const timer = setTimeout(() => {
          const el = document.getElementById(`item-${highlightedId}`);
@@ -695,7 +701,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           return (
             <button 
               key={idx} 
-              onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); }} 
+              onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); setHighlightedId(null); selectionSourceRef.current = null; }} 
               className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3 rounded-2xl text-center transition-all duration-300 cursor-pointer active:scale-95 border ${
                 isSelected 
                   ? 'bg-primary text-white shadow-md shadow-primary/25 border-primary font-black' 
@@ -772,7 +778,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 items={displayItems}
                 onAddSearchResult={handleAddSearchResult}
                 activeItemId={highlightedId}
-                onMarkerClick={(id) => { setHighlightedId(id); }}
+                onMarkerClick={(id) => { selectionSourceRef.current = 'map'; setHighlightedId(id); }}
                 hasBottomCards={viewMode === 'map' && !isMobileCardsCollapsed}
               />
             </Suspense>
@@ -818,7 +824,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                           <div
                             key={item.id}
                             ref={el => { cardRefs.current[item.id] = el; }}
-                            onClick={() => setHighlightedId(item.id)}
+                            onClick={() => { selectionSourceRef.current = 'list'; setHighlightedId((prev) => (prev === item.id ? null : item.id)); }}
                             className={`snap-center shrink-0 w-[240px] h-[104px] p-2.5 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] flex flex-col justify-between ${
                               isHighlighted
                                 ? 'bg-white/95 dark:bg-[#161822] border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
@@ -1023,7 +1029,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
                         <div 
                            onClick={() => {
-                             setHighlightedId(item.id);
+                             selectionSourceRef.current = 'list';
+                             setHighlightedId((prev) => (prev === item.id ? null : item.id));
                            }}
                            className="flex-1 flex flex-col items-start text-left overflow-x-auto sm:overflow-x-visible custom-thin-scrollbar min-w-0 transition-all cursor-pointer sm:cursor-pointer rounded-xl px-1 hover:bg-slate-50 dark:hover:bg-white/[0.06]"
                         >
