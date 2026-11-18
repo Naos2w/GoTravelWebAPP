@@ -1,9 +1,21 @@
 import React from "react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { MapView } from "../../components/MapView";
+import { MapView, LEG_ROUTE_CACHE } from "../../components/MapView";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { ItineraryItem } from "../../types";
+
+const mockMapInstance = {
+  setView: vi.fn(),
+  panTo: vi.fn(),
+  flyTo: vi.fn(),
+  fitBounds: vi.fn(),
+  stop: vi.fn(),
+  getCenter: vi.fn().mockReturnValue({ lat: 35.71, lng: 139.79 }),
+  getZoom: vi.fn().mockReturnValue(14),
+  getContainer: vi.fn().mockReturnValue(document.createElement("div")),
+  invalidateSize: vi.fn(),
+};
 
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children }: any) => <div data-testid="map-container">{children}</div>,
@@ -11,15 +23,7 @@ vi.mock("react-leaflet", () => ({
   Marker: ({ children }: any) => <div data-testid="marker">{children}</div>,
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
   Polyline: () => <div data-testid="polyline" />,
-  useMap: () => ({
-    setView: vi.fn(),
-    panTo: vi.fn(),
-    flyTo: vi.fn(),
-    fitBounds: vi.fn(),
-    getZoom: vi.fn().mockReturnValue(12),
-    getContainer: vi.fn().mockReturnValue(document.createElement("div")),
-    invalidateSize: vi.fn(),
-  }),
+  useMap: () => mockMapInstance,
 }));
 
 vi.mock("leaflet", () => ({
@@ -40,6 +44,20 @@ vi.mock("leaflet", () => ({
 }));
 
 describe("MapView Component Smoke Test", () => {
+  beforeEach(() => {
+    LEG_ROUTE_CACHE.clear();
+    mockMapInstance.flyTo.mockClear();
+    mockMapInstance.fitBounds.mockClear();
+    mockMapInstance.stop.mockClear();
+    mockMapInstance.getZoom.mockReturnValue(14);
+    mockMapInstance.getCenter.mockReturnValue({ lat: 35.71, lng: 139.79 });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Offline OSRM test")));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   const mockItems: ItineraryItem[] = [
     {
       id: "item-1",
@@ -108,5 +126,44 @@ describe("MapView Component Smoke Test", () => {
     fireEvent.click(walkBtn);
     expect(selector.querySelectorAll("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: /全域走路/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("renders immediate route polylines even when OSRM fails and uses snappy stop flyTo transition", () => {
+    const twoStopItems: ItineraryItem[] = [
+      ...mockItems,
+      {
+        id: "item-2",
+        trip_id: "trip-1",
+        user_id: "user-1",
+        time: "11:00",
+        placeName: "Tokyo Skytree",
+        lat: 35.7101,
+        lng: 139.8107,
+        type: "Place",
+        date: "2026-10-01",
+      },
+    ];
+
+    render(
+      <LocalizationProvider>
+        <MapView items={twoStopItems} activeItemId="item-1" />
+      </LocalizationProvider>
+    );
+
+    // Dual-layer glowing polylines must immediately render without disappearing while OSRM fails/loads
+    expect(screen.getAllByTestId("polyline").length).toBeGreaterThanOrEqual(2);
+
+    // Camera transition should interrupt prior motion and animate smoothly within <= 0.8s
+    expect(mockMapInstance.stop).toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).toHaveBeenCalledWith(
+      [35.7148, 139.7967],
+      15,
+      expect.objectContaining({
+        animate: true,
+        easeLinearity: 0.25,
+      })
+    );
+    const flyOptions = mockMapInstance.flyTo.mock.calls[0][2];
+    expect(flyOptions.duration).toBeLessThanOrEqual(0.8);
   });
 });
