@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
@@ -19,7 +19,46 @@ interface Props {
   hasBottomCards?: boolean;
 }
 
+const MARKER_ICON_CACHE = new Map<string, L.DivIcon>();
+const DURATION_ICON_CACHE = new Map<string, L.DivIcon>();
+
+const MODE_ICON_HTML: Record<string, string> = {
+  walking: renderToString(<Footprints size={11} strokeWidth={2.5} />),
+  transit: renderToString(<TrainFront size={11} strokeWidth={2.5} />),
+  bicycling: renderToString(<Bike size={11} strokeWidth={2.5} />),
+  flight: renderToString(<Plane size={11} strokeWidth={2.5} />),
+  driving: renderToString(<Car size={11} strokeWidth={2.5} />),
+};
+
+const getDurationDivIcon = (
+  iconColorClass: string,
+  modeIcon: string,
+  displayStr: string
+): L.DivIcon => {
+  const key = `${iconColorClass}:${displayStr}`;
+  const cached = DURATION_ICON_CACHE.get(key);
+  if (cached) return cached;
+
+  const icon = L.divIcon({
+    html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
+                          <div class="${iconColorClass} transition-colors">
+                            ${modeIcon}
+                          </div>
+                          ${displayStr}
+                        </div>`,
+    className: 'custom-leaflet-marker z-[999]',
+    iconSize: [108, 26],
+    iconAnchor: [54, 13],
+  });
+  DURATION_ICON_CACHE.set(key, icon);
+  return icon;
+};
+
 const createCustomIcon = (index: number, type: string, isActive = false) => {
+  const cacheKey = `${index}:${type}:${isActive ? '1' : '0'}`;
+  const cached = MARKER_ICON_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const isFood = type === 'Food';
   const isFlight = type === 'Flight';
   
@@ -43,17 +82,21 @@ const createCustomIcon = (index: number, type: string, isActive = false) => {
     </div>
   `;
 
-  return L.divIcon({
+  const icon = L.divIcon({
     html,
     className: 'custom-leaflet-marker',
     iconSize: isActive ? [32, 40] : [28, 36],
     iconAnchor: isActive ? [16, 40] : [14, 36],
     popupAnchor: isActive ? [0, -40] : [0, -36]
   });
+  MARKER_ICON_CACHE.set(cacheKey, icon);
+  return icon;
 };
 
 const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number], bounds?: L.LatLngBounds, activeItem?: ItineraryItem }) => {
   const map = useMap();
+  const prevActiveIdRef = useRef<string | null | undefined>(undefined);
+  const prevBoundsStrRef = useRef<string | null>(null);
   
   // Create stable primitive dependencies to prevent infinite render loops
   // center is a new array every render, bounds is a new L.LatLngBounds every render
@@ -62,14 +105,39 @@ const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number],
   const activeItemId = activeItem?.id;
 
   useEffect(() => {
+    const anyMap = map as any;
+    if (anyMap?._renderer?.options) {
+      anyMap._renderer.options.padding = 0.75;
+    }
+    anyMap?.stop?.();
+
     if (activeItem && activeItem.lat != null && activeItem.lng != null) {
       // Must cast to Number because Google Places/Supabase string representations crash Leaflet's flyTo math
-      map.flyTo([Number(activeItem.lat), Number(activeItem.lng)], 16, { animate: true, duration: 1.5 });
+      const targetLat = Number(activeItem.lat);
+      const targetLng = Number(activeItem.lng);
+      const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 13;
+      const currentCenter = typeof anyMap?.getCenter === 'function' ? anyMap.getCenter() : null;
+      const distDeg = currentCenter
+        ? Math.hypot(targetLat - Number(currentCenter.lat), targetLng - Number(currentCenter.lng))
+        : 1;
+      const duration = distDeg < 0.03 && currentZoom >= 14 ? 0.5 : 0.75;
+      const targetZoom = Math.max(currentZoom, 15);
+
+      map.flyTo([targetLat, targetLng], targetZoom, {
+        animate: true,
+        duration,
+        easeLinearity: 0.25,
+      });
     } else if (bounds && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+      if (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null) {
+        map.fitBounds(bounds, { padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any);
+      }
     } else if (center) {
       map.setView(center, map.getZoom(), { animate: true });
     }
+
+    prevActiveIdRef.current = activeItemId ?? null;
+    prevBoundsStrRef.current = boundsStr;
   }, [centerStr, boundsStr, activeItemId, map]);
   
   return null;
@@ -98,16 +166,30 @@ const MapResizer = () => {
   return null;
 };
 
-const fetchLegRoute = (
-  stop1: ItineraryItem,
-  stop2: ItineraryItem,
-  mode: string
-): Promise<{
+export interface LegRouteInfo {
   geometry: [number, number][];
   duration: number;
   distance: number;
   mode: string;
-}> => {
+  isFallback?: boolean;
+}
+
+export const LEG_ROUTE_CACHE = new Map<string, LegRouteInfo>();
+
+const buildLegCacheKey = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+  mode: string
+): string =>
+  `${lat1.toFixed(5)},${lng1.toFixed(5)}->${lat2.toFixed(5)},${lng2.toFixed(5)}:${mode}`;
+
+const fetchLegRoute = (
+  stop1: ItineraryItem,
+  stop2: ItineraryItem,
+  mode: string
+): Promise<LegRouteInfo> => {
   const lat1 = Number(stop1.lat);
   const lng1 = Number(stop1.lng);
   const lat2 = Number(stop2.lat);
@@ -115,92 +197,97 @@ const fetchLegRoute = (
 
   if (mode === 'flight') {
     return Promise.resolve({
-      geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
+      geometry: [[lat1, lng1], [lat2, lng2]],
       duration: 0,
       distance: 0,
-      mode
+      mode,
+      isFallback: false,
     });
   }
 
   return fetchOSRM(lat1, lng1, lat2, lng2, mode);
 };
 
-const fetchOSRM = (
+const fetchOSRM = async (
   lat1: number,
   lng1: number,
   lat2: number,
   lng2: number,
   mode: string
-): Promise<{
-  geometry: [number, number][];
-  duration: number;
-  distance: number;
-  mode: string;
-}> => {
+): Promise<LegRouteInfo> => {
+  const cacheKey = buildLegCacheKey(lat1, lng1, lat2, lng2, mode);
+  const cached = LEG_ROUTE_CACHE.get(cacheKey);
+  if (cached && !cached.isFallback) {
+    return cached;
+  }
+
   let profile = 'driving';
   if (mode === 'walking') profile = 'foot';
   else if (mode === 'bicycling') profile = 'bicycle';
-  
-  return fetch(`https://router.project-osrm.org/route/v1/${profile}/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`)
-    .then((res) => res.json())
-    .then((data) => {
-      if (data && data.code === 'Ok' && data.routes?.[0]) {
-        const route = data.routes[0];
-        const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]] as [number, number]);
-        
-        // Compute realistic travel time for each specific mode based on road network distance
-        let calculatedDuration = route.duration;
-        const distanceM = route.distance || 0;
 
-        if (mode === 'walking') {
-          // Average walking speed: 4.5 km/h (1.25 m/s)
-          calculatedDuration = Math.round(distanceM / 1.25);
-        } else if (mode === 'bicycling') {
-          // Average city cycling speed: 15 km/h (4.16 m/s)
-          calculatedDuration = Math.round(distanceM / 4.16);
-        } else if (mode === 'transit') {
-          // Public transit (bus/metro) includes stop wait times and transfers (~1.5x driving time + 4 mins buffer)
-          calculatedDuration = Math.max(Math.round(route.duration * 1.5 + 240), Math.round(distanceM / 5.5));
-        } else {
-          // Driving: use OSRM driving duration
-          calculatedDuration = route.duration;
-        }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? window.setTimeout(() => controller.abort(), 4000) : null;
 
-        return {
-          geometry,
-          duration: calculatedDuration,
-          distance: route.distance,
-          mode
-        };
+  try {
+    const res = await fetch(
+      `https://router.project-osrm.org/route/v1/${profile}/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`,
+      controller ? { signal: controller.signal } : undefined
+    );
+    const data = await res.json();
+    if (data && data.code === 'Ok' && data.routes?.[0]) {
+      const route = data.routes[0];
+      const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]] as [number, number]);
+
+      // Compute realistic travel time for each specific mode based on road network distance
+      let calculatedDuration = route.duration;
+      const distanceM = route.distance || 0;
+
+      if (mode === 'walking') {
+        // Average walking speed: 4.5 km/h (1.25 m/s)
+        calculatedDuration = Math.round(distanceM / 1.25);
+      } else if (mode === 'bicycling') {
+        // Average city cycling speed: 15 km/h (4.16 m/s)
+        calculatedDuration = Math.round(distanceM / 4.16);
+      } else if (mode === 'transit') {
+        // Public transit (bus/metro) includes stop wait times and transfers (~1.5x driving time + 4 mins buffer)
+        calculatedDuration = Math.max(Math.round(route.duration * 1.5 + 240), Math.round(distanceM / 5.5));
+      } else {
+        // Driving: use OSRM driving duration
+        calculatedDuration = route.duration;
       }
-      return {
-        geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
-        duration: 0,
-        distance: 0,
-        mode
+
+      const result: LegRouteInfo = {
+        geometry,
+        duration: calculatedDuration,
+        distance: route.distance,
+        mode,
+        isFallback: false,
       };
-    })
-    .catch((err) => {
-      console.error("OSRM fetch error", err);
-      return {
-        geometry: [[lat1, lng1], [lat2, lng2]] as [number, number][],
-        duration: 0,
-        distance: 0,
-        mode
-      };
-    });
+      LEG_ROUTE_CACHE.set(cacheKey, result);
+      return result;
+    }
+  } catch (err) {
+    console.error("OSRM fetch error", err);
+  } finally {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  return {
+    geometry: [[lat1, lng1], [lat2, lng2]],
+    duration: 0,
+    distance: 0,
+    mode,
+    isFallback: true,
+  };
 };
 
 export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards }) => {
   const { language } = useTranslation();
   const isEn = language?.startsWith('en');
 
-  const [legsRouteInfo, setLegsRouteInfo] = useState<{
-    geometry: [number, number][];
-    duration: number;
-    distance: number;
-    mode: string;
-  }[]>([]);
+  const [legsRouteInfo, setLegsRouteInfo] = useState<LegRouteInfo[]>([]);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
   const [isRoutingMenuOpen, setIsRoutingMenuOpen] = useState(false);
@@ -381,14 +468,22 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   };
 
   // Filter out any items where lat or lng is missing, null, or undefined
-  const validItems = items.filter(i => 
-    i.lat != null && 
-    i.lng != null && 
-    !isNaN(i.lat) && 
-    !isNaN(i.lng) && 
-    i.type !== 'Transport'
+  const validItems = useMemo(
+    () =>
+      items.filter(
+        i =>
+          i.lat != null &&
+          i.lng != null &&
+          !isNaN(i.lat) &&
+          !isNaN(i.lng) &&
+          i.type !== 'Transport'
+      ),
+    [items]
   );
-  const pathPositions: [number, number][] = validItems.map(i => [Number(i.lat), Number(i.lng)]);
+  const pathPositions: [number, number][] = useMemo(
+    () => validItems.map(i => [Number(i.lat), Number(i.lng)]),
+    [validItems]
+  );
   
   let center: [number, number] = [23.5, 121]; // default center
   let bounds: L.LatLngBounds | undefined = undefined;
@@ -422,32 +517,88 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     return 'driving';
   };
 
-  // Fetch routing data leg-by-leg whenever validItems or routingModeOverride changes
+  const plannedLegs = useMemo(() => {
+    if (validItems.length < 2) return [];
+    const legs: {
+      stop1: ItineraryItem;
+      stop2: ItineraryItem;
+      lat1: number;
+      lng1: number;
+      lat2: number;
+      lng2: number;
+      mode: string;
+      cacheKey: string;
+    }[] = [];
+    for (let idx = 0; idx < validItems.length - 1; idx++) {
+      const stop1 = validItems[idx];
+      const stop2 = validItems[idx + 1];
+      const lat1 = Number(stop1.lat);
+      const lng1 = Number(stop1.lng);
+      const lat2 = Number(stop2.lat);
+      const lng2 = Number(stop2.lng);
+      const mode = getLegMode(stop1, stop2);
+      legs.push({
+        stop1,
+        stop2,
+        lat1,
+        lng1,
+        lat2,
+        lng2,
+        mode,
+        cacheKey: buildLegCacheKey(lat1, lng1, lat2, lng2, mode),
+      });
+    }
+    return legs;
+  }, [validItems, items, routingModeOverride]);
+
+  const legsSignature = useMemo(
+    () => plannedLegs.map((l) => l.cacheKey).join('|'),
+    [plannedLegs]
+  );
+
+  // Fetch routing data leg-by-leg whenever stops or per-leg/override transport modes change
   useEffect(() => {
-    if (validItems.length < 2) {
+    if (plannedLegs.length === 0) {
       setLegsRouteInfo([]);
       return;
     }
-    
+
+    // Seed immediately from cache or straight-line fallback so route lines never vanish during fetches
+    const immediateLegs: LegRouteInfo[] = plannedLegs.map((leg) => {
+      const cached = LEG_ROUTE_CACHE.get(leg.cacheKey);
+      if (cached && !cached.isFallback) return cached;
+      return {
+        geometry: [[leg.lat1, leg.lng1], [leg.lat2, leg.lng2]],
+        duration: 0,
+        distance: 0,
+        mode: leg.mode,
+        isFallback: leg.mode !== 'flight',
+      };
+    });
+    setLegsRouteInfo(immediateLegs);
+
+    const needsFetch = immediateLegs.some((leg) => leg.isFallback);
+    if (!needsFetch) return;
+
+    let cancelled = false;
     const fetchAllLegs = async () => {
-      const legPromises = [];
-      for (let idx = 0; idx < validItems.length - 1; idx++) {
-        const stop1 = validItems[idx];
-        const stop2 = validItems[idx + 1];
-        const mode = getLegMode(stop1, stop2);
-        legPromises.push(fetchLegRoute(stop1, stop2, mode));
-      }
-      
       try {
-        const results = await Promise.all(legPromises);
-        setLegsRouteInfo(results);
+        const results = await Promise.all(
+          plannedLegs.map((leg) => fetchLegRoute(leg.stop1, leg.stop2, leg.mode))
+        );
+        if (!cancelled) {
+          setLegsRouteInfo(results);
+        }
       } catch (err) {
         console.error("Error fetching all legs route info", err);
       }
     };
 
     fetchAllLegs();
-  }, [JSON.stringify(pathPositions), routingModeOverride]);
+    return () => {
+      cancelled = true;
+    };
+  }, [legsSignature]);
 
   const activeItem = validItems.find(i => i.id === activeItemId);
 
@@ -690,31 +841,29 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const midPointIdx = Math.floor(leg.geometry.length / 2);
            const [midLat, midLng] = leg.geometry[midPointIdx];
            
+           if ((!leg.duration || leg.duration <= 0) && leg.mode !== 'flight') return null; // hide if fallback/0 duration except for flight
            const mins = Math.max(1, Math.round(leg.duration / 60)); // Minimum 1 min
-           if (mins === 0 && leg.mode !== 'flight') return null; // hide if 0 duration except for flight
            
-           let modeIcon = '';
+           let modeIcon = MODE_ICON_HTML.driving;
            let modeText = isEn ? 'Drive' : '車程';
            let iconColorClass = 'text-sky-400';
            
            if (leg.mode === 'walking') {
-             modeIcon = renderToString(<Footprints size={11} strokeWidth={2.5} />);
+             modeIcon = MODE_ICON_HTML.walking;
              modeText = isEn ? 'Walk' : '步行';
              iconColorClass = 'text-amber-400';
            } else if (leg.mode === 'transit') {
-             modeIcon = renderToString(<TrainFront size={11} strokeWidth={2.5} />);
+             modeIcon = MODE_ICON_HTML.transit;
              modeText = isEn ? 'Transit' : '乘車';
              iconColorClass = 'text-indigo-400';
            } else if (leg.mode === 'bicycling') {
-             modeIcon = renderToString(<Bike size={11} strokeWidth={2.5} />);
+             modeIcon = MODE_ICON_HTML.bicycling;
              modeText = isEn ? 'Bike' : '騎車';
              iconColorClass = 'text-emerald-400';
            } else if (leg.mode === 'flight') {
-             modeIcon = renderToString(<Plane size={11} strokeWidth={2.5} />);
+             modeIcon = MODE_ICON_HTML.flight;
              modeText = isEn ? 'Flight' : '飛行';
              iconColorClass = 'text-blue-400';
-           } else {
-             modeIcon = renderToString(<Car size={11} strokeWidth={2.5} />);
            }
            
            let timeText = '';
@@ -737,17 +886,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                key={`duration-${idx}`} 
                position={[midLat, midLng]}
                zIndexOffset={100}
-               icon={L.divIcon({
-                 html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="${iconColorClass} transition-colors">
-                            ${modeIcon}
-                          </div>
-                          ${displayStr}
-                        </div>`,
-                 className: 'custom-leaflet-marker z-[999]',
-                 iconSize: [108, 26],
-                 iconAnchor: [54, 13]
-               })}
+               icon={getDurationDivIcon(iconColorClass, modeIcon, displayStr)}
              />
            );
         })}
