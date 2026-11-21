@@ -381,9 +381,9 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     else if (transportType === 'Bicycle') profile = 'bicycle';
 
     try {
-      const res = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
+      const res = await fetch(`https://routing.openstreetmap.de/${profile === 'foot' ? 'routed-foot' : profile === 'bicycle' ? 'routed-bike' : 'routed-car'}/route/v1/${profile}/${Number(lng1)},${Number(lat1)};${Number(lng2)},${Number(lat2)}?overview=false`);
       const data = await res.json();
-      if (data?.routes?.[0]) return roundTo5(Math.max(5, Math.round(data.routes[0].duration / 60)));
+      if (data?.routes?.[0] && data.routes[0].duration > 0 && data.routes[0].distance > 0) return roundTo5(Math.max(5, Math.round(data.routes[0].duration / 60)));
     } catch(e) {}
     return 30; // fallback default
   };
