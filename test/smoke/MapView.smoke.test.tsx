@@ -18,11 +18,19 @@ const mockMapInstance = {
 };
 
 vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: any) => <div data-testid="map-container">{children}</div>,
+  MapContainer: ({ children, preferCanvas }: any) => (
+    <div data-testid="map-container" data-prefer-canvas={String(preferCanvas)}>{children}</div>
+  ),
   TileLayer: () => <div data-testid="tile-layer" />,
   Marker: ({ children }: any) => <div data-testid="marker">{children}</div>,
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
-  Polyline: () => <div data-testid="polyline" />,
+  Polyline: ({ pathOptions, color }: any) => (
+    <div
+      data-testid="polyline"
+      data-top-level-color={color ?? ""}
+      data-path-options={pathOptions ? JSON.stringify(pathOptions) : ""}
+    />
+  ),
   useMap: () => mockMapInstance,
 }));
 
@@ -47,6 +55,8 @@ describe("MapView Component Smoke Test", () => {
   beforeEach(() => {
     LEG_ROUTE_CACHE.clear();
     mockMapInstance.flyTo.mockClear();
+    mockMapInstance.setView.mockClear();
+    mockMapInstance.panTo.mockClear();
     mockMapInstance.fitBounds.mockClear();
     mockMapInstance.stop.mockClear();
     mockMapInstance.getZoom.mockReturnValue(14);
@@ -144,26 +154,86 @@ describe("MapView Component Smoke Test", () => {
       },
     ];
 
+    mockMapInstance.getZoom.mockReturnValue(14);
     render(
       <LocalizationProvider>
         <MapView items={twoStopItems} activeItemId="item-1" />
       </LocalizationProvider>
     );
 
-    // Dual-layer glowing polylines must immediately render without disappearing while OSRM fails/loads
-    expect(screen.getAllByTestId("polyline").length).toBeGreaterThanOrEqual(2);
+    // Canvas renderer is enabled
+    expect(screen.getByTestId("map-container")).toHaveAttribute("data-prefer-canvas", "true");
 
-    // Camera transition should interrupt prior motion and animate smoothly within <= 0.8s
+    // Dual-layer glowing polylines must immediately render without disappearing while OSRM fails/loads
+    const polylines = screen.getAllByTestId("polyline");
+    expect(polylines.length).toBeGreaterThanOrEqual(2);
+    polylines.forEach((pl) => {
+      expect(pl).toHaveAttribute("data-top-level-color", "");
+      const opts = JSON.parse(pl.getAttribute("data-path-options") || "{}");
+      expect(opts.color).toBeTruthy();
+      expect(opts.weight).toBeGreaterThan(0);
+      expect(opts.opacity).toBeGreaterThan(0);
+    });
+
+    // Nearby stop at zoom 14: setView straight to zoom 15 (no flyTo zoom-out bounce)
     expect(mockMapInstance.stop).toHaveBeenCalled();
-    expect(mockMapInstance.flyTo).toHaveBeenCalledWith(
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).toHaveBeenCalledWith(
       [35.7148, 139.7967],
       15,
-      expect.objectContaining({
-        animate: true,
-        easeLinearity: 0.25,
-      })
+      expect.objectContaining({ animate: true })
+    );
+  });
+
+  it("pans (no zoom change) to a nearby stop when already at zoom 15", () => {
+    mockMapInstance.getZoom.mockReturnValue(15);
+    render(
+      <LocalizationProvider>
+        <MapView items={mockItems} activeItemId="item-1" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.stop).toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).toHaveBeenCalledWith(
+      [35.7148, 139.7967],
+      expect.objectContaining({ animate: true, duration: 0.45, easeLinearity: 0.25 })
+    );
+  });
+
+  it("flies to a far stop with a snappy duration <= 0.8s", () => {
+    const farItems: ItineraryItem[] = [
+      ...mockItems,
+      {
+        id: "item-far",
+        trip_id: "trip-1",
+        user_id: "user-1",
+        time: "15:00",
+        placeName: "Kyoto Station",
+        lat: 34.9858,
+        lng: 135.7588,
+        type: "Place",
+        date: "2026-10-01",
+      },
+    ];
+    mockMapInstance.getZoom.mockReturnValue(14);
+    render(
+      <LocalizationProvider>
+        <MapView items={farItems} activeItemId="item-far" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.stop).toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).toHaveBeenCalledWith(
+      [34.9858, 135.7588],
+      15,
+      expect.objectContaining({ animate: true, easeLinearity: 0.25 })
     );
     const flyOptions = mockMapInstance.flyTo.mock.calls[0][2];
     expect(flyOptions.duration).toBeLessThanOrEqual(0.8);
+    expect(mockMapInstance.setView).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
   });
 });

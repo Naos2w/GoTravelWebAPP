@@ -106,9 +106,6 @@ const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number],
 
   useEffect(() => {
     const anyMap = map as any;
-    if (anyMap?._renderer?.options) {
-      anyMap._renderer.options.padding = 0.75;
-    }
     anyMap?.stop?.();
 
     if (activeItem && activeItem.lat != null && activeItem.lng != null) {
@@ -120,14 +117,20 @@ const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number],
       const distDeg = currentCenter
         ? Math.hypot(targetLat - Number(currentCenter.lat), targetLng - Number(currentCenter.lng))
         : 1;
-      const duration = distDeg < 0.03 && currentZoom >= 14 ? 0.5 : 0.75;
-      const targetZoom = Math.max(currentZoom, 15);
 
-      map.flyTo([targetLat, targetLng], targetZoom, {
-        animate: true,
-        duration,
-        easeLinearity: 0.25,
-      });
+      if (distDeg < 0.05) {
+        if (currentZoom >= 15) {
+          map.panTo([targetLat, targetLng], { animate: true, duration: 0.45, easeLinearity: 0.25 });
+        } else {
+          map.setView([targetLat, targetLng], 15, { animate: true, duration: 0.5 } as any);
+        }
+      } else {
+        map.flyTo([targetLat, targetLng], 15, {
+          animate: true,
+          duration: 0.75,
+          easeLinearity: 0.25,
+        });
+      }
     } else if (bounds && bounds.isValid()) {
       if (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null) {
         map.fitBounds(bounds, { padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any);
@@ -581,13 +584,28 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     if (!needsFetch) return;
 
     let cancelled = false;
+    const BATCH_SIZE = 3;
     const fetchAllLegs = async () => {
       try {
-        const results = await Promise.all(
-          plannedLegs.map((leg) => fetchLegRoute(leg.stop1, leg.stop2, leg.mode))
-        );
-        if (!cancelled) {
-          setLegsRouteInfo(results);
+        const currentLegs = [...immediateLegs];
+        const pendingIdx = currentLegs
+          .map((leg, idx) => (leg.isFallback ? idx : -1))
+          .filter((idx) => idx !== -1);
+
+        for (let i = 0; i < pendingIdx.length; i += BATCH_SIZE) {
+          if (cancelled) return;
+          const batch = pendingIdx.slice(i, i + BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map((idx) => {
+              const leg = plannedLegs[idx];
+              return fetchLegRoute(leg.stop1, leg.stop2, leg.mode);
+            })
+          );
+          if (cancelled) return;
+          batch.forEach((idx, k) => {
+            currentLegs[idx] = results[k];
+          });
+          setLegsRouteInfo([...currentLegs]);
         }
       } catch (err) {
         console.error("Error fetching all legs route info", err);
@@ -753,7 +771,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
             })}
         </div>
 
-        <MapContainer ref={setMapRef} center={center} zoom={13} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
+        <MapContainer ref={setMapRef} center={center} zoom={13} preferCanvas={true} style={{ height: '100%', width: '100%', zIndex: 0 }} zoomControl={false}>
         {/* 100% Free Watermark-Free OpenStreetMap Basemap (Dark Mode Styled via Calibrated Slate-Navy Filter) */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -793,16 +811,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
               <React.Fragment key={`leg-route-${idx}`}>
                 <Polyline
                   positions={leg.geometry}
-                  color={color}
-                  weight={weight + 3}
-                  opacity={isDarkMode ? 0.18 : 0.12}
+                  pathOptions={{
+                    color,
+                    weight: weight + 3,
+                    opacity: isDarkMode ? 0.18 : 0.12,
+                  }}
                 />
                 <Polyline
                   positions={leg.geometry}
-                  color={color}
-                  weight={weight}
-                  opacity={opacity}
-                  dashArray={dashArray}
+                  pathOptions={{ color, weight, opacity, dashArray }}
                 />
               </React.Fragment>
             );
@@ -811,16 +828,20 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           <>
             <Polyline
               positions={pathPositions}
-              color={isDarkMode ? '#38BDF8' : '#0284C7'}
-              weight={6}
-              opacity={isDarkMode ? 0.18 : 0.12}
+              pathOptions={{
+                color: isDarkMode ? '#38BDF8' : '#0284C7',
+                weight: 6,
+                opacity: isDarkMode ? 0.18 : 0.12,
+              }}
             />
-            <Polyline 
-              positions={pathPositions} 
-              color={isDarkMode ? '#38BDF8' : '#0284C7'} 
-              weight={3} 
-              opacity={0.92} 
-              dashArray="10, 10" 
+            <Polyline
+              positions={pathPositions}
+              pathOptions={{
+                color: isDarkMode ? '#38BDF8' : '#0284C7',
+                weight: 3,
+                opacity: 0.92,
+                dashArray: '10, 10',
+              }}
             />
           </>
         ) : null}
