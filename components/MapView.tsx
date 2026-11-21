@@ -211,6 +211,31 @@ const fetchLegRoute = (
   return fetchOSRM(lat1, lng1, lat2, lng2, mode);
 };
 
+type OsrmProfile = 'foot' | 'bicycle' | 'driving';
+
+const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// FOSSGIS OSRM hosts separate foot/bike/car graphs (router.project-osrm.org only has a car graph)
+const buildOsrmRouteUrl = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+  profile: OsrmProfile,
+  overview: 'full' | 'false' = 'full'
+): string => {
+  const service = profile === 'foot' ? 'routed-foot' : profile === 'bicycle' ? 'routed-bike' : 'routed-car';
+  return `https://routing.openstreetmap.de/${service}/route/v1/${profile}/${lng1},${lat1};${lng2},${lat2}?overview=${overview}&geometries=geojson`;
+};
+
 const fetchOSRM = async (
   lat1: number,
   lng1: number,
@@ -224,22 +249,40 @@ const fetchOSRM = async (
     return cached;
   }
 
-  let profile = 'driving';
-  if (mode === 'walking') profile = 'foot';
-  else if (mode === 'bicycling') profile = 'bicycle';
+  let initialProfile: OsrmProfile = 'driving';
+  if (mode === 'walking') initialProfile = 'foot';
+  else if (mode === 'bicycling') initialProfile = 'bicycle';
 
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? window.setTimeout(() => controller.abort(), 4000) : null;
+  const directMeters = haversineMeters(lat1, lng1, lat2, lng2);
+  // Car-free zones (e.g. Zermatt) make the car graph snap both stops to the same road: retry on foot once.
+  const profiles: OsrmProfile[] = initialProfile === 'driving' ? ['driving', 'foot'] : [initialProfile];
 
   try {
-    const res = await fetch(
-      `https://router.project-osrm.org/route/v1/${profile}/${lng1},${lat1};${lng2},${lat2}?overview=full&geometries=geojson`,
-      controller ? { signal: controller.signal } : undefined
-    );
-    const data = await res.json();
-    if (data && data.code === 'Ok' && data.routes?.[0]) {
+    for (const profile of profiles) {
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timeoutId = controller ? window.setTimeout(() => controller.abort(), 4000) : null;
+      let data: any;
+      try {
+        const res = await fetch(
+          buildOsrmRouteUrl(lat1, lng1, lat2, lng2, profile),
+          controller ? { signal: controller.signal } : undefined
+        );
+        data = await res.json();
+      } finally {
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+      }
+      if (!(data && data.code === 'Ok' && data.routes?.[0])) continue;
+
       const route = data.routes[0];
-      const geometry: [number, number][] = route.geometry.coordinates.map((c: any[]) => [c[1], c[0]] as [number, number]);
+      let geometry: [number, number][] = (route.geometry?.coordinates ?? []).map((c: any[]) => [c[1], c[0]] as [number, number]);
+
+      // Reject degenerate responses (0-length route between distinct stops)
+      if (geometry.length < 2 || (directMeters > 15 && !(route.distance > 0))) continue;
+
+      // Anchor the road geometry to the marker pins so there are no mid-air gaps
+      if (haversineMeters(geometry[0][0], geometry[0][1], lat1, lng1) > 10) geometry = [[lat1, lng1], ...geometry];
+      const last = geometry[geometry.length - 1];
+      if (haversineMeters(last[0], last[1], lat2, lng2) > 10) geometry = [...geometry, [lat2, lng2]];
 
       // Compute realistic travel time for each specific mode based on road network distance
       let calculatedDuration = route.duration;
@@ -271,10 +314,6 @@ const fetchOSRM = async (
     }
   } catch (err) {
     console.error("OSRM fetch error", err);
-  } finally {
-    if (timeoutId !== null) {
-      window.clearTimeout(timeoutId);
-    }
   }
 
   return {

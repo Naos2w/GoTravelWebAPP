@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { MapView, LEG_ROUTE_CACHE } from "../../components/MapView";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { ItineraryItem } from "../../types";
@@ -24,10 +24,11 @@ vi.mock("react-leaflet", () => ({
   TileLayer: () => <div data-testid="tile-layer" />,
   Marker: ({ children }: any) => <div data-testid="marker">{children}</div>,
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
-  Polyline: ({ pathOptions, color }: any) => (
+  Polyline: ({ pathOptions, color, positions }: any) => (
     <div
       data-testid="polyline"
       data-top-level-color={color ?? ""}
+      data-positions={positions ? JSON.stringify(positions) : ""}
       data-path-options={pathOptions ? JSON.stringify(pathOptions) : ""}
     />
   ),
@@ -236,4 +237,48 @@ describe("MapView Component Smoke Test", () => {
     expect(mockMapInstance.setView).not.toHaveBeenCalled();
     expect(mockMapInstance.panTo).not.toHaveBeenCalled();
   });
+
+  it("rejects degenerate 0-length OSRM routes (car-free towns) and keeps a valid 2-point polyline", async () => {
+    const zermattItems: ItineraryItem[] = [
+      { ...mockItems[0], id: "z-1", placeName: "Zermatt Station", lat: 46.0207, lng: 7.7491 },
+      { ...mockItems[0], id: "z-2", placeName: "Gornergrat Bahn", lat: 46.0238, lng: 7.7527, time: "11:00" },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      json: async () => ({
+        code: "Ok",
+        routes: [
+          {
+            distance: 0,
+            duration: 0,
+            geometry: { coordinates: [[7.751462, 46.026536], [7.751462, 46.026536]] },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalizationProvider>
+        <MapView items={zermattItems} />
+      </LocalizationProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /自動 \(依行程\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /全域走路/i }));
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes("routing.openstreetmap.de/routed-foot/route/v1/foot/"))).toBe(true);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(LEG_ROUTE_CACHE.size).toBe(0);
+    const polylines = screen.getAllByTestId("polyline");
+    expect(polylines.length).toBeGreaterThanOrEqual(2);
+    polylines.forEach((pl) => {
+      const positions = JSON.parse(pl.getAttribute("data-positions") || "[]");
+      expect(positions).toEqual([[46.0207, 7.7491], [46.0238, 7.7527]]);
+    });
+  });
 });
+
