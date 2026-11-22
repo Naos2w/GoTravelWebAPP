@@ -223,6 +223,8 @@ const haversineMeters = (lat1: number, lng1: number, lat2: number, lng2: number)
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const CAR_ROAD_UNREACHABLE_GAP_METERS = 200;
+
 // FOSSGIS OSRM hosts separate foot/bike/car graphs (router.project-osrm.org only has a car graph)
 const buildOsrmRouteUrl = (
   lat1: number,
@@ -257,6 +259,8 @@ const fetchOSRM = async (
   // Car-free zones (e.g. Zermatt) make the car graph snap both stops to the same road: retry on foot once.
   const profiles: OsrmProfile[] = initialProfile === 'driving' ? ['driving', 'foot'] : [initialProfile];
 
+  let bestCandidate: { result: LegRouteInfo; maxSnapGap: number } | null = null;
+
   try {
     for (const profile of profiles) {
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -278,6 +282,11 @@ const fetchOSRM = async (
 
       // Reject degenerate responses (0-length route between distinct stops)
       if (geometry.length < 2 || (directMeters > 15 && !(route.distance > 0))) continue;
+
+      // How far the snapped route ends are from the pins (before anchoring)
+      const startGap = haversineMeters(geometry[0][0], geometry[0][1], lat1, lng1);
+      const endGap = haversineMeters(geometry[geometry.length - 1][0], geometry[geometry.length - 1][1], lat2, lng2);
+      const maxSnapGap = Math.max(startGap, endGap);
 
       // Anchor the road geometry to the marker pins so there are no mid-air gaps
       if (haversineMeters(geometry[0][0], geometry[0][1], lat1, lng1) > 10) geometry = [[lat1, lng1], ...geometry];
@@ -302,18 +311,32 @@ const fetchOSRM = async (
         calculatedDuration = route.duration;
       }
 
-      const result: LegRouteInfo = {
+      const candidate: LegRouteInfo = {
         geometry,
         duration: calculatedDuration,
         distance: route.distance,
         mode,
         isFallback: false,
       };
-      LEG_ROUTE_CACHE.set(cacheKey, result);
-      return result;
+
+      // Car road ends far from a pin (e.g. mountain destinations): keep it as backup and try the foot graph
+      if (profile === 'driving' && profiles.length > 1 && maxSnapGap > CAR_ROAD_UNREACHABLE_GAP_METERS) {
+        bestCandidate = { result: candidate, maxSnapGap };
+        continue;
+      }
+
+      const chosen = bestCandidate && bestCandidate.maxSnapGap < maxSnapGap ? bestCandidate.result : candidate;
+      LEG_ROUTE_CACHE.set(cacheKey, chosen);
+      return chosen;
     }
   } catch (err) {
     console.error("OSRM fetch error", err);
+  }
+
+  // Foot graph failed/timed out/was degenerate: fall back to the car route we set aside
+  if (bestCandidate) {
+    LEG_ROUTE_CACHE.set(cacheKey, bestCandidate.result);
+    return bestCandidate.result;
   }
 
   return {
