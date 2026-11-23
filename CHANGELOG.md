@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.6.0] - 2026-11-23
+
+### ✨ 智慧旅程、路徑式路由與記帳匯率全面升級 (Smart Trip, Path Router & Currency Upgrade)
+
+#### Added
+- **🎨 Flighty × Apple Wallet 精品視覺與手機操作優化**：
+  - 手機底部導航列支援按住滑動跟手切換（Dock Scrubbing）。
+  - 全新深色藍灰底圖與發光航線視覺。
+  - 行動端航班編輯與行程時間軸微調。
+- **🧠 智慧旅程功能擴充**：
+  - **天氣預報**：整合 Open-Meteo 免費每日天氣預報徽章。
+  - **行程重排**：行程拖曳／手機重排後自動順延時間（`itineraryReorderService`）。
+  - **多人分帳**：支援多人 AA 分帳與 Splitwise 最小化平帳結算（`splitwiseService`）。
+  - **行李清單**：一鍵智慧行李待辦範本庫。
+  - **PWA**：支援 PWA 獨立應用與離線 Service Worker。
+- **🧭 路徑式 URL Router**：
+  - 支援 `/`、`/trips`、`/trips/:tripId` 路徑，舊版 `/?tripId=` 連結自動轉址。
+  - 新增 Vercel / Netlify SPA 重寫設定。
+- **💱 記帳即時匯率轉換**：
+  - 串接 `open.er-api.com`，含 6 小時快取與離線備援。
+  - 擴充至 12 種常用旅遊幣別。
+  - 支出與機票歷史匯率永久鎖定，不受後續匯率波動影響。
+  - 總花費卡片新增幣別切換膠囊，表單記憶上次使用的幣別。
+
+#### Fixed
+- **🔐 登入重新導向**：OAuth / Magic Link 登入的 `redirectTo` 改用乾淨 origin 並保留深層連結 `tripId`，避免跨環境被導回 Prod。
+- **🗺️ 地圖平滑縮放與路線穩定度**：
+  - 改用 Leaflet Canvas Renderer 與 React-Leaflet v5 `pathOptions`。
+  - OSRM 路線分批漸進載入，近距點平移無彈跳。
+- **🛣️ 路網服務**：
+  - 改接 FOSSGIS / OpenStreetMap Germany 真正分流的 `routed-foot` / `routed-bike` / `routed-car` OSRM 路網。
+  - 加入 0 距離退化路線防護與圖釘端點吸附。
+  - 車道離景點超過 200m 時自動改試步行路網。
+
+#### Testing
+- **🧪 測試套件擴充**：
+  - 涵蓋 `routerService`、`exchangeRateService`、`splitwiseService`、`itineraryReorderService`、`weatherService` 與策馬特／阿彭策爾地圖回歸測試。
+  - 全專案自動化測試套件擴充至 **26 個檔案、141 項測試 100% 通過**。
+
+---
+
 ## [v1.5.1] - 2026-10-14
 
 ### 💎 Header & Footer 跨裝置極簡現代化 (Instagram/iOS Style Modernization)
