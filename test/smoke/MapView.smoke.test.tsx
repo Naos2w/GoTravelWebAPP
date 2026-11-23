@@ -280,5 +280,42 @@ describe("MapView Component Smoke Test", () => {
       expect(positions).toEqual([[46.0207, 7.7491], [46.0238, 7.7527]]);
     });
   });
+
+  it("falls back to routed-foot when the car road ends >200m from the pin (Wasserauen -> Ebenalp)", async () => {
+    const baseItem = mockItems[0];
+    const wasserauenItems: ItineraryItem[] = [
+      { ...baseItem, id: "w-1", placeName: "Wasserauen", lat: 47.2833, lng: 9.4083 },
+      { ...baseItem, id: "w-t", type: "Transport", transportType: "Public", time: "10:00" } as ItineraryItem,
+      { ...baseItem, id: "w-2", placeName: "Ebenalp", lat: 47.2849, lng: 9.4176, time: "11:00" },
+    ];
+    // [lng, lat]: car road stops ~360m short of the Ebenalp pin; the foot trail reaches the pin
+    const carRoad = [[9.4083, 47.2833], [9.4130, 47.2840]];
+    const footTrail = [[9.4083, 47.2833], [9.4110, 47.2838], [9.4150, 47.2844], [9.4176, 47.2849]];
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      const coordinates = String(url).includes("routed-car") ? carRoad : footTrail;
+      return {
+        json: async () => ({ code: "Ok", routes: [{ distance: 1500, duration: 600, geometry: { coordinates } }] }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <LocalizationProvider>
+        <MapView items={wasserauenItems} />
+      </LocalizationProvider>
+    );
+
+    const expected = footTrail.map(([lng, lat]) => [lat, lng]);
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes("routed-car"))).toBe(true);
+      expect(urls.some((u) => u.includes("routed-foot"))).toBe(true);
+      const polylines = screen.getAllByTestId("polyline");
+      expect(polylines.length).toBeGreaterThanOrEqual(2);
+      polylines.forEach((pl) => {
+        expect(JSON.parse(pl.getAttribute("data-positions") || "[]")).toEqual(expected);
+      });
+    });
+  });
 });
 
