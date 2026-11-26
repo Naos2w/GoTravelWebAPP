@@ -34,15 +34,21 @@ const MODE_ICON_HTML: Record<string, string> = {
 const getDurationDivIcon = (
   iconColorClass: string,
   modeIcon: string,
-  displayStr: string
+  displayStr: string,
+  iconRotationDeg?: number
 ): L.DivIcon => {
-  const key = `${iconColorClass}:${displayStr}`;
+  const rotationKey = iconRotationDeg !== undefined ? iconRotationDeg.toFixed(1) : 'none';
+  const key = `${iconColorClass}:${displayStr}:${rotationKey}`;
   const cached = DURATION_ICON_CACHE.get(key);
   if (cached) return cached;
 
+  const rotationStyle = iconRotationDeg !== undefined
+    ? ` style="transform: rotate(${iconRotationDeg.toFixed(1)}deg)"`
+    : '';
+
   const icon = L.divIcon({
     html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="${iconColorClass} transition-colors">
+                          <div class="${iconColorClass} transition-colors inline-flex items-center justify-center"${rotationStyle}>
                             ${modeIcon}
                           </div>
                           ${displayStr}
@@ -55,40 +61,41 @@ const getDurationDivIcon = (
   return icon;
 };
 
-const createCustomIcon = (index: number, type: string, isActive = false) => {
+export const createCustomIcon = (index: number, type: string, isActive = false) => {
   const cacheKey = `${index}:${type}:${isActive ? '1' : '0'}`;
   const cached = MARKER_ICON_CACHE.get(cacheKey);
   if (cached) return cached;
 
   const isFood = type === 'Food';
   const isFlight = type === 'Flight';
-  
-  // Choose color based on type
+
   const bgClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
-  const pulseClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
-  const shadowClass = isFlight ? 'shadow-blue-500/50' : isFood ? 'shadow-orange-500/50' : 'shadow-primary/50';
-  const sizeClass = isActive
-    ? 'w-8 h-8 ring-4 ring-white/30 dark:ring-primary/40 scale-110 -translate-y-1'
-    : 'w-7 h-7';
+  const shadowClass = isFlight ? 'shadow-blue-500/40' : isFood ? 'shadow-orange-500/40' : 'shadow-primary/40';
+  const haloStyle = isFlight
+    ? 'background:rgba(59,130,246,0.16);border:1.5px solid rgba(59,130,246,0.45);box-shadow:0 0 14px rgba(59,130,246,0.35);'
+    : isFood
+      ? 'background:rgba(249,115,22,0.16);border:1.5px solid rgba(249,115,22,0.45);box-shadow:0 0 14px rgba(249,115,22,0.35);'
+      : 'background:rgba(0,122,255,0.16);border:1.5px solid rgba(0,122,255,0.45);box-shadow:0 0 14px rgba(0,122,255,0.35);';
+
+  const outerSize = isActive ? 44 : 28;
+  const circleSize = isActive ? 32 : 28;
+  const anchor = outerSize / 2;
 
   const html = `
-    <div class="relative group cursor-pointer">
-      ${isActive ? `<div class="absolute -inset-2 ${pulseClass} rounded-full opacity-35 animate-pulse-soft"></div>` : ''}
-      <div class="relative ${sizeClass} ${bgClass} rounded-full border-[2.5px] border-white dark:border-slate-900 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
-        <span class="text-white ${isActive ? 'text-xs' : 'text-[11px]'} font-black font-mono tabular-nums">${index + 1}</span>
+    <div class="group cursor-pointer transition-transform hover:scale-105" style="position:relative;width:${outerSize}px;height:${outerSize}px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
+      ${isActive ? `<div style="position:absolute;inset:0;border-radius:9999px;pointer-events:none;${haloStyle}"></div>` : ''}
+      <div class="${bgClass} border-2 border-white dark:border-slate-900 shadow-lg ${shadowClass}" style="position:relative;width:${circleSize}px;height:${circleSize}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
+        <span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#ffffff;font-size:${isActive ? '12px' : '11px'};font-weight:800;line-height:1;padding:0;margin:0;text-align:center;font-variant-numeric:tabular-nums;">${index + 1}</span>
       </div>
-      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] ${
-        isFlight ? 'border-t-blue-500' : isFood ? 'border-t-orange-500' : 'border-t-primary'
-      }"></div>
     </div>
   `;
 
   const icon = L.divIcon({
     html,
     className: 'custom-leaflet-marker',
-    iconSize: isActive ? [32, 40] : [28, 36],
-    iconAnchor: isActive ? [16, 40] : [14, 36],
-    popupAnchor: isActive ? [0, -40] : [0, -36]
+    iconSize: [outerSize, outerSize],
+    iconAnchor: [anchor, anchor],
+    popupAnchor: [0, -anchor]
   });
   MARKER_ICON_CACHE.set(cacheKey, icon);
   return icon;
@@ -180,6 +187,73 @@ export interface LegRouteInfo {
 
 export const LEG_ROUTE_CACHE = new Map<string, LegRouteInfo>();
 
+const FLIGHT_ARC_SEGMENTS = 40;
+const FLIGHT_ARC_CURVE_RATIO = 0.16;
+
+const clampMercatorLat = (lat: number): number => Math.max(-85, Math.min(85, lat));
+
+const toMercatorY = (lat: number): number => {
+  const rad = (clampMercatorLat(lat) * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+};
+
+/**
+ * Compute the map bearing angle in degrees clockwise from North (0 = North, 90 = East)
+ * along the flight direction from `start` to `end` in Web Mercator space.
+ */
+export const computeFlightBearing = (
+  start: [number, number],
+  end: [number, number]
+): number => {
+  const dLngRad = ((end[1] - start[1]) * Math.PI) / 180;
+  const dMercY = toMercatorY(end[0]) - toMercatorY(start[0]);
+  if (Math.abs(dLngRad) < 1e-9 && Math.abs(dMercY) < 1e-9) return 0;
+  return (Math.atan2(dLngRad, dMercY) * 180) / Math.PI;
+};
+
+/**
+ * Build a smooth quadratic Bezier aviation arc between `start` and `end`,
+ * lifting perpendicularly (~16% of chord length, curving northward/upward).
+ */
+export const buildFlightArc = (
+  start: [number, number],
+  end: [number, number],
+  segments = FLIGHT_ARC_SEGMENTS
+): [number, number][] => {
+  const [lat1, lng1] = start;
+  const [lat2, lng2] = end;
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const dist = Math.hypot(dLat, dLng);
+
+  if (dist < 1e-6) {
+    return [[lat1, lng1], [lat2, lng2]];
+  }
+
+  const steps = Math.max(2, Math.round(segments));
+  const midLat = (lat1 + lat2) / 2;
+  const midLng = (lng1 + lng2) / 2;
+
+  // Choose the perpendicular unit vector pointing northward (positive lat) when dLng != 0
+  const sign = dLng >= 0 ? 1 : -1;
+  const perpLat = (sign * dLng) / dist;
+  const perpLng = (-sign * dLat) / dist;
+  const lift = dist * FLIGHT_ARC_CURVE_RATIO;
+
+  const ctrlLat = clampMercatorLat(midLat + perpLat * lift);
+  const ctrlLng = midLng + perpLng * lift;
+
+  const points: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const oneMinusT = 1 - t;
+    const lat = oneMinusT * oneMinusT * lat1 + 2 * oneMinusT * t * ctrlLat + t * t * lat2;
+    const lng = oneMinusT * oneMinusT * lng1 + 2 * oneMinusT * t * ctrlLng + t * t * lng2;
+    points.push([lat, lng]);
+  }
+  return points;
+};
+
 const buildLegCacheKey = (
   lat1: number,
   lng1: number,
@@ -201,7 +275,7 @@ const fetchLegRoute = (
 
   if (mode === 'flight') {
     return Promise.resolve({
-      geometry: [[lat1, lng1], [lat2, lng2]],
+      geometry: buildFlightArc([lat1, lng1], [lat2, lng2]),
       duration: 0,
       distance: 0,
       mode,
@@ -647,12 +721,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       return;
     }
 
-    // Seed immediately from cache or straight-line fallback so route lines never vanish during fetches
+    // Seed immediately from cache or curved-flight / straight-line fallback so route lines never vanish during fetches
     const immediateLegs: LegRouteInfo[] = plannedLegs.map((leg) => {
       const cached = LEG_ROUTE_CACHE.get(leg.cacheKey);
       if (cached && !cached.isFallback) return cached;
       return {
-        geometry: [[leg.lat1, leg.lng1], [leg.lat2, leg.lng2]],
+        geometry:
+          leg.mode === 'flight'
+            ? buildFlightArc([leg.lat1, leg.lng1], [leg.lat2, leg.lng2])
+            : [[leg.lat1, leg.lng1], [leg.lat2, leg.lng2]],
         duration: 0,
         distance: 0,
         mode: leg.mode,
@@ -882,10 +959,10 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
               color = isDarkMode ? '#34D399' : '#10B981'; // Emerald
               weight = 4;
             } else if (leg.mode === 'flight') {
-              color = isDarkMode ? '#60A5FA' : '#3B82F6'; // Blue
-              dashArray = '5, 10';
-              weight = 3;
-              opacity = 0.78;
+              color = isDarkMode ? '#38BDF8' : '#0EA5E9'; // Flighty sky-blue arc
+              dashArray = '6, 8';
+              weight = 2.5;
+              opacity = 0.92;
             }
 
             return (
@@ -894,8 +971,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                   positions={leg.geometry}
                   pathOptions={{
                     color,
-                    weight: weight + 3,
-                    opacity: isDarkMode ? 0.18 : 0.12,
+                    weight: leg.mode === 'flight' ? 7 : weight + 3,
+                    opacity: leg.mode === 'flight' ? (isDarkMode ? 0.22 : 0.14) : (isDarkMode ? 0.18 : 0.12),
                   }}
                 />
                 <Polyline
@@ -970,7 +1047,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            } else if (leg.mode === 'flight') {
              modeIcon = MODE_ICON_HTML.flight;
              modeText = isEn ? 'Flight' : '飛行';
-             iconColorClass = 'text-blue-400';
+             iconColorClass = 'text-sky-400';
            }
            
            let timeText = '';
@@ -987,13 +1064,26 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const displayStr = leg.mode === 'flight' 
              ? modeText
              : `${modeText} ${timeText}`;
+
+           // Lucide Plane naturally points NE (+45 deg); rotate by (bearing - 45) to align with flight path
+           const planeRotationDeg =
+             leg.mode === 'flight'
+               ? Number(
+                   (
+                     computeFlightBearing(
+                       leg.geometry[0],
+                       leg.geometry[leg.geometry.length - 1]
+                     ) - 45
+                   ).toFixed(1)
+                 )
+               : undefined;
            
            return (
              <Marker 
                key={`duration-${idx}`} 
                position={[midLat, midLng]}
                zIndexOffset={100}
-               icon={getDurationDivIcon(iconColorClass, modeIcon, displayStr)}
+               icon={getDurationDivIcon(iconColorClass, modeIcon, displayStr, planeRotationDeg)}
              />
            );
         })}

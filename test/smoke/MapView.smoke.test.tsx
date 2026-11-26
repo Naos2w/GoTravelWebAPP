@@ -1,7 +1,13 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MapView, LEG_ROUTE_CACHE } from "../../components/MapView";
+import {
+  MapView,
+  LEG_ROUTE_CACHE,
+  buildFlightArc,
+  computeFlightBearing,
+  createCustomIcon,
+} from "../../components/MapView";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { ItineraryItem } from "../../types";
 
@@ -22,7 +28,15 @@ vi.mock("react-leaflet", () => ({
     <div data-testid="map-container" data-prefer-canvas={String(preferCanvas)}>{children}</div>
   ),
   TileLayer: () => <div data-testid="tile-layer" />,
-  Marker: ({ children }: any) => <div data-testid="marker">{children}</div>,
+  Marker: ({ children, position, icon }: any) => (
+    <div
+      data-testid="marker"
+      data-position={position ? JSON.stringify(position) : ""}
+      data-icon={icon ? JSON.stringify(icon) : ""}
+    >
+      {children}
+    </div>
+  ),
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
   Polyline: ({ pathOptions, color, positions }: any) => (
     <div
@@ -37,14 +51,14 @@ vi.mock("react-leaflet", () => ({
 
 vi.mock("leaflet", () => ({
   default: {
-    divIcon: () => ({}),
+    divIcon: (opts: any) => opts ?? {},
     latLngBounds: () => ({
       extend: vi.fn(),
       isValid: vi.fn().mockReturnValue(true),
       toBBoxString: vi.fn().mockReturnValue("0,0,1,1"),
     }),
   },
-  divIcon: () => ({}),
+  divIcon: (opts: any) => opts ?? {},
   latLngBounds: () => ({
     extend: vi.fn(),
     isValid: vi.fn().mockReturnValue(true),
@@ -365,13 +379,67 @@ describe("MapView Component Smoke Test", () => {
 
     const polylines = screen.getAllByTestId("polyline");
     expect(polylines.length).toBe(2);
-    const positions = JSON.parse(polylines[0].getAttribute("data-positions") || "[]");
-    expect(positions).toEqual([
-      [25.0797, 121.2342],
-      [33.5859, 130.4507],
-    ]);
+    const positions: [number, number][] = JSON.parse(polylines[0].getAttribute("data-positions") || "[]");
+    expect(positions.length).toBe(41);
+    expect(positions[0]).toEqual([25.0797, 121.2342]);
+    expect(positions[positions.length - 1]).toEqual([33.5859, 130.4507]);
+
+    // Curved arc midpoint at t = 0.5 must bow away from the straight chord
+    const straightMidLat = (25.0797 + 33.5859) / 2;
+    const straightMidLng = (121.2342 + 130.4507) / 2;
+    const arcMid = positions[Math.floor(positions.length / 2)];
+    expect(arcMid[0]).toBeGreaterThan(straightMidLat);
+    expect(arcMid[1]).not.toBeCloseTo(straightMidLng, 2);
+
+    // Midpoint flight badge sits on the curved arc's t=0.5 point and rotates the plane along flight bearing
+    const markers = screen.getAllByTestId("marker");
+    const badgeMarker = markers.find((m) => (m.getAttribute("data-icon") || "").includes("飛行"));
+    expect(badgeMarker).toBeDefined();
+    expect(JSON.parse(badgeMarker!.getAttribute("data-position") || "[]")).toEqual(arcMid);
+    const badgeIcon = JSON.parse(badgeMarker!.getAttribute("data-icon") || "{}");
+    expect(badgeIcon.html).toContain("transform: rotate(");
+
     // Flight legs must never hit OSRM
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("builds smooth curved flight arcs for regional and long-haul routes with accurate bearing", () => {
+    const longHaulArc = buildFlightArc([25.0797, 121.2342], [49.1967, -123.1815]);
+    expect(longHaulArc.length).toBe(41);
+    expect(longHaulArc[0]).toEqual([25.0797, 121.2342]);
+    expect(longHaulArc[longHaulArc.length - 1]).toEqual([49.1967, -123.1815]);
+    expect(longHaulArc[20][0]).toBeGreaterThan((25.0797 + 49.1967) / 2);
+
+    // Due North = 0 deg, Due East = 90 deg, TPE -> FUK ~ NE (~43 deg)
+    expect(computeFlightBearing([25, 121], [35, 121])).toBeCloseTo(0, 1);
+    expect(computeFlightBearing([25, 121], [25, 131])).toBeCloseTo(90, 1);
+    const tpeFukBearing = computeFlightBearing([25.0797, 121.2342], [33.5859, 130.4507]);
+    expect(tpeFukBearing).toBeGreaterThan(35);
+    expect(tpeFukBearing).toBeLessThan(55);
+  });
+
+  it("renders non-blinking static focus halo and dead-center concentric marker numbers", () => {
+    render(
+      <LocalizationProvider>
+        <MapView items={mockItems} activeItemId="item-1" />
+      </LocalizationProvider>
+    );
+
+    const markers = screen.getAllByTestId("marker");
+    expect(markers).toHaveLength(1);
+    const activeIcon = JSON.parse(markers[0].getAttribute("data-icon") || "{}");
+    expect(activeIcon.html).not.toMatch(/animate-ping|animate-pulse|animate-pulse-soft/);
+    expect(activeIcon.html).toContain("display:flex;align-items:center;justify-content:center;");
+    expect(activeIcon.html).toContain("line-height:1;padding:0;margin:0;");
+    expect(activeIcon.html).toContain("box-shadow:0 0 14px");
+    expect(activeIcon.iconSize).toEqual([44, 44]);
+    expect(activeIcon.iconAnchor).toEqual([22, 22]);
+
+    const inactiveIcon = createCustomIcon(1, "Food", false) as any;
+    expect(inactiveIcon.html).not.toMatch(/animate-ping|animate-pulse|animate-pulse-soft/);
+    expect(inactiveIcon.html).toContain("display:flex;align-items:center;justify-content:center;");
+    expect(inactiveIcon.iconSize).toEqual([28, 28]);
+    expect(inactiveIcon.iconAnchor).toEqual([14, 14]);
   });
 });
 
