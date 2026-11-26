@@ -19,6 +19,7 @@ const mockMapInstance = {
   stop: vi.fn(),
   getCenter: vi.fn().mockReturnValue({ lat: 35.71, lng: 139.79 }),
   getZoom: vi.fn().mockReturnValue(14),
+  getSize: vi.fn().mockReturnValue({ x: 400, y: 600 }),
   getContainer: vi.fn().mockReturnValue(document.createElement("div")),
   invalidateSize: vi.fn(),
 };
@@ -74,8 +75,10 @@ describe("MapView Component Smoke Test", () => {
     mockMapInstance.panTo.mockClear();
     mockMapInstance.fitBounds.mockClear();
     mockMapInstance.stop.mockClear();
+    mockMapInstance.invalidateSize.mockClear();
     mockMapInstance.getZoom.mockReturnValue(14);
     mockMapInstance.getCenter.mockReturnValue({ lat: 35.71, lng: 139.79 });
+    mockMapInstance.getSize.mockReturnValue({ x: 400, y: 600 });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Offline OSRM test")));
   });
 
@@ -218,17 +221,17 @@ describe("MapView Component Smoke Test", () => {
     );
   });
 
-  it("flies to a far stop with a snappy duration <= 0.8s", () => {
-    const farItems: ItineraryItem[] = [
+  it("flies to a regional stop (0.05 <= distDeg < 2) with a snappy duration <= 0.8s", () => {
+    const regionalItems: ItineraryItem[] = [
       ...mockItems,
       {
-        id: "item-far",
+        id: "item-regional",
         trip_id: "trip-1",
         user_id: "user-1",
         time: "15:00",
-        placeName: "Kyoto Station",
-        lat: 34.9858,
-        lng: 135.7588,
+        placeName: "Yokohama Station",
+        lat: 35.4658,
+        lng: 139.6223,
         type: "Place",
         date: "2026-10-01",
       },
@@ -236,13 +239,13 @@ describe("MapView Component Smoke Test", () => {
     mockMapInstance.getZoom.mockReturnValue(14);
     render(
       <LocalizationProvider>
-        <MapView items={farItems} activeItemId="item-far" />
+        <MapView items={regionalItems} activeItemId="item-regional" />
       </LocalizationProvider>
     );
 
     expect(mockMapInstance.stop).toHaveBeenCalled();
     expect(mockMapInstance.flyTo).toHaveBeenCalledWith(
-      [34.9858, 135.7588],
+      [35.4658, 139.6223],
       15,
       expect.objectContaining({ animate: true, easeLinearity: 0.25 })
     );
@@ -250,6 +253,120 @@ describe("MapView Component Smoke Test", () => {
     expect(flyOptions.duration).toBeLessThanOrEqual(0.8);
     expect(mockMapInstance.setView).not.toHaveBeenCalled();
     expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+  });
+
+  it("avoids flyTo and animated fitBounds when map container is hidden (0x0 on mobile list mode)", () => {
+    const flightItems: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Flight: BR106",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Arrival",
+        date: "2026-04-01",
+      },
+    ];
+
+    mockMapInstance.getSize.mockReturnValue({ x: 0, y: 0 });
+    mockMapInstance.getCenter.mockReturnValue({ lat: 25.0797, lng: 121.2342 });
+
+    const { rerender } = render(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId={null} />
+      </LocalizationProvider>
+    );
+
+    // Must never call fitBounds or flyTo on a 0x0 hidden container
+    expect(mockMapInstance.fitBounds).not.toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+
+    // Selecting an airport card while map is hidden (0x0) must use non-animated setView safely
+    rerender(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId="f-arr" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).toHaveBeenCalledWith(
+      [33.5859, 130.4507],
+      14,
+      { animate: false }
+    );
+  });
+
+  it("uses setView instead of unstable flyTo when jumping to a far-away airport (distDeg >= 2)", () => {
+    const flightItems: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        date: "2026-04-01",
+      },
+    ];
+
+    mockMapInstance.getSize.mockReturnValue({ x: 390, y: 600 });
+    mockMapInstance.getCenter.mockReturnValue({ lat: 25.0797, lng: 121.2342 });
+
+    render(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId="f-arr" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.stop).toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).toHaveBeenCalledWith(
+      [33.5859, 130.4507],
+      14,
+      expect.objectContaining({ animate: true })
+    );
+  });
+
+  it("calls invalidateSize({ animate: false }) when container transitions from 0x0 to visible", () => {
+    let resizeCallback: ((entries: any[]) => void) | null = null;
+    class MockResizeObserver {
+      constructor(cb: (entries: any[]) => void) {
+        resizeCallback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver as any);
+    mockMapInstance.getSize.mockReturnValue({ x: 0, y: 0 });
+
+    render(
+      <LocalizationProvider>
+        <MapView items={mockItems} />
+      </LocalizationProvider>
+    );
+
+    mockMapInstance.getSize.mockReturnValue({ x: 390, y: 600 });
+    resizeCallback?.([{ contentRect: { width: 390, height: 600 } }]);
+
+    expect(mockMapInstance.invalidateSize).toHaveBeenCalledWith({ animate: false });
   });
 
   it("rejects degenerate 0-length OSRM routes (car-free towns) and keeps a valid 2-point polyline", async () => {

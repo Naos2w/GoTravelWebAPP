@@ -125,4 +125,83 @@ describe("Itinerary Component Smoke Test", () => {
     expect(screen.getByText("STOP 1")).toBeInTheDocument();
     expect(screen.getByText(/1 個景點|1 Stops/i)).toBeInTheDocument();
   });
+
+  it("handles tapping airport cards in both mobile list mode and mobile map mode without crashing", async () => {
+    const flightTrip: Trip = {
+      ...mockTrip,
+      itinerary: [
+        {
+          date: "2026-10-01",
+          items: [
+            {
+              id: "f-dep",
+              trip_id: mockTrip.id,
+              user_id: mockUser.id,
+              time: "08:10",
+              placeName: "TPE Airport",
+              type: "Place",
+              transportType: "Flight",
+              note: "Flight: BR106",
+              date: "2026-10-01",
+            },
+            {
+              id: "f-mid",
+              trip_id: mockTrip.id,
+              user_id: mockUser.id,
+              time: "09:45",
+              placeName: "Flight",
+              type: "Transport",
+              transportType: "Flight",
+              note: "2h 10m",
+              date: "2026-10-01",
+            },
+            {
+              id: "f-arr",
+              trip_id: mockTrip.id,
+              user_id: mockUser.id,
+              time: "11:20",
+              placeName: "FUK Airport",
+              type: "Place",
+              transportType: "Flight",
+              note: "Arrival",
+              date: "2026-10-01",
+            },
+          ],
+        },
+      ],
+    };
+
+    await act(async () => {
+      render(
+        <LocalizationProvider>
+          <Itinerary
+            trip={flightTrip}
+            currentUser={mockUser}
+            onUpdate={vi.fn()}
+          />
+        </LocalizationProvider>
+      );
+    });
+
+    // Tap airport cards in mobile list mode
+    await act(async () => {
+      screen.getByText("TPE Airport").click();
+    });
+    await act(async () => {
+      screen.getByText("FUK Airport").click();
+    });
+
+    // Switch to mobile map mode and tap airport cards in the floating carousel
+    const mapBtn = screen.getByRole("button", { name: /地圖|Map/i });
+    await act(async () => {
+      mapBtn.click();
+    });
+
+    const fukMatches = screen.getAllByText("FUK Airport");
+    expect(fukMatches.length).toBeGreaterThanOrEqual(2);
+    await act(async () => {
+      fukMatches[0].click();
+    });
+    expect(screen.getByText("STOP 2")).toBeInTheDocument();
+  });
 });

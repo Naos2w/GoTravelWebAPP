@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
@@ -18,6 +18,7 @@ interface Props {
   activeItemId?: string | null;
   onMarkerClick?: (id: string) => void;
   hasBottomCards?: boolean;
+  visibilityTrigger?: string | number | boolean;
 }
 
 const MARKER_ICON_CACHE = new Map<string, L.DivIcon>();
@@ -101,11 +102,82 @@ export const createCustomIcon = (index: number, type: string, isActive = false) 
   return icon;
 };
 
-const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number], bounds?: L.LatLngBounds, activeItem?: ItineraryItem }) => {
+const getSafeMapSize = (map: L.Map): { x: number; y: number } | null => {
+  const anyMap = map as any;
+  if (typeof anyMap?.getSize !== 'function') return null;
+  try {
+    const size = anyMap.getSize();
+    if (!size) return null;
+    return { x: Number(size.x), y: Number(size.y) };
+  } catch {
+    return null;
+  }
+};
+
+const hasVisibleMapSize = (map: L.Map): boolean => {
+  const size = getSafeMapSize(map);
+  return !size || (Number.isFinite(size.x) && Number.isFinite(size.y) && size.x > 0 && size.y > 0);
+};
+
+const getSafeMapZoom = (map: L.Map, fallback = 13): number => {
+  try {
+    const z = typeof map.getZoom === 'function' ? Number(map.getZoom()) : fallback;
+    return Number.isFinite(z) ? z : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const getSafeMapCenter = (map: L.Map): { lat: number; lng: number } | null => {
+  const anyMap = map as any;
+  if (typeof anyMap?.getCenter !== 'function') return null;
+  try {
+    const center = anyMap.getCenter();
+    if (!center) return null;
+    const lat = Number(center.lat);
+    const lng = Number(center.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const safeSetMapView = (
+  map: L.Map,
+  coords: [number, number],
+  zoom: number,
+  options: L.ZoomPanOptions
+) => {
+  try {
+    map.setView(coords, zoom, options);
+  } catch {
+    try {
+      map.setView(coords, zoom, { animate: false });
+    } catch {
+      // Ignore if map container is detached or uninitialized
+    }
+  }
+};
+
+const ChangeView = ({
+  center,
+  bounds,
+  activeItem,
+  visibleRev = 0,
+}: {
+  center?: [number, number];
+  bounds?: L.LatLngBounds;
+  activeItem?: ItineraryItem;
+  visibleRev?: number;
+}) => {
   const map = useMap();
   const prevActiveIdRef = useRef<string | null | undefined>(undefined);
   const prevBoundsStrRef = useRef<string | null>(null);
-  
+  const prevVisibleRevRef = useRef<number>(visibleRev);
+
   // Create stable primitive dependencies to prevent infinite render loops
   // center is a new array every render, bounds is a new L.LatLngBounds every render
   const centerStr = center ? `${center[0]},${center[1]}` : null;
@@ -114,66 +186,192 @@ const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number],
 
   useEffect(() => {
     const anyMap = map as any;
-    anyMap?.stop?.();
+    try {
+      anyMap?.stop?.();
+    } catch {
+      // Ignore if map animation state is uninitialized
+    }
+
+    const hasVisibleSize = hasVisibleMapSize(map);
+    const justBecameVisible = prevVisibleRevRef.current !== visibleRev;
+    const currentZoom = getSafeMapZoom(map, 13);
 
     if (activeItem && activeItem.lat != null && activeItem.lng != null) {
       // Must cast to Number because Google Places/Supabase string representations crash Leaflet's flyTo math
       const targetLat = Number(activeItem.lat);
       const targetLng = Number(activeItem.lng);
-      const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 13;
-      const currentCenter = typeof anyMap?.getCenter === 'function' ? anyMap.getCenter() : null;
-      const distDeg = currentCenter
-        ? Math.hypot(targetLat - Number(currentCenter.lat), targetLng - Number(currentCenter.lng))
-        : 1;
 
-      if (distDeg < 0.05) {
-        if (currentZoom >= 15) {
-          map.panTo([targetLat, targetLng], { animate: true, duration: 0.45, easeLinearity: 0.25 });
+      if (Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
+        const currentCenter = getSafeMapCenter(map);
+        const distDeg = currentCenter
+          ? Math.hypot(targetLat - currentCenter.lat, targetLng - currentCenter.lng)
+          : 1;
+        const isLongJump = distDeg >= 2 || activeItem.transportType === 'Flight';
+        const targetZoom = isLongJump ? 14 : 15;
+
+        if (!hasVisibleSize) {
+          // Never call flyTo or animated transitions on a hidden 0x0 container (Leaflet divides by 0 -> NaN)
+          safeSetMapView(map, [targetLat, targetLng], targetZoom, { animate: false });
+        } else if (justBecameVisible) {
+          safeSetMapView(map, [targetLat, targetLng], targetZoom, { animate: false });
+        } else if (isLongJump) {
+          // Long-distance / flight jumps avoid Leaflet flyTo zoom-out blanking on mobile
+          safeSetMapView(map, [targetLat, targetLng], 14, { animate: true, duration: 0.45 } as any);
+        } else if (distDeg < 0.05) {
+          if (currentZoom >= 15) {
+            try {
+              map.panTo([targetLat, targetLng], { animate: true, duration: 0.45, easeLinearity: 0.25 });
+            } catch {
+              safeSetMapView(map, [targetLat, targetLng], currentZoom, { animate: false });
+            }
+          } else {
+            safeSetMapView(map, [targetLat, targetLng], 15, { animate: true, duration: 0.5 } as any);
+          }
         } else {
-          map.setView([targetLat, targetLng], 15, { animate: true, duration: 0.5 } as any);
+          try {
+            map.flyTo([targetLat, targetLng], 15, {
+              animate: true,
+              duration: 0.75,
+              easeLinearity: 0.25,
+            });
+          } catch {
+            safeSetMapView(map, [targetLat, targetLng], 15, { animate: false });
+          }
         }
-      } else {
-        map.flyTo([targetLat, targetLng], 15, {
-          animate: true,
-          duration: 0.75,
-          easeLinearity: 0.25,
-        });
       }
     } else if (bounds && bounds.isValid()) {
-      if (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null) {
-        map.fitBounds(bounds, { padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any);
+      if (hasVisibleSize && (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null || justBecameVisible)) {
+        try {
+          map.fitBounds(
+            bounds,
+            justBecameVisible
+              ? { padding: [56, 56], maxZoom: 15, animate: false }
+              : ({ padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any)
+          );
+        } catch {
+          // Ignore fitBounds failure if container has invalid geometry
+        }
       }
-    } else if (center) {
-      map.setView(center, map.getZoom(), { animate: true });
+    } else if (center && Number.isFinite(center[0]) && Number.isFinite(center[1])) {
+      safeSetMapView(map, center, currentZoom, { animate: hasVisibleSize && !justBecameVisible });
     }
 
     prevActiveIdRef.current = activeItemId ?? null;
-    prevBoundsStrRef.current = boundsStr;
-  }, [centerStr, boundsStr, activeItemId, map]);
-  
+    if (hasVisibleSize) {
+      prevBoundsStrRef.current = boundsStr;
+    }
+    prevVisibleRevRef.current = visibleRev;
+  }, [centerStr, boundsStr, activeItemId, visibleRev, map]);
+
   return null;
 }
 
-const MapResizer = () => {
+const MapResizer = ({
+  onBecomeVisible,
+  visibilityTrigger,
+}: {
+  onBecomeVisible?: () => void;
+  visibilityTrigger?: string | number | boolean;
+}) => {
   const map = useMap();
+  const wasHiddenRef = useRef<boolean>(false);
+  const isFirstTriggerRef = useRef<boolean>(true);
+
   useEffect(() => {
+    const container = typeof map.getContainer === 'function' ? map.getContainer() : null;
+    const initialSize = getSafeMapSize(map);
+    wasHiddenRef.current =
+      (initialSize ? initialSize.x <= 0 || initialSize.y <= 0 : false) ||
+      (container ? container.clientWidth === 0 || container.clientHeight === 0 : false);
+
+    const safeInvalidate = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // Ignore if map container is detached
+      }
+    };
+
     // Initial stabilization
-    const timer = setTimeout(() => {
-       map.invalidateSize();
-    }, 250);
-    
-    // Observer for Split-View changes
-    const resizeObserver = new ResizeObserver(() => {
-      map.invalidateSize();
-    });
-    
-    resizeObserver.observe(map.getContainer());
-    
+    const timer = setTimeout(safeInvalidate, 250);
+    let rafId: number | null = null;
+
+    // Observer for Split-View and mobile List -> Map transitions
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && container
+        ? new ResizeObserver((entries) => {
+            const entry = entries[0];
+            const width = entry ? entry.contentRect.width : container.clientWidth;
+            const height = entry ? entry.contentRect.height : container.clientHeight;
+            const isVisible = width > 0 && height > 0;
+
+            safeInvalidate();
+
+            if (wasHiddenRef.current && isVisible) {
+              wasHiddenRef.current = false;
+              if (typeof requestAnimationFrame === 'function') {
+                if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+                  cancelAnimationFrame(rafId);
+                }
+                rafId = requestAnimationFrame(() => {
+                  safeInvalidate();
+                  onBecomeVisible?.();
+                });
+              } else {
+                onBecomeVisible?.();
+              }
+            } else {
+              wasHiddenRef.current = !isVisible;
+            }
+          })
+        : null;
+
+    if (resizeObserver && container) {
+      resizeObserver.observe(container);
+    }
+
     return () => {
       clearTimeout(timer);
-      resizeObserver.disconnect();
+      if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafId);
+      }
+      resizeObserver?.disconnect();
     };
-  }, [map]);
+  }, [map, onBecomeVisible]);
+
+  useEffect(() => {
+    if (isFirstTriggerRef.current) {
+      isFirstTriggerRef.current = false;
+      return;
+    }
+
+    const syncAfterToggle = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // Ignore if map container is detached
+      }
+      const container = typeof map.getContainer === 'function' ? map.getContainer() : null;
+      const isVisible =
+        hasVisibleMapSize(map) &&
+        (!container || (container.clientWidth > 0 && container.clientHeight > 0));
+      if (wasHiddenRef.current && isVisible) {
+        wasHiddenRef.current = false;
+        onBecomeVisible?.();
+      } else if (!isVisible) {
+        wasHiddenRef.current = true;
+      }
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      const id = requestAnimationFrame(syncAfterToggle);
+      return () => {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id);
+      };
+    }
+    syncAfterToggle();
+  }, [visibilityTrigger, map, onBecomeVisible]);
+
   return null;
 };
 
@@ -423,11 +621,13 @@ const fetchOSRM = async (
   };
 };
 
-export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards }) => {
+export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards, visibilityTrigger }) => {
   const { language } = useTranslation();
   const isEn = language?.startsWith('en');
 
   const [legsRouteInfo, setLegsRouteInfo] = useState<LegRouteInfo[]>([]);
+  const [visibleRev, setVisibleRev] = useState(0);
+  const handleMapBecomeVisible = useCallback(() => setVisibleRev((v) => v + 1), []);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
   const [isRoutingMenuOpen, setIsRoutingMenuOpen] = useState(false);
@@ -602,11 +802,29 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     const latNum = typeof result.lat === 'number' ? result.lat : parseFloat(result.lat);
     const lonNum = typeof result.lon === 'number' ? result.lon : parseFloat(result.lon);
 
-    if (mapRef && !isNaN(latNum) && !isNaN(lonNum)) {
-      mapRef.flyTo([latNum, lonNum], Math.max(mapRef.getZoom(), 15), { duration: 1 });
+    if (mapRef && Number.isFinite(latNum) && Number.isFinite(lonNum)) {
+      const hasVisibleSize = hasVisibleMapSize(mapRef);
+      const currentZoom = getSafeMapZoom(mapRef, 13);
+      const targetZoom = Math.max(currentZoom, 15);
+      const currentCenter = getSafeMapCenter(mapRef);
+      const distDeg = currentCenter
+        ? Math.hypot(latNum - currentCenter.lat, lonNum - currentCenter.lng)
+        : 1;
+
+      if (!hasVisibleSize) {
+        safeSetMapView(mapRef, [latNum, lonNum], targetZoom, { animate: false });
+      } else if (distDeg >= 2) {
+        safeSetMapView(mapRef, [latNum, lonNum], 14, { animate: true, duration: 0.45 } as any);
+      } else {
+        try {
+          mapRef.flyTo([latNum, lonNum], targetZoom, { duration: 0.75 });
+        } catch {
+          safeSetMapView(mapRef, [latNum, lonNum], targetZoom, { animate: false });
+        }
+      }
     }
 
-    if(onAddSearchResult && !isNaN(latNum) && !isNaN(lonNum)) {
+    if (onAddSearchResult && Number.isFinite(latNum) && Number.isFinite(lonNum)) {
       onAddSearchResult(result.display_name.split(',')[0], latNum, lonNum);
     }
     setSearchQuery('');
@@ -620,8 +838,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
         i =>
           i.lat != null &&
           i.lng != null &&
-          !isNaN(i.lat) &&
-          !isNaN(i.lng) &&
+          Number.isFinite(Number(i.lat)) &&
+          Number.isFinite(Number(i.lng)) &&
           i.type !== 'Transport'
       ),
     [resolvedItems]
@@ -936,8 +1154,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
-        <MapResizer />
-        {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
+        <MapResizer onBecomeVisible={handleMapBecomeVisible} visibilityTrigger={visibilityTrigger} />
+        {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} visibleRev={visibleRev} />}
         
         {/* Draw the connected route legs with dual-layer Flighty glowing casing */}
         {legsRouteInfo && legsRouteInfo.length > 0 ? (

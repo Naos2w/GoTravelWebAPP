@@ -112,8 +112,12 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   useEffect(() => {
     if (highlightedId && viewMode === 'map' && !isMobileCardsCollapsed) {
       const el = cardRefs.current[highlightedId];
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      if (el && typeof el.scrollIntoView === 'function') {
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        } catch {
+          // Ignore scrollIntoView errors on restricted mobile WebViews
+        }
       }
     }
   }, [highlightedId, viewMode, isMobileCardsCollapsed]);
@@ -222,13 +226,18 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       highlightedId &&
       viewMode === 'list' &&
       selectionSourceRef.current === 'map' &&
+      typeof window !== 'undefined' &&
       window.innerWidth >= 1024
     ) {
       // Small timeout to ensure DOM layout is updated
       const timer = setTimeout(() => {
          const el = document.getElementById(`item-${highlightedId}`);
-         if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+         if (el && typeof el.scrollIntoView === 'function') {
+            try {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch {
+              // Ignore scrollIntoView errors on restricted mobile WebViews
+            }
          }
       }, 150);
       return () => clearTimeout(timer);
@@ -790,6 +799,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                 activeItemId={highlightedId}
                 onMarkerClick={(id) => { selectionSourceRef.current = 'map'; setHighlightedId(id); }}
                 hasBottomCards={viewMode === 'map' && !isMobileCardsCollapsed}
+                visibilityTrigger={viewMode}
               />
             </Suspense>
 
@@ -797,7 +807,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             {viewMode === 'map' && (() => {
               const validItems = mapItems.filter(i =>
                 i.lat != null && i.lng != null &&
-                !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
+                Number.isFinite(Number(i.lat)) && Number.isFinite(Number(i.lng)) &&
                 i.type !== 'Transport'
               );
 
@@ -824,7 +834,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                       {validItems.map((item, mapIdx) => {
                         const isHighlighted = highlightedId === item.id;
                         const originalIdx = displayItems.findIndex(i => i.id === item.id);
-                        const nextOriginal = displayItems[originalIdx + 1];
+                        const nextOriginal = originalIdx >= 0 ? displayItems[originalIdx + 1] : undefined;
                         const hasTransport = nextOriginal?.type === 'Transport';
                         const transportOpt = hasTransport
                           ? TRANSPORT_OPTIONS.find(o => o.type === nextOriginal.transportType)
