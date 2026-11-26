@@ -190,18 +190,22 @@ export async function fetchTdxFlights(
   date: string,
   flightNumber?: string
 ): Promise<FlightSegment[]> {
-  // If the flight departs from a foreign airport, bypass TDX and query Aviationstack directly to avoid TDX UTC departure time shift bugs.
-  if (!TAIWAN_AIRPORTS.has(origin.toUpperCase())) {
-    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+  const normOrigin = origin.trim().toUpperCase();
+  const normDest = destination.trim().toUpperCase();
+
+  // Prioritize TDX whenever either origin or destination is a Taiwan airport;
+  // only bypass directly to Aviationstack for pure foreign-to-foreign legs.
+  if (!TAIWAN_AIRPORTS.has(normOrigin) && !TAIWAN_AIRPORTS.has(normDest)) {
+    return fetchAviationstackFlights(normOrigin, normDest, date, flightNumber);
   }
 
   const token = await getTdxToken();
   if (!token) {
-    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+    return fetchAviationstackFlights(normOrigin, normDest, date, flightNumber);
   }
 
   try {
-    let filter = `DepartureAirportID eq '${origin}' and ArrivalAirportID eq '${destination}' and ScheduleStartDate le ${date} and ScheduleEndDate ge ${date}`;
+    let filter = `DepartureAirportID eq '${normOrigin}' and ArrivalAirportID eq '${normDest}' and ScheduleStartDate le ${date} and ScheduleEndDate ge ${date}`;
     
     if (flightNumber && flightNumber.trim()) {
       filter += ` and FlightNumber eq '${flightNumber.trim().toUpperCase()}'`;
@@ -221,7 +225,7 @@ export async function fetchTdxFlights(
 
     const data = await response.json();
     if (!Array.isArray(data) || data.length === 0) {
-      return fetchAviationstackFlights(origin, destination, date, flightNumber);
+      return fetchAviationstackFlights(normOrigin, normDest, date, flightNumber);
     }
 
     const uniqueAirlines = Array.from(new Set(data.map((item: any) => item.AirlineID)));
@@ -253,6 +257,6 @@ export async function fetchTdxFlights(
     });
   } catch (e) {
     console.error("TDX Data Fetch Error, falling back to Aviationstack:", e);
-    return fetchAviationstackFlights(origin, destination, date, flightNumber);
+    return fetchAviationstackFlights(normOrigin, normDest, date, flightNumber);
   }
 }
