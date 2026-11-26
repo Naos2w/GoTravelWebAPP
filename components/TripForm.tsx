@@ -54,14 +54,29 @@ const parseBudget = (value: string): number => {
 
 const emptyManual = { airline: '', flightNumber: '', from: '', to: '', depTime: '', arrTime: '' };
 
-const SegmentRow: React.FC<{ seg: FlightSegment; onRemove?: () => void }> = ({ seg, onRemove }) => (
-  <div className="bg-slate-50 dark:bg-white/[0.05] p-3 rounded-2xl flex justify-between items-center text-xs font-black border border-slate-100 dark:border-white/[0.08]">
-    <div>
-      <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
-      <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
+const dayDiff = (dep: string, arr: string): number => {
+  const [dy, dm, dd] = dep.split('T')[0].split('-').map(Number);
+  const [ay, am, ad] = arr.split('T')[0].split('-').map(Number);
+  const diff = Math.round((Date.UTC(ay, am - 1, ad) - Date.UTC(dy, dm - 1, dd)) / 86400000);
+  return Number.isFinite(diff) && diff > 0 ? diff : 0;
+};
+
+const SegmentRow: React.FC<{ seg: FlightSegment; onRemove?: () => void }> = ({ seg, onRemove }) => {
+  const plusDays = dayDiff(seg.departureTime, seg.arrivalTime);
+  return (
+  <div className="bg-slate-50 dark:bg-white/[0.05] p-3 rounded-2xl flex justify-between items-center gap-3 text-xs font-black border border-slate-100 dark:border-white/[0.08]">
+    <div className="min-w-0 flex flex-col gap-0.5">
+      <div className="truncate">
+        <span className="text-slate-400 mr-2">{seg.flightNumber}</span>
+        <span className="dark:text-white">{seg.departureAirport} → {seg.arrivalAirport}</span>
+      </div>
+      <span className="text-[10px] font-bold text-slate-400 tabular-nums">{seg.departureTime.split('T')[0]}</span>
     </div>
-    <div className="flex items-center gap-2">
-      <span className="text-slate-400 tabular-nums">{DateTimeUtils.formatTime24(seg.departureTime)}</span>
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="dark:text-white tabular-nums whitespace-nowrap">
+        {DateTimeUtils.formatTime24(seg.departureTime)} → {DateTimeUtils.formatTime24(seg.arrivalTime)}
+        {plusDays > 0 && <sup className="ml-0.5 text-[9px] font-black text-orange-500">+{plusDays}</sup>}
+      </span>
       {onRemove && (
         <button
           type="button"
@@ -74,7 +89,8 @@ const SegmentRow: React.FC<{ seg: FlightSegment; onRemove?: () => void }> = ({ s
       )}
     </div>
   </div>
-);
+  );
+};
 
 const AirportChips: React.FC<{ value: string; onPick: (code: string) => void; label: string }> = ({ value, onPick, label }) => (
   <div className="flex flex-wrap gap-1 pt-1" role="group" aria-label={label}>

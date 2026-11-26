@@ -221,6 +221,12 @@ describe("TripForm UX upgrade", () => {
       fireEvent.click(screen.getByRole("button", { name: /前往確認/ }));
 
       const nameInput = byId(container, "review-trip-name");
+      // Review cards show date + full departure → arrival range
+      expect(screen.getByText("09:00 → 13:00")).toBeInTheDocument();
+      expect(screen.getByText("14:00 → 16:30")).toBeInTheDocument();
+      expect(screen.getByText("2026-03-01")).toBeInTheDocument();
+      expect(screen.getByText("2026-03-05")).toBeInTheDocument();
+      expect(screen.queryByText(/^\+\d$/)).not.toBeInTheDocument();
       expect(nameInput.placeholder).toBe("KIX");
       fireEvent.change(nameInput, { target: { value: "大阪美食行" } });
       fireEvent.change(byId(container, "review-budget"), { target: { value: "65000" } });
