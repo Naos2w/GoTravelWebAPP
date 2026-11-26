@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { FlightManager } from "../../components/FlightManager";
 import { BoardingPass } from "../../components/BoardingPass";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
@@ -102,5 +102,57 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     );
 
     expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
+  });
+
+  it("auto-opens edit mode, focuses ticket price, updates baggage on cabin change, and calls onGuidedPriceSaved", () => {
+    const onUpdate = vi.fn();
+    const onGuidedPriceSaved = vi.fn();
+    const zeroPriceTrip: Trip = {
+      ...mockTrip,
+      flights: [
+        {
+          ...mockTrip.flights![0],
+          price: 0,
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+          outbound: {
+            ...mockSegment,
+            baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+          },
+        },
+      ],
+    };
+
+    render(
+      <LocalizationProvider>
+        <FlightManager
+          trip={zeroPriceTrip}
+          currentUser={mockUser}
+          onUpdate={onUpdate}
+          autoEditFlightId="flight-1"
+          onGuidedPriceSaved={onGuidedPriceSaved}
+        />
+      </LocalizationProvider>
+    );
+
+    expect(screen.getByTestId("guide-price-hint")).toBeInTheDocument();
+    const priceInput = screen.getByTestId("flight-price-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(priceInput);
+
+    // Switching Economy -> Business updates untouched BR baggage preset to 2x7kg / 2x32kg
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    const cabinSelect = selects.find((s) => s.value === "Economy")!;
+    fireEvent.change(cabinSelect, { target: { value: "Business" } });
+
+    fireEvent.change(priceInput, { target: { value: "24500" } });
+    fireEvent.click(screen.getByRole("button", { name: /確認|Confirm|Save/i }));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const savedTrip = onUpdate.mock.calls[0][0] as Trip;
+    expect(savedTrip.flights![0].price).toBe(24500);
+    expect(savedTrip.flights![0].outbound.baggage).toEqual({
+      carryOn: { count: 2, weight: "7kg" },
+      checked: { count: 2, weight: "32kg" },
+    });
+    expect(onGuidedPriceSaved).toHaveBeenCalledTimes(1);
   });
 });

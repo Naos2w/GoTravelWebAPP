@@ -8,7 +8,7 @@ import React, {
   Suspense,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
-import { Trip, Currency, Theme, Language, User, ChecklistItem } from "./types";
+import { Trip, FlightInfo, Currency, Theme, Language, User, ChecklistItem } from "./types";
 import {
   getTrips,
   getTripById,
@@ -57,6 +57,7 @@ import {
 } from "./components/ExpenseCategories";
 
 import { TripForm } from "./components/TripForm";
+import { BoardingPassIssueModal } from "./components/BoardingPassIssueModal";
 import { NotificationToast } from "./components/NotificationToast";
 import { BudgetModal } from "./components/BudgetModal";
 import { ShareModal } from "./components/ShareModal";
@@ -97,7 +98,7 @@ import {
   AlertTriangle,
   Trash2,
   Lock,
-  PieChart as PieChartIcon,
+  X,  PieChart as PieChartIcon,
   List,
   AlertCircle,
   Map as MapIcon,
@@ -158,6 +159,8 @@ const getGradient = (str: string) => {
 
 
 
+type PostCreateGuideStep = "idle" | "issuing" | "itinerary-hint" | "edit-price";
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>("landing");
@@ -170,6 +173,8 @@ const App: React.FC = () => {
     "dashboard" | "itinerary" | "checklist" | "expenses" | "flights"
   >("dashboard");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [postCreateGuideStep, setPostCreateGuideStep] = useState<PostCreateGuideStep>("idle");
+  const [guideFlight, setGuideFlight] = useState<FlightInfo | null>(null);
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("theme") as Theme) || "light"
   );
@@ -1021,12 +1026,6 @@ const App: React.FC = () => {
     );
     return !(isOwner || isAllowed);
   }, [user, currentTrip]);
-  const isPricePending = useMemo(() => {
-    if (!currentTrip || !user) return false;
-    const myFlight = currentTrip.flights?.find((f) => f.user_id === user.id);
-    return !!myFlight && myFlight.price === 0;
-  }, [currentTrip, user]);
-
   const hasMissingFlightInfo = useMemo(() => {
     if (!currentTrip || !currentTrip.flights) return false;
     return currentTrip.flights.some((f) => {
@@ -1034,17 +1033,22 @@ const App: React.FC = () => {
       const bag = f.baggage || f.outbound.baggage;
       const checkBag = (b: any) => {
         if (!b) return true;
-        const w = b.weight ? b.weight.replace(/[^0-9.]/g, "") : "";
+        const w = b.weight ? parseFloat(String(b.weight).replace(/[^0-9.]/g, "")) || 0 : 0;
         const c = b.count || 0;
-        return !((c > 0 && !w) || (w.length > 0 && c <= 0));
+        return !((c > 0 && w <= 0) || (w > 0 && c <= 0));
       };
       return !hasPrice || !checkBag(bag?.carryOn) || !checkBag(bag?.checked);
     });
   }, [currentTrip]);
 
+  // Guided post-creation flow only lives as long as its screen: leaving it ends the guide.
   useEffect(() => {
-    if (isPricePending && activeTab !== "flights") setActiveTab("flights");
-  }, [isPricePending, activeTab]);
+    if (postCreateGuideStep === "idle" || postCreateGuideStep === "issuing") return;
+    const expectedTab = postCreateGuideStep === "itinerary-hint" ? "itinerary" : "flights";
+    if (view !== "detail" || activeTab !== expectedTab) {
+      setPostCreateGuideStep("idle");
+    }
+  }, [postCreateGuideStep, activeTab, view]);
 
   const t = (key: keyof typeof translations.en) =>
     (translations as any)[language][key] || (translations as any).en[key];
@@ -1322,6 +1326,15 @@ const App: React.FC = () => {
       setCurrentTripId(enrichedTrip.id);
       setView("detail");
       setShowCreateForm(false);
+      if (enrichedTrip.flights.length > 0) {
+        // Flight import: print the boarding pass, then guide the user through itinerary -> price.
+        setGuideFlight(enrichedTrip.flights[0]);
+        setPostCreateGuideStep("issuing");
+      } else {
+        // Quick create: no flights, no guide.
+        setPostCreateGuideStep("idle");
+        selectTabWithDirection("dashboard");
+      }
     } catch (err) {
       setError("Failed to create trip.");
     }
@@ -1416,6 +1429,21 @@ const App: React.FC = () => {
     setActiveTab(nextTabId);
   };
 
+  const handleIssueContinue = () => {
+    setPostCreateGuideStep("itinerary-hint");
+    selectTabWithDirection("itinerary");
+  };
+
+  const handleGuideGoToPrice = () => {
+    setPostCreateGuideStep("edit-price");
+    selectTabWithDirection("flights");
+  };
+
+  const handleGuidedPriceSaved = () => {
+    setPostCreateGuideStep("idle");
+    selectTabWithDirection("dashboard");
+    setNotification({ message: t("guidePriceSaved"), type: "success" });
+  };
   useEffect(() => {
     const idx = tabs.findIndex((t) => t.id === activeTab);
     if (idx !== -1) {
@@ -1456,18 +1484,16 @@ const App: React.FC = () => {
     const totalSlots = tabs.length + 1;
     const slotWidth = Math.max(1, (rect.width - paddingX * 2) / totalSlots);
     const rawSlot = (e.clientX - rect.left - paddingX) / slotWidth - 0.5;
-    const minSlot = isPricePending ? 4 : 0;
-    const clampedSlot = Math.max(minSlot, Math.min(totalSlots - 1, rawSlot));
+    const clampedSlot = Math.max(0, Math.min(totalSlots - 1, rawSlot));
     setDockDragSlot(clampedSlot);
 
     const nearestIdx = Math.round(clampedSlot);
     if (nearestIdx < tabs.length) {
       const targetTab = tabs[nearestIdx];
-      const disabled = isPricePending && targetTab.id !== "flights";
       if (profileMenuOpen === "mobile") {
         setProfileMenuOpen(null);
       }
-      if (!disabled && activeTab !== targetTab.id) {
+      if (activeTab !== targetTab.id) {
         selectTabWithDirection(targetTab.id as any);
       }
     } else if (nearestIdx === tabs.length) {
@@ -2326,6 +2352,13 @@ const App: React.FC = () => {
           />
         )}
 
+        {postCreateGuideStep === "issuing" && guideFlight && (
+          <BoardingPassIssueModal
+            flight={guideFlight}
+            onContinue={handleIssueContinue}
+          />
+        )}
+
         {view === "detail" && currentTrip && (
           <div className="min-h-screen flex flex-col pb-28 sm:pb-32 md:pb-0">
             <nav className="bg-white/80 dark:bg-[#060709]/80 backdrop-blur-3xl border-b border-black/[0.06] dark:border-white/[0.08] sticky top-0 z-40 h-[60px] flex items-center px-4 sm:px-6">
@@ -2369,23 +2402,16 @@ const App: React.FC = () => {
                   <div className="hidden md:flex bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-2xl shadow-sm">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
-                      const isDisabled = isPricePending && tab.id !== "flights";
                       return (
                         <button
                           key={tab.id}
-                          onClick={() =>
-                            !isDisabled && selectTabWithDirection(tab.id as any)
-                          }
-                          disabled={isDisabled}
+                          onClick={() => selectTabWithDirection(tab.id as any)}
                           className={`relative px-4 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-all duration-300 ease-spring active:scale-95 cursor-pointer ${
                             isActive
                               ? "ios27-dock-active text-primary shadow-sm"
                               : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white"
-                          } ${
-                            isDisabled ? "opacity-40 cursor-not-allowed" : ""
                           }`}
                         >
-                          {isDisabled && <Lock size={11} />}
                           <tab.icon size={14} strokeWidth={isActive ? 2.5 : 1.8} />
                           <span className="hidden lg:inline">{tab.label}</span>
                           {tab.alert && (
@@ -2777,12 +2803,42 @@ const App: React.FC = () => {
               }>
                 <div key={activeTab} className={tabTransitionClass}>
                   {activeTab === "itinerary" && (
-                    <Itinerary
-                      trip={currentTrip}
-                      currentUser={user!}
-                      onUpdate={updateCurrentTrip}
-                      isGuest={isGuest}
-                    />
+                    <>
+                      {postCreateGuideStep === "itinerary-hint" && (
+                        <div
+                          role="status"
+                          data-testid="guide-itinerary-banner"
+                          className="mb-5 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 animate-in slide-in-from-top-4 fade-in duration-500"
+                        >
+                          <div className="flex-1 min-w-0 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+                            ✈️ {t("guideBannerText")} ➔
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={handleGuideGoToPrice}
+                              className="bg-primary text-white text-xs font-black px-4 py-2 rounded-xl shadow-md shadow-primary/20 active:scale-95 transition-all cursor-pointer"
+                            >
+                              {t("guideBannerCta")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPostCreateGuideStep("idle")}
+                              aria-label={t("guideBannerDismiss")}
+                              className="p-2 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <Itinerary
+                        trip={currentTrip}
+                        currentUser={user!}
+                        onUpdate={updateCurrentTrip}
+                        isGuest={isGuest}
+                      />
+                    </>
                   )}
                   {activeTab === "checklist" && (
                     <Checklist
@@ -2806,6 +2862,10 @@ const App: React.FC = () => {
                       currentUser={user!}
                       onUpdate={updateCurrentTrip}
                       isGuest={isGuest}
+                      autoEditFlightId={
+                        postCreateGuideStep === "edit-price" ? guideFlight?.id ?? null : null
+                      }
+                      onGuidedPriceSaved={handleGuidedPriceSaved}
                     />
                   )}
                 </div>
@@ -2868,21 +2928,17 @@ const App: React.FC = () => {
                 />
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
-                  const isDisabled = isPricePending && tab.id !== "flights";
                   return (
                     <button
                       key={tab.id}
                       onClick={() => {
                         if (Date.now() - lastScrubEndTimeRef.current < 250) return;
                         setProfileMenuOpen(null);
-                        !isDisabled && selectTabWithDirection(tab.id as any);
+                        selectTabWithDirection(tab.id as any);
                       }}
-                      disabled={isDisabled}
                       aria-label={tab.label}
                       title={tab.label}
                       className={`relative z-10 flex items-center justify-center h-11 rounded-full transition-colors duration-200 select-none cursor-pointer active:scale-90 ${
-                        isDisabled ? "opacity-35 cursor-not-allowed" : ""
-                      } ${
                         isActive && profileMenuOpen !== "mobile"
                           ? "text-slate-900 dark:text-white"
                           : "text-slate-500 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"
@@ -2893,14 +2949,10 @@ const App: React.FC = () => {
                           isActive && profileMenuOpen !== "mobile" ? "scale-110" : "scale-100"
                         }`}
                       >
-                        {isDisabled ? (
-                          <Lock size={20} />
-                        ) : (
-                          <tab.icon
-                            size={21}
-                            strokeWidth={isActive && profileMenuOpen !== "mobile" ? 2.5 : 1.9}
-                          />
-                        )}
+                        <tab.icon
+                          size={21}
+                          strokeWidth={isActive && profileMenuOpen !== "mobile" ? 2.5 : 1.9}
+                        />
                         {tab.alert && (
                           <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#FF3B30] rounded-full ring-2 ring-white dark:ring-[#18181b]" />
                         )}

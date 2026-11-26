@@ -6,6 +6,7 @@ import { createNewTrip } from '../services/storageService';
 import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { SegmentedDateInput } from './SegmentedDateInput';
+import { getDefaultBaggage, inferAirlineId } from '../services/airlineBaggageService';
 
 interface Props {
   onClose: () => void;
@@ -18,6 +19,7 @@ type Step = 'outbound-search' | 'outbound-select' | 'inbound-search' | 'inbound-
 type SearchIssue = { dir: Direction; kind: 'empty' | 'error' } | null;
 
 const POPULAR_AIRPORTS = ['TPE', 'TSA', 'KHH', 'NRT', 'HND', 'KIX', 'ICN', 'HKG'];
+const CABIN = 'Economy';
 const DEFAULT_BUDGET = 50000;
 const MAX_TRIP_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -398,7 +400,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       terminal: '',
       gate: '',
       status: 'Scheduled',
-      baggage: { carryOn: { count: 1, weight: '' }, checked: { count: 0, weight: '' } },
+      baggage: getDefaultBaggage(inferAirlineId(m.flightNumber), CABIN),
     });
     setManual(emptyManual);
     setManualError(false);
@@ -512,7 +514,14 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       return { date: dateStr, items: uniqueItems.sort((a, b) => a.time.localeCompare(b.time)) };
     });
 
-    const buildCompoundSegment = (segs: FlightSegment[]): FlightSegment => {
+    const withPreset = (seg: FlightSegment): FlightSegment => {
+      const b = seg.baggage;
+      const hasWeights = !!b && (parseFloat((b.carryOn?.weight || '').replace(/[^0-9.]/g, '')) > 0 || parseFloat((b.checked?.weight || '').replace(/[^0-9.]/g, '')) > 0);
+      return hasWeights ? seg : { ...seg, baggage: getDefaultBaggage(seg.airlineID, CABIN) };
+    };
+
+    const buildCompoundSegment = (rawSegs: FlightSegment[]): FlightSegment => {
+      const segs = rawSegs.map(withPreset);
       if (segs.length === 1) return segs[0];
       return {
         airline: segs.map(s => s.airline).join(' + '),
@@ -527,7 +536,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         terminal: segs[0].terminal || '',
         gate: segs[0].gate || '',
         status: 'Scheduled',
-        baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } },
+        baggage: getDefaultBaggage(segs[0].airlineID, CABIN),
         segments: segs
       };
     };
@@ -537,11 +546,13 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     newTrip.name = name;
     newTrip.itinerary = generatedItinerary;
     newTrip.checklist = getDefaultChecklist();
+    const outboundFlight = buildCompoundSegment(outboundSegments);
+    const inboundFlight = buildCompoundSegment(inboundSegments);
     newTrip.flights = [{
-      id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: 'Economy',
-      outbound: buildCompoundSegment(outboundSegments),
-      inbound: buildCompoundSegment(inboundSegments),
-      baggage: { carryOn: { count: 1, weight: '7kg' }, checked: { count: 1, weight: '23kg' } }, budget: parseBudget(budget)
+      id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: CABIN,
+      outbound: outboundFlight,
+      inbound: inboundFlight,
+      baggage: outboundFlight.baggage || getDefaultBaggage(outboundFlight.airlineID, CABIN), budget: parseBudget(budget)
     }];
     onSubmit(newTrip);
   };

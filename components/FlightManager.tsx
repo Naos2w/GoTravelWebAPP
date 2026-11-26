@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Trip,
   FlightInfo,
@@ -35,6 +35,7 @@ import { DateTimeUtils } from "../services/dateTimeUtils";
 import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from "../services/storageService";
 import { fetchLiveRatesToTwd, getRateToTwd } from "../services/exchangeRateService";
+import { getDefaultBaggage, isSameBaggage } from "../services/airlineBaggageService";
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -610,6 +611,10 @@ interface Props {
   currentUser: User;
   onUpdate: (trip: Trip) => void;
   isGuest?: boolean;
+  /** Guided post-create flow: open this flight's edit form and focus its price input. */
+  autoEditFlightId?: string | null;
+  /** Called after the guided flight (autoEditFlightId) has been saved. */
+  onGuidedPriceSaved?: () => void;
 }
 
 export const FlightManager: React.FC<Props> = ({
@@ -617,6 +622,8 @@ export const FlightManager: React.FC<Props> = ({
   currentUser,
   onUpdate,
   isGuest = false,
+  autoEditFlightId = null,
+  onGuidedPriceSaved,
 }) => {
   const { t } = useTranslation();
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
@@ -719,9 +726,46 @@ export const FlightManager: React.FC<Props> = ({
   }, [currentUser, trip.flights, editingFlightId, ownerFlight]);
   */
 
-  const defaultBaggage = {
-    carryOn: { count: 1, weight: "7kg" },
-    checked: { count: 1, weight: "23kg" },
+  const defaultBaggage = getDefaultBaggage();
+
+  const hasWeight = (b?: { carryOn?: { weight?: string }; checked?: { weight?: string } }) =>
+    !!b &&
+    [b.carryOn?.weight, b.checked?.weight].some(
+      (w) => (parseFloat((w || "").replace(/[^0-9.]/g, "")) || 0) > 0
+    );
+
+  /** Keeps real baggage data; otherwise fills the airline x cabin preset. */
+  const resolveBaggage = (seg: FlightSegment, cabin: string) =>
+    seg.baggage && hasWeight(seg.baggage)
+      ? seg.baggage
+      : getDefaultBaggage(seg.airlineID, cabin);
+
+  const handleCabinChange = (nextCabin: string) => {
+    if (!tempFlightData) return;
+    const prevCabin = tempFlightData.cabinClass;
+    // Only swap baggage the user hasn't customised (untouched preset or empty).
+    const isUntouched = (seg: FlightSegment) =>
+      !seg.baggage ||
+      !hasWeight(seg.baggage) ||
+      isSameBaggage(seg.baggage, getDefaultBaggage(seg.airlineID, prevCabin));
+    const swap = (seg: FlightSegment): FlightSegment =>
+      isUntouched(seg)
+        ? { ...seg, baggage: getDefaultBaggage(seg.airlineID, nextCabin) }
+        : seg;
+    const outboundAirline = tempFlightData.outbound.airlineID;
+    const topUntouched =
+      !tempFlightData.baggage ||
+      !hasWeight(tempFlightData.baggage) ||
+      isSameBaggage(tempFlightData.baggage, getDefaultBaggage(outboundAirline, prevCabin));
+    setTempFlightData({
+      ...tempFlightData,
+      cabinClass: nextCabin,
+      outbound: swap(tempFlightData.outbound),
+      inbound: tempFlightData.inbound ? swap(tempFlightData.inbound) : undefined,
+      baggage: topUntouched
+        ? getDefaultBaggage(outboundAirline, nextCabin)
+        : tempFlightData.baggage,
+    });
   };
 
   const handleStartAdd = () => {
@@ -800,17 +844,18 @@ export const FlightManager: React.FC<Props> = ({
     if (!tempFlightData) return;
     const outWithBag = {
       ...outbound,
-      baggage: outbound.baggage || defaultBaggage,
+      baggage: resolveBaggage(outbound, tempFlightData.cabinClass),
     };
     const inWithBag = {
       ...inbound,
-      baggage: inbound.baggage || defaultBaggage,
+      baggage: resolveBaggage(inbound, tempFlightData.cabinClass),
     };
 
     setTempFlightData({
       ...tempFlightData,
       outbound: outWithBag,
       inbound: inWithBag,
+      baggage: outWithBag.baggage,
     });
     setIsSyncingWithOwner(false);
     setIsSelectorOpen(false);
@@ -821,7 +866,7 @@ export const FlightManager: React.FC<Props> = ({
   const validateBaggage = (bag: any) => {
     const errs: { carryOn?: boolean; checked?: boolean } = {};
     const isWeightValid = (w: string) =>
-      w && w.replace(/[^0-9.]/g, "").length > 0;
+      !!w && (parseFloat(w.replace(/[^0-9.]/g, "")) || 0) > 0;
     if (bag.carryOn?.count > 0 && !isWeightValid(bag.carryOn.weight))
       errs.carryOn = true;
     if (isWeightValid(bag.carryOn.weight) && bag.carryOn?.count <= 0)
@@ -1243,6 +1288,9 @@ export const FlightManager: React.FC<Props> = ({
     setTempFlightData(null);
     setIsSyncingWithOwner(false);
     setShowManualDetails(false);
+    if (autoEditFlightId && actualId === autoEditFlightId) {
+      onGuidedPriceSaved?.();
+    }
   };
 
   const startEdit = (flight: FlightInfo) => {
@@ -1251,12 +1299,12 @@ export const FlightManager: React.FC<Props> = ({
       ...flight,
       outbound: {
         ...flight.outbound,
-        baggage: flight.outbound.baggage || defaultBaggage,
+        baggage: flight.outbound.baggage || getDefaultBaggage(flight.outbound.airlineID, flight.cabinClass),
       },
       inbound: flight.inbound
         ? {
             ...flight.inbound,
-            baggage: flight.inbound?.baggage || defaultBaggage,
+            baggage: flight.inbound?.baggage || getDefaultBaggage(flight.inbound.airlineID, flight.cabinClass),
           }
         : undefined,
     };
@@ -1278,6 +1326,26 @@ export const FlightManager: React.FC<Props> = ({
   const hasMyFlight =
     currentUser && trip.flights?.some((f) => f.user_id === currentUser.id);
   const canSync = !isOwner && ownerFlight && !hasMyFlight;
+
+  // Guided post-create flow: open the user's flight in edit mode (once) and focus the price input.
+  const autoEditedRef = useRef<string | null>(null);
+  const priceInputRef = useRef<HTMLInputElement>(null);
+  const isGuidedEdit = !!autoEditFlightId && editingFlightId === autoEditFlightId;
+
+  useEffect(() => {
+    if (!autoEditFlightId || autoEditedRef.current === autoEditFlightId) return;
+    const target = trip.flights?.find((f) => f.id === autoEditFlightId);
+    if (!target) return;
+    autoEditedRef.current = autoEditFlightId;
+    startEdit(target);
+  }, [autoEditFlightId, trip.flights]);
+
+  useEffect(() => {
+    if (!isGuidedEdit) return;
+    const input = priceInputRef.current;
+    input?.focus();
+    input?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  }, [isGuidedEdit]);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4 sm:px-0">
@@ -1376,6 +1444,8 @@ export const FlightManager: React.FC<Props> = ({
                     className={`flex w-full h-[48px] items-stretch rounded-2xl bg-slate-50 dark:bg-white/[0.05] transition-all border ${
                       priceError
                         ? "border-red-500 bg-red-50/10 ring-4 ring-red-500/10"
+                        : isGuidedEdit
+                        ? "border-primary/50 ring-4 ring-primary/20 animate-pulse-soft"
                         : "border-slate-200/50 dark:border-white/[0.08] focus-within:border-primary/20"
                     }`}
                   >
@@ -1400,6 +1470,8 @@ export const FlightManager: React.FC<Props> = ({
                       ))}
                     </select>
                     <input
+                      ref={priceInputRef}
+                      data-testid="flight-price-input"
                       type="number"
                       value={tempFlightData.price || ""}
                       onChange={(e) => {
@@ -1413,6 +1485,14 @@ export const FlightManager: React.FC<Props> = ({
                       placeholder="0"
                     />
                   </div>
+                  {isGuidedEdit && !priceError && (
+                    <p
+                      data-testid="guide-price-hint"
+                      className="text-[11px] font-bold text-primary"
+                    >
+                      {t("guidePriceHint")}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5 w-full">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center h-[15px]">
@@ -1421,12 +1501,7 @@ export const FlightManager: React.FC<Props> = ({
                   <div className="relative flex items-center w-full h-[48px] bg-slate-50 dark:bg-white/[0.05] rounded-2xl border border-slate-200/50 dark:border-white/[0.08] focus-within:border-primary/20 transition-all">
                     <select
                       value={tempFlightData.cabinClass}
-                      onChange={(e) =>
-                        setTempFlightData({
-                          ...tempFlightData,
-                          cabinClass: e.target.value,
-                        })
-                      }
+                      onChange={(e) => handleCabinChange(e.target.value)}
                       className="w-full bg-transparent dark:text-white px-3 font-bold text-sm outline-none appearance-none cursor-pointer"
                     >
                       <option value="Economy" className="bg-white dark:bg-[#161822] text-slate-900 dark:text-white">
