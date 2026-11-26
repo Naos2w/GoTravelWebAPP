@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor, act } from "@testing-library/react";
 import { TripForm } from "../../components/TripForm";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { fetchTdxFlights } from "../../services/tdxService";
@@ -103,6 +103,71 @@ describe("TripForm UX upgrade", () => {
       fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "" } });
       fireEvent.click(screen.getByRole("button", { name: /建立旅程/ }));
       expect(onSubmit.mock.calls[0][0].budget).toBe(50000);
+    });
+
+    it("ignores rapid double-click and disables submit while async onSubmit is in flight", async () => {
+      let resolveSubmit!: () => void;
+      const onSubmit = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSubmit = resolve;
+          })
+      );
+      render(
+        <LocalizationProvider>
+          <TripForm onClose={vi.fn()} onSubmit={onSubmit} />
+        </LocalizationProvider>
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("例如：東京 5 日遊"), { target: { value: "Tokyo" } });
+      typeDates("20260301", "20260305");
+
+      const submitBtn = screen.getByRole("button", { name: /建立旅程/ });
+      fireEvent.click(submitBtn);
+      fireEvent.click(submitBtn);
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(submitBtn).toBeDisabled();
+      expect(submitBtn.querySelector(".animate-spin")).toBeInTheDocument();
+
+      await act(async () => {
+        resolveSubmit();
+      });
+
+      await waitFor(() => {
+        expect(submitBtn).not.toBeDisabled();
+      });
+    });
+
+    it("re-enables submit cleanly if async onSubmit rejects", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      let rejectSubmit!: (err: Error) => void;
+      const onSubmit = vi.fn(
+        () =>
+          new Promise<void>((_, reject) => {
+            rejectSubmit = reject;
+          })
+      );
+      render(
+        <LocalizationProvider>
+          <TripForm onClose={vi.fn()} onSubmit={onSubmit} />
+        </LocalizationProvider>
+      );
+
+      fireEvent.change(screen.getByPlaceholderText("例如：東京 5 日遊"), { target: { value: "Tokyo" } });
+      typeDates("20260301", "20260305");
+
+      const submitBtn = screen.getByRole("button", { name: /建立旅程/ });
+      fireEvent.click(submitBtn);
+      expect(submitBtn).toBeDisabled();
+
+      await act(async () => {
+        rejectSubmit(new Error("network failure"));
+      });
+
+      await waitFor(() => {
+        expect(submitBtn).not.toBeDisabled();
+      });
     });
   });
 
@@ -315,6 +380,76 @@ describe("TripForm UX upgrade", () => {
       expect(typeof fukStop.lng).toBe("number");
       expect(fukStop.lat).toBeCloseTo(33.59, 1);
       expect(fukStop.lng).toBeCloseTo(130.45, 1);
+    });
+
+    it("prevents double-submit on the Flight Review confirm button while async onSubmit is in flight", async () => {
+      mockedFetch
+        .mockResolvedValueOnce([
+          {
+            airline: "EVA Air",
+            airlineID: "BR",
+            flightNumber: "BR106",
+            departureTime: "2026-04-01T08:10",
+            arrivalTime: "2026-04-01T11:20",
+            departureAirport: "TPE",
+            arrivalAirport: "FUK",
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            airline: "EVA Air",
+            airlineID: "BR",
+            flightNumber: "BR105",
+            departureTime: "2026-04-03T12:20",
+            arrivalTime: "2026-04-03T13:50",
+            departureAirport: "FUK",
+            arrivalAirport: "TPE",
+          },
+        ]);
+
+      let resolveSubmit!: () => void;
+      const onSubmit = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSubmit = resolve;
+          })
+      );
+      const { container } = render(
+        <LocalizationProvider>
+          <TripForm onClose={vi.fn()} onSubmit={onSubmit} />
+        </LocalizationProvider>
+      );
+
+      openFlightMode();
+      fireEvent.change(byId(container, "outbound-destination"), { target: { value: "FUK" } });
+      fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20260401" } });
+      fireEvent.change(byId(container, "outbound-flight-number"), { target: { value: "BR106" } });
+      fireEvent.click(screen.getByRole("button", { name: /^搜尋$/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /BR106/ }));
+
+      fireEvent.click(screen.getByRole("button", { name: /下一步：設定回程/ }));
+      fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20260403" } });
+      fireEvent.change(byId(container, "inbound-flight-number"), { target: { value: "BR105" } });
+      fireEvent.click(screen.getByRole("button", { name: /^搜尋$/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /BR105/ }));
+
+      fireEvent.click(await screen.findByRole("button", { name: /前往確認/ }));
+
+      const confirmBtn = screen.getByRole("button", { name: /^確認$/ });
+      fireEvent.click(confirmBtn);
+      fireEvent.click(confirmBtn);
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(confirmBtn).toBeDisabled();
+      expect(confirmBtn.querySelector(".animate-spin")).toBeInTheDocument();
+
+      await act(async () => {
+        resolveSubmit();
+      });
+
+      await waitFor(() => {
+        expect(confirmBtn).not.toBeDisabled();
+      });
     });
   });
 

@@ -693,5 +693,113 @@ describe("App Component (Smoke Test)", () => {
     expect(screen.queryByTestId("boarding-pass-issue-modal")).not.toBeInTheDocument();
     expect(screen.queryByTestId("guide-itinerary-banner")).not.toBeInTheDocument();
   });
+
+  it("deduplicates trip IDs and skips Realtime list refresh during trip creation so no duplicate trip card appears", async () => {
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    let globalTripsInsertHandler: ((payload: any) => void) | null = null;
+    const globalChannel = {
+      on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
+        if (type === "postgres_changes" && filter?.table === "trips") {
+          globalTripsInsertHandler = cb;
+        }
+        return this;
+      }),
+      subscribe: vi.fn().mockReturnThis(),
+    };
+    const activeChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("global-trips-") ? (globalChannel as any) : (activeChannel as any)
+    );
+
+    const duplicatePartialTrip = {
+      id: "trip-new-1",
+      user_id: "user-dedupe-1",
+      name: "Taipei Weekend",
+      destination: "Taipei Weekend",
+      startDate: "2026-11-01",
+      endDate: "2026-11-03",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+
+    let createdTrip: any = null;
+    let resolveCreateFullTrip!: () => void;
+    vi.mocked(createFullTrip).mockImplementation(
+      (trip: any) =>
+        new Promise<void>((resolve) => {
+          createdTrip = trip;
+          resolveCreateFullTrip = resolve;
+        })
+    );
+    vi.mocked(getTripById).mockImplementation(async () => createdTrip);
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-dedupe-1",
+            email: "dedupe@example.com",
+            user_metadata: { full_name: "Dedupe Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    // Return duplicate partial rows with the same ID as the newly created trip
+    vi.mocked(getTrips).mockResolvedValue([duplicatePartialTrip, duplicatePartialTrip]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("heading", { name: "Taipei Weekend" })).toHaveLength(1);
+    });
+    const initialGetTripsCalls = vi.mocked(getTrips).mock.calls.length;
+
+    // Open TripForm and submit while createFullTrip stays in flight
+    fireEvent.click(screen.getAllByRole("button", { name: /新增旅程|New Trip/i })[0]);
+    fireEvent.change(screen.getByPlaceholderText(/例如：東京 5 日遊|e\.g\., Tokyo 5 Days/i), {
+      target: { value: "Taipei Weekend" },
+    });
+    const [startInput, endInput] = screen.getAllByPlaceholderText("YYYY/MM/DD");
+    fireEvent.change(startInput, { target: { value: "20261101" } });
+    fireEvent.change(endInput, { target: { value: "20261103" } });
+
+    const submitBtn = screen.getByRole("button", { name: /建立旅程|Create Trip/i });
+    fireEvent.click(submitBtn);
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(createFullTrip).toHaveBeenCalledTimes(1);
+    });
+
+    // Simulate Realtime INSERT firing mid-creation; refreshList() must skip while creatingTripRef is true
+    expect(globalTripsInsertHandler).not.toBeNull();
+    act(() => {
+      globalTripsInsertHandler!({ eventType: "INSERT", new: { id: "trip-new-1" } });
+    });
+    expect(vi.mocked(getTrips).mock.calls.length).toBe(initialGetTripsCalls);
+
+    await act(async () => {
+      resolveCreateFullTrip();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-new-1");
+    });
+
+    // Navigate back to the trips list and verify only one trip card exists for trip-new-1
+    const backBtn = document.querySelector("nav button") as HTMLButtonElement;
+    expect(backBtn).not.toBeNull();
+    fireEvent.click(backBtn);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips");
+      expect(screen.getAllByRole("heading", { name: "Taipei Weekend" })).toHaveLength(1);
+    });
+  });
 });
 

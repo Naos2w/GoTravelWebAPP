@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Plane, ArrowRight, Loader2, Check, ChevronLeft, AlertCircle, Plus, Zap, PenLine } from 'lucide-react';
 import { fetchTdxFlights } from '../services/tdxService';
 import { FlightSegment, Currency, ItineraryItem, DayPlan, ChecklistItem } from '../types';
@@ -11,7 +11,7 @@ import { getAirportCoords } from '../services/airportCoordsService';
 
 interface Props {
   onClose: () => void;
-  onSubmit: (tripData: any) => void;
+  onSubmit: (tripData: any) => void | Promise<void>;
 }
 
 type Mode = 'quick' | 'flight';
@@ -138,6 +138,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [quickErrors, setQuickErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -432,7 +434,25 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
 
   // ---------- Trip creation ----------
 
-  const handleQuickCreate = () => {
+  const submitWithLock = async (buildTrip: () => any) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      const result = onSubmit(buildTrip());
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        setIsSubmitting(true);
+        await result;
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickCreate = async () => {
+    if (submittingRef.current) return;
     const errs: Record<string, string> = {};
     const name = tripName.trim();
     if (!name) errs.tripName = t('required');
@@ -448,118 +468,123 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     setQuickErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
-    const totalDays = (diffDays(startDate, endDate) as number) + 1;
-    const newTrip = createNewTrip({ destination: name, startDate, endDate });
-    newTrip.name = name;
-    newTrip.itinerary = buildDateRange(startDate, totalDays).map(date => ({ date, items: [] }));
-    newTrip.checklist = getDefaultChecklist();
-    newTrip.flights = [];
-    newTrip.budget = parseBudget(budget);
-    onSubmit(newTrip);
+    await submitWithLock(() => {
+      const totalDays = (diffDays(startDate, endDate) as number) + 1;
+      const newTrip = createNewTrip({ destination: name, startDate, endDate });
+      newTrip.name = name;
+      newTrip.itinerary = buildDateRange(startDate, totalDays).map(date => ({ date, items: [] }));
+      newTrip.checklist = getDefaultChecklist();
+      newTrip.flights = [];
+      newTrip.budget = parseBudget(budget);
+      return newTrip;
+    });
   };
 
-  const handleCreateTrip = () => {
+  const handleCreateTrip = async () => {
+    if (submittingRef.current) return;
     if (outboundSegments.length === 0 || inboundSegments.length === 0) return;
 
-    const lastOutbound = outboundSegments[outboundSegments.length - 1];
-    const lastInbound = inboundSegments[inboundSegments.length - 1];
+    await submitWithLock(() => {
+      const lastOutbound = outboundSegments[outboundSegments.length - 1];
+      const lastInbound = inboundSegments[inboundSegments.length - 1];
 
-    const startStr = outboundSegments[0].departureTime.split('T')[0];
-    const endStr = lastInbound.arrivalTime.split('T')[0];
-    const totalDays = Math.abs(diffDays(startStr, endStr) ?? 0) + 1;
+      const startStr = outboundSegments[0].departureTime.split('T')[0];
+      const endStr = lastInbound.arrivalTime.split('T')[0];
+      const totalDays = Math.abs(diffDays(startStr, endStr) ?? 0) + 1;
 
-    const addSegmentItineraryItems = (seg: FlightSegment, itemsMap: Record<string, ItineraryItem[]>) => {
-      const depDate = seg.departureTime.split('T')[0];
-      const arrDate = seg.arrivalTime.split('T')[0];
-      const depCoords = getAirportCoords(seg.departureAirport);
-      const arrCoords = getAirportCoords(seg.arrivalAirport);
+      const addSegmentItineraryItems = (seg: FlightSegment, itemsMap: Record<string, ItineraryItem[]>) => {
+        const depDate = seg.departureTime.split('T')[0];
+        const arrDate = seg.arrivalTime.split('T')[0];
+        const depCoords = getAirportCoords(seg.departureAirport);
+        const arrCoords = getAirportCoords(seg.arrivalAirport);
 
-      if (!itemsMap[depDate]) itemsMap[depDate] = [];
-      if (!itemsMap[arrDate]) itemsMap[arrDate] = [];
+        if (!itemsMap[depDate]) itemsMap[depDate] = [];
+        if (!itemsMap[arrDate]) itemsMap[arrDate] = [];
 
-      itemsMap[depDate].push({
-        id: crypto.randomUUID(),
-        time: DateTimeUtils.formatTime24(seg.departureTime),
-        placeName: `${seg.departureAirport} Airport`,
-        ...(depCoords ?? {}),
-        type: 'Place', transportType: 'Flight',
-        note: `Flight: ${seg.flightNumber}`, date: depDate
-      });
+        itemsMap[depDate].push({
+          id: crypto.randomUUID(),
+          time: DateTimeUtils.formatTime24(seg.departureTime),
+          placeName: `${seg.departureAirport} Airport`,
+          ...(depCoords ?? {}),
+          type: 'Place', transportType: 'Flight',
+          note: `Flight: ${seg.flightNumber}`, date: depDate
+        });
 
-      itemsMap[depDate].push({
-        id: crypto.randomUUID(),
-        time: getMidPointTime(DateTimeUtils.formatTime24(seg.departureTime), DateTimeUtils.formatTime24(seg.arrivalTime)),
-        placeName: 'Flight', type: 'Transport', transportType: 'Flight',
-        note: calculateDurationStr(seg.departureTime, seg.arrivalTime), date: depDate
-      });
+        itemsMap[depDate].push({
+          id: crypto.randomUUID(),
+          time: getMidPointTime(DateTimeUtils.formatTime24(seg.departureTime), DateTimeUtils.formatTime24(seg.arrivalTime)),
+          placeName: 'Flight', type: 'Transport', transportType: 'Flight',
+          note: calculateDurationStr(seg.departureTime, seg.arrivalTime), date: depDate
+        });
 
-      itemsMap[arrDate].push({
-        id: crypto.randomUUID(),
-        time: DateTimeUtils.formatTime24(seg.arrivalTime),
-        placeName: `${seg.arrivalAirport} Airport`,
-        ...(arrCoords ?? {}),
-        type: 'Place', transportType: 'Flight', note: 'Arrival', date: arrDate
-      });
-    };
-
-    const itemsMap: Record<string, ItineraryItem[]> = {};
-    outboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
-    inboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
-
-    const generatedItinerary: DayPlan[] = buildDateRange(startStr, totalDays).map(dateStr => {
-      const uniqueItems: ItineraryItem[] = [];
-      (itemsMap[dateStr] || []).forEach(item => {
-        const isDuplicate = uniqueItems.some(existing =>
-          existing.time === item.time &&
-          existing.placeName === item.placeName &&
-          existing.type === item.type
-        );
-        if (!isDuplicate) uniqueItems.push(item);
-      });
-      return { date: dateStr, items: uniqueItems.sort((a, b) => a.time.localeCompare(b.time)) };
-    });
-
-    const withPreset = (seg: FlightSegment): FlightSegment => {
-      const b = seg.baggage;
-      const hasWeights = !!b && (parseFloat((b.carryOn?.weight || '').replace(/[^0-9.]/g, '')) > 0 || parseFloat((b.checked?.weight || '').replace(/[^0-9.]/g, '')) > 0);
-      return hasWeights ? seg : { ...seg, baggage: getDefaultBaggage(seg.airlineID, CABIN) };
-    };
-
-    const buildCompoundSegment = (rawSegs: FlightSegment[]): FlightSegment => {
-      const segs = rawSegs.map(withPreset);
-      if (segs.length === 1) return segs[0];
-      return {
-        airline: segs.map(s => s.airline).join(' + '),
-        airlineID: segs[0].airlineID,
-        airlineNameZh: segs.map(s => s.airlineNameZh || s.airline).join(' + '),
-        airlineNameEn: segs.map(s => s.airlineNameEn || s.airline).join(' + '),
-        flightNumber: segs.map(s => s.flightNumber).join(' + '),
-        departureTime: segs[0].departureTime,
-        arrivalTime: segs[segs.length - 1].arrivalTime,
-        departureAirport: segs[0].departureAirport,
-        arrivalAirport: segs[segs.length - 1].arrivalAirport,
-        terminal: segs[0].terminal || '',
-        gate: segs[0].gate || '',
-        status: 'Scheduled',
-        baggage: getDefaultBaggage(segs[0].airlineID, CABIN),
-        segments: segs
+        itemsMap[arrDate].push({
+          id: crypto.randomUUID(),
+          time: DateTimeUtils.formatTime24(seg.arrivalTime),
+          placeName: `${seg.arrivalAirport} Airport`,
+          ...(arrCoords ?? {}),
+          type: 'Place', transportType: 'Flight', note: 'Arrival', date: arrDate
+        });
       };
-    };
 
-    const name = tripName.trim() || lastOutbound.arrivalAirport;
-    const newTrip = createNewTrip({ destination: name, startDate: startStr, endDate: endStr });
-    newTrip.name = name;
-    newTrip.itinerary = generatedItinerary;
-    newTrip.checklist = getDefaultChecklist();
-    const outboundFlight = buildCompoundSegment(outboundSegments);
-    const inboundFlight = buildCompoundSegment(inboundSegments);
-    newTrip.flights = [{
-      id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: CABIN,
-      outbound: outboundFlight,
-      inbound: inboundFlight,
-      baggage: outboundFlight.baggage || getDefaultBaggage(outboundFlight.airlineID, CABIN), budget: parseBudget(budget)
-    }];
-    onSubmit(newTrip);
+      const itemsMap: Record<string, ItineraryItem[]> = {};
+      outboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
+      inboundSegments.forEach(seg => addSegmentItineraryItems(seg, itemsMap));
+
+      const generatedItinerary: DayPlan[] = buildDateRange(startStr, totalDays).map(dateStr => {
+        const uniqueItems: ItineraryItem[] = [];
+        (itemsMap[dateStr] || []).forEach(item => {
+          const isDuplicate = uniqueItems.some(existing =>
+            existing.time === item.time &&
+            existing.placeName === item.placeName &&
+            existing.type === item.type
+          );
+          if (!isDuplicate) uniqueItems.push(item);
+        });
+        return { date: dateStr, items: uniqueItems.sort((a, b) => a.time.localeCompare(b.time)) };
+      });
+
+      const withPreset = (seg: FlightSegment): FlightSegment => {
+        const b = seg.baggage;
+        const hasWeights = !!b && (parseFloat((b.carryOn?.weight || '').replace(/[^0-9.]/g, '')) > 0 || parseFloat((b.checked?.weight || '').replace(/[^0-9.]/g, '')) > 0);
+        return hasWeights ? seg : { ...seg, baggage: getDefaultBaggage(seg.airlineID, CABIN) };
+      };
+
+      const buildCompoundSegment = (rawSegs: FlightSegment[]): FlightSegment => {
+        const segs = rawSegs.map(withPreset);
+        if (segs.length === 1) return segs[0];
+        return {
+          airline: segs.map(s => s.airline).join(' + '),
+          airlineID: segs[0].airlineID,
+          airlineNameZh: segs.map(s => s.airlineNameZh || s.airline).join(' + '),
+          airlineNameEn: segs.map(s => s.airlineNameEn || s.airline).join(' + '),
+          flightNumber: segs.map(s => s.flightNumber).join(' + '),
+          departureTime: segs[0].departureTime,
+          arrivalTime: segs[segs.length - 1].arrivalTime,
+          departureAirport: segs[0].departureAirport,
+          arrivalAirport: segs[segs.length - 1].arrivalAirport,
+          terminal: segs[0].terminal || '',
+          gate: segs[0].gate || '',
+          status: 'Scheduled',
+          baggage: getDefaultBaggage(segs[0].airlineID, CABIN),
+          segments: segs
+        };
+      };
+
+      const name = tripName.trim() || lastOutbound.arrivalAirport;
+      const newTrip = createNewTrip({ destination: name, startDate: startStr, endDate: endStr });
+      newTrip.name = name;
+      newTrip.itinerary = generatedItinerary;
+      newTrip.checklist = getDefaultChecklist();
+      const outboundFlight = buildCompoundSegment(outboundSegments);
+      const inboundFlight = buildCompoundSegment(inboundSegments);
+      newTrip.flights = [{
+        id: crypto.randomUUID(), user_id: '', traveler_name: 'TRAVELER', price: 0, currency: Currency.TWD, cabinClass: CABIN,
+        outbound: outboundFlight,
+        inbound: inboundFlight,
+        baggage: outboundFlight.baggage || getDefaultBaggage(outboundFlight.airlineID, CABIN), budget: parseBudget(budget)
+      }];
+      return newTrip;
+    });
   };
 
   // ---------- Render helpers ----------
@@ -815,7 +840,11 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         </div>
       )}
       {renderBudgetField('quick-budget')}
-      <button type="submit" className={darkBtn}>{t('tfCreateTrip')} <ArrowRight size={18}/></button>
+      <button type="submit" disabled={isSubmitting} className={`${darkBtn} disabled:opacity-60 disabled:cursor-not-allowed`}>
+        {isSubmitting && <Loader2 className="animate-spin" size={16} />}
+        {t('tfCreateTrip')}
+        {!isSubmitting && <ArrowRight size={18}/>}
+      </button>
     </form>
   );
 
@@ -840,7 +869,11 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       </div>
       {renderBudgetField('review-budget')}
 
-      <button type="button" onClick={handleCreateTrip} className={`${darkBtn} shadow-lg`}>{labels.confirmBtn} <ArrowRight size={18}/></button>
+      <button type="button" onClick={handleCreateTrip} disabled={isSubmitting} className={`${darkBtn} shadow-lg disabled:opacity-60 disabled:cursor-not-allowed`}>
+        {isSubmitting && <Loader2 className="animate-spin" size={16} />}
+        {labels.confirmBtn}
+        {!isSubmitting && <ArrowRight size={18}/>}
+      </button>
       <button type="button" onClick={handleReviewBack} className={ghostBtn}><ChevronLeft size={14}/> {labels.back}</button>
     </div>
   );

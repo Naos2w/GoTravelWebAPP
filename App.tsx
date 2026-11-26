@@ -253,6 +253,7 @@ const App: React.FC = () => {
   const saveTimeoutRef = useRef<number | null>(null);
   const refreshTimeoutRef = useRef<number | null>(null);
   const joinLockRef = useRef<string | null>(null);
+  const creatingTripRef = useRef(false);
   const activeChannelRef = useRef<RealtimeChannel | null>(null);
   const userRef = useRef<User | null>(user);
   userRef.current = user;
@@ -659,6 +660,8 @@ const App: React.FC = () => {
     if (!user) return;
 
     const refreshList = async () => {
+      // Skip list refresh while a new trip creation is in flight so partial Realtime INSERTs do not clobber state
+      if (creatingTripRef.current) return;
       // Simple reload to catch any new trips where I was added to allowed_emails
       await loadTrips();
     };
@@ -953,7 +956,9 @@ const App: React.FC = () => {
     if (!user) return;
     try {
       const userTrips = await getTrips(user.id, user.email);
-      setTrips(userTrips);
+      if (creatingTripRef.current) return;
+      const uniqueTrips = Array.from(new globalThis.Map(userTrips.map((t) => [t.id, t])).values());
+      setTrips(uniqueTrips);
       setError(null);
     } catch (err: any) {
       console.warn("[Storage] loadTrips caught error:", err);
@@ -1303,7 +1308,8 @@ const App: React.FC = () => {
   };
 
   const handleCreateTripSubmit = async (tripData: Trip) => {
-    if (!user) return;
+    if (!user || creatingTripRef.current) return;
+    creatingTripRef.current = true;
     try {
       const enrichedTrip = {
         ...tripData,
@@ -1322,7 +1328,7 @@ const App: React.FC = () => {
       // CRITICAL UPDATE: Join the creator immediately
       await joinTrip(enrichedTrip.id, user.id, user.email, "owner");
 
-      setTrips((prev) => [enrichedTrip, ...prev]);
+      setTrips((prev) => [enrichedTrip, ...prev.filter((t) => t.id !== enrichedTrip.id)]);
       setCurrentTripId(enrichedTrip.id);
       setView("detail");
       setShowCreateForm(false);
@@ -1337,6 +1343,8 @@ const App: React.FC = () => {
       }
     } catch (err) {
       setError("Failed to create trip.");
+    } finally {
+      creatingTripRef.current = false;
     }
   };
 
