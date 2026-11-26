@@ -240,6 +240,81 @@ describe("TripForm UX upgrade", () => {
       expect(trip.startDate).toBe("2026-03-01");
       expect(trip.endDate).toBe("2026-03-05");
       expect(trip.itinerary).toHaveLength(5);
+
+      const day1Places = trip.itinerary[0].items.filter((i: any) => i.type === "Place");
+      const day1Dep = day1Places.find((i: any) => i.placeName === "TPE Airport");
+      const day1Arr = day1Places.find((i: any) => i.placeName === "KIX Airport");
+      expect(day1Dep).toBeDefined();
+      expect(typeof day1Dep.lat).toBe("number");
+      expect(typeof day1Dep.lng).toBe("number");
+      expect(day1Dep.lat).toBeCloseTo(25.08, 1);
+      expect(day1Dep.lng).toBeCloseTo(121.23, 1);
+      expect(day1Arr).toBeDefined();
+      expect(typeof day1Arr.lat).toBe("number");
+      expect(typeof day1Arr.lng).toBe("number");
+      expect(day1Arr.lat).toBeCloseTo(34.43, 1);
+      expect(day1Arr.lng).toBeCloseTo(135.24, 1);
+
+      const day5Places = trip.itinerary[4].items.filter((i: any) => i.type === "Place");
+      const day5Dep = day5Places.find((i: any) => i.placeName === "KIX Airport");
+      const day5Arr = day5Places.find((i: any) => i.placeName === "TPE Airport");
+      expect(typeof day5Dep.lat).toBe("number");
+      expect(typeof day5Dep.lng).toBe("number");
+      expect(typeof day5Arr.lat).toBe("number");
+      expect(typeof day5Arr.lng).toBe("number");
+    });
+
+    it("attaches numeric lat and lng to generated TPE and FUK airport itinerary items", async () => {
+      mockedFetch
+        .mockResolvedValueOnce([
+          {
+            airline: "EVA Air",
+            flightNumber: "BR106",
+            departureTime: "2026-04-01T08:10",
+            arrivalTime: "2026-04-01T11:20",
+            departureAirport: "TPE",
+            arrivalAirport: "FUK",
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            airline: "EVA Air",
+            flightNumber: "BR105",
+            departureTime: "2026-04-03T12:20",
+            arrivalTime: "2026-04-03T13:50",
+            departureAirport: "FUK",
+            arrivalAirport: "TPE",
+          },
+        ]);
+
+      const { container, onSubmit } = renderForm();
+      openFlightMode();
+      fireEvent.change(byId(container, "outbound-destination"), { target: { value: "FUK" } });
+      fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20260401" } });
+      fireEvent.change(byId(container, "outbound-flight-number"), { target: { value: "BR106" } });
+      fireEvent.click(screen.getByRole("button", { name: /^搜尋$/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /BR106/ }));
+
+      fireEvent.click(screen.getByRole("button", { name: /下一步：設定回程/ }));
+      fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20260403" } });
+      fireEvent.change(byId(container, "inbound-flight-number"), { target: { value: "BR105" } });
+      fireEvent.click(screen.getByRole("button", { name: /^搜尋$/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /BR105/ }));
+
+      fireEvent.click(await screen.findByRole("button", { name: /前往確認/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^確認$/ }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      const trip = onSubmit.mock.calls[0][0];
+      const day1Places = trip.itinerary[0].items.filter((i: any) => i.type === "Place");
+      const tpeStop = day1Places.find((i: any) => i.placeName === "TPE Airport");
+      const fukStop = day1Places.find((i: any) => i.placeName === "FUK Airport");
+      expect(typeof tpeStop.lat).toBe("number");
+      expect(typeof tpeStop.lng).toBe("number");
+      expect(typeof fukStop.lat).toBe("number");
+      expect(typeof fukStop.lng).toBe("number");
+      expect(fukStop.lat).toBeCloseTo(33.59, 1);
+      expect(fukStop.lng).toBeCloseTo(130.45, 1);
     });
   });
 

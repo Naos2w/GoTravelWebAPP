@@ -36,6 +36,7 @@ import { useTranslation } from "../contexts/LocalizationContext";
 import { supabase } from "../services/storageService";
 import { fetchLiveRatesToTwd, getRateToTwd } from "../services/exchangeRateService";
 import { getDefaultBaggage, isSameBaggage } from "../services/airlineBaggageService";
+import { getAirportCoords } from "../services/airportCoordsService";
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -1099,12 +1100,15 @@ export const FlightManager: React.FC<Props> = ({
     const processSingleSegment = (seg: FlightSegment) => {
       const depDate = seg.departureTime.split("T")[0];
       const arrDate = seg.arrivalTime.split("T")[0];
+      const depCoords = getAirportCoords(seg.departureAirport);
+      const arrCoords = getAirportCoords(seg.arrivalAirport);
 
       items.push({
         id: crypto.randomUUID(),
         user_id: currentUser.id,
         time: DateTimeUtils.formatTime24(seg.departureTime),
         placeName: `${seg.departureAirport} Airport`,
+        ...(depCoords ?? {}),
         type: "Place",
         transportType: "Flight",
         note: `Flight: ${seg.flightNumber}${noteSuffix}`,
@@ -1130,6 +1134,7 @@ export const FlightManager: React.FC<Props> = ({
         user_id: currentUser.id,
         time: DateTimeUtils.formatTime24(seg.arrivalTime),
         placeName: `${seg.arrivalAirport} Airport`,
+        ...(arrCoords ?? {}),
         type: "Place",
         transportType: "Flight",
         note: `Arrival${noteSuffix}`,

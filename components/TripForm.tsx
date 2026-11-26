@@ -7,6 +7,7 @@ import { DateTimeUtils } from '../services/dateTimeUtils';
 import { useTranslation } from "../contexts/LocalizationContext";
 import { SegmentedDateInput } from './SegmentedDateInput';
 import { getDefaultBaggage, inferAirlineId } from '../services/airlineBaggageService';
+import { getAirportCoords } from '../services/airportCoordsService';
 
 interface Props {
   onClose: () => void;
@@ -470,6 +471,8 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
     const addSegmentItineraryItems = (seg: FlightSegment, itemsMap: Record<string, ItineraryItem[]>) => {
       const depDate = seg.departureTime.split('T')[0];
       const arrDate = seg.arrivalTime.split('T')[0];
+      const depCoords = getAirportCoords(seg.departureAirport);
+      const arrCoords = getAirportCoords(seg.arrivalAirport);
 
       if (!itemsMap[depDate]) itemsMap[depDate] = [];
       if (!itemsMap[arrDate]) itemsMap[arrDate] = [];
@@ -478,6 +481,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         id: crypto.randomUUID(),
         time: DateTimeUtils.formatTime24(seg.departureTime),
         placeName: `${seg.departureAirport} Airport`,
+        ...(depCoords ?? {}),
         type: 'Place', transportType: 'Flight',
         note: `Flight: ${seg.flightNumber}`, date: depDate
       });
@@ -493,6 +497,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         id: crypto.randomUUID(),
         time: DateTimeUtils.formatTime24(seg.arrivalTime),
         placeName: `${seg.arrivalAirport} Airport`,
+        ...(arrCoords ?? {}),
         type: 'Place', transportType: 'Flight', note: 'Arrival', date: arrDate
       });
     };

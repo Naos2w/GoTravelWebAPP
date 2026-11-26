@@ -317,5 +317,61 @@ describe("MapView Component Smoke Test", () => {
       });
     });
   });
+
+  it("enriches legacy airport stops missing lat/lng and renders a flight polyline without calling OSRM", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const legacyFlightDay: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Flight: BR106",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-mid",
+        time: "09:45",
+        placeName: "Flight",
+        type: "Transport",
+        transportType: "Flight",
+        note: "2h 10m",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Arrival",
+        date: "2026-04-01",
+      },
+    ];
+
+    render(
+      <LocalizationProvider>
+        <MapView items={legacyFlightDay} />
+      </LocalizationProvider>
+    );
+
+    expect(screen.getByTestId("map-container")).toBeInTheDocument();
+    expect(screen.queryByText(/新增帶有坐標的地點即可在地圖上查看/)).not.toBeInTheDocument();
+    // 2 airport markers + 1 midpoint flight badge marker
+    expect(screen.getAllByTestId("marker").length).toBe(3);
+
+    const polylines = screen.getAllByTestId("polyline");
+    expect(polylines.length).toBe(2);
+    const positions = JSON.parse(polylines[0].getAttribute("data-positions") || "[]");
+    expect(positions).toEqual([
+      [25.0797, 121.2342],
+      [33.5859, 130.4507],
+    ]);
+    // Flight legs must never hit OSRM
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 

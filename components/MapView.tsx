@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
 import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
+import { enrichAirportCoords } from '../services/airportCoordsService';
 
 // Remove default marker icon logic since we'll use custom DivIcons
 import { MapPin, Car, Search, Loader2, Footprints, TrainFront, Bike, Plane, Route } from 'lucide-react';
@@ -388,6 +389,12 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   const [isSearching, setIsSearching] = useState(false);
   const [mapRef, setMapRef] = useState<L.Map | null>(null);
 
+  // Enrich legacy/already-created airport items missing coordinates with fallback airport coords
+  const resolvedItems = useMemo(
+    () => items.map((item) => enrichAirportCoords(item)),
+    [items]
+  );
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!searchQuery.trim()) return;
@@ -415,7 +422,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       }
 
       // 2. Check existing items in itinerary to allow quick jumps
-      const existingMatches = items.filter(i => 
+      const existingMatches = resolvedItems.filter(i => 
         i.placeName && 
         i.placeName.toLowerCase().includes(searchQuery.toLowerCase()) && 
         i.lat != null && 
@@ -535,7 +542,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   // Filter out any items where lat or lng is missing, null, or undefined
   const validItems = useMemo(
     () =>
-      items.filter(
+      resolvedItems.filter(
         i =>
           i.lat != null &&
           i.lng != null &&
@@ -543,7 +550,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           !isNaN(i.lng) &&
           i.type !== 'Transport'
       ),
-    [items]
+    [resolvedItems]
   );
   const pathPositions: [number, number][] = useMemo(
     () => validItems.map(i => [Number(i.lat), Number(i.lng)]),
@@ -559,27 +566,39 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   }
 
   const getLegMode = (stop1: ItineraryItem, stop2: ItineraryItem) => {
+    const idx1 = resolvedItems.findIndex(it => it.id === stop1.id);
+    const idx2 = resolvedItems.findIndex(it => it.id === stop2.id);
+
+    let explicitTransportMode: string | null = null;
+    if (idx1 !== -1 && idx2 !== -1) {
+      const start = Math.min(idx1, idx2);
+      const end = Math.max(idx1, idx2);
+      for (let i = start + 1; i < end; i++) {
+        if (resolvedItems[i].type === 'Transport') {
+          const mode = resolvedItems[i].transportType;
+          if (mode === 'Flight') return 'flight';
+          if (mode === 'Walking') explicitTransportMode = 'walking';
+          else if (mode === 'Public') explicitTransportMode = 'transit';
+          else if (mode === 'Car') explicitTransportMode = 'driving';
+          else if (mode === 'Bicycle') explicitTransportMode = 'bicycling';
+        }
+      }
+    }
+
+    // Two consecutive flight airport stops without a ground transport leg always draw a flight line
+    if (
+      !explicitTransportMode &&
+      stop1.transportType === 'Flight' &&
+      stop2.transportType === 'Flight'
+    ) {
+      return 'flight';
+    }
+
     if (routingModeOverride !== 'auto') {
       return routingModeOverride;
     }
-    
-    const idx1 = items.findIndex(it => it.id === stop1.id);
-    const idx2 = items.findIndex(it => it.id === stop2.id);
-    if (idx1 === -1 || idx2 === -1) return 'driving';
-    
-    const start = Math.min(idx1, idx2);
-    const end = Math.max(idx1, idx2);
-    for (let i = start + 1; i < end; i++) {
-      if (items[i].type === 'Transport') {
-        const mode = items[i].transportType;
-        if (mode === 'Walking') return 'walking';
-        if (mode === 'Public') return 'transit';
-        if (mode === 'Car') return 'driving';
-        if (mode === 'Bicycle') return 'bicycling';
-        if (mode === 'Flight') return 'flight';
-      }
-    }
-    return 'driving';
+
+    return explicitTransportMode ?? 'driving';
   };
 
   const plannedLegs = useMemo(() => {
@@ -614,7 +633,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       });
     }
     return legs;
-  }, [validItems, items, routingModeOverride]);
+  }, [validItems, resolvedItems, routingModeOverride]);
 
   const legsSignature = useMemo(
     () => plannedLegs.map((l) => l.cacheKey).join('|'),
@@ -920,9 +939,14 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const leg = legsRouteInfo[idx];
            if (!leg || !leg.geometry || leg.geometry.length < 2) return null;
            
-           // Calculate midpoint of the route geometry instead of straight line midpoint for better accuracy!
-           const midPointIdx = Math.floor(leg.geometry.length / 2);
-           const [midLat, midLng] = leg.geometry[midPointIdx];
+           // Calculate midpoint of the route geometry (interpolate 2-point lines like flights so the badge sits centered)
+           const [midLat, midLng] =
+             leg.geometry.length === 2
+               ? [
+                   (leg.geometry[0][0] + leg.geometry[1][0]) / 2,
+                   (leg.geometry[0][1] + leg.geometry[1][1]) / 2,
+                 ]
+               : leg.geometry[Math.floor(leg.geometry.length / 2)];
            
            if ((!leg.duration || leg.duration <= 0) && leg.mode !== 'flight') return null; // hide if fallback/0 duration except for flight
            const mins = Math.max(1, Math.round(leg.duration / 60)); // Minimum 1 min
@@ -979,7 +1003,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           <Marker 
             key={item.id} 
             position={[Number(item.lat!), Number(item.lng!)]}
-            icon={createCustomIcon(idx, item.type, item.id === activeItemId)}
+            icon={createCustomIcon(idx, item.transportType === 'Flight' ? 'Flight' : item.type, item.id === activeItemId)}
             zIndexOffset={item.id === activeItemId ? 1000 : idx * 10}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(item.id)

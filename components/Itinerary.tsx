@@ -14,6 +14,7 @@ import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
 import { DailyWeatherForecast, fetchDayWeather } from '../services/weatherService';
 import { reorderAnchorsWithSmartTime, recalculateTransportSegment } from '../services/itineraryReorderService';
+import { enrichAirportCoords } from '../services/airportCoordsService';
 
 // TODO: [Optimized] Lazy load MapView to code-split Leaflet and map rendering dependencies
 const MapView = React.lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
@@ -131,15 +132,19 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   // Resolve representative coordinates for the active day (prefer current day's stops, fall back to trip stops)
   const dayWeatherCoords = React.useMemo(() => {
     const findCoords = (items: ItineraryItem[] = []) => {
-      const stop = items.find(
-        (i) =>
-          i.type !== 'Transport' &&
-          i.lat != null &&
-          i.lng != null &&
-          Number.isFinite(Number(i.lat)) &&
-          Number.isFinite(Number(i.lng))
-      );
-      return stop ? { lat: Number(stop.lat), lng: Number(stop.lng) } : null;
+      for (const raw of items) {
+        if (raw.type === 'Transport') continue;
+        const stop = enrichAirportCoords(raw);
+        if (
+          stop.lat != null &&
+          stop.lng != null &&
+          Number.isFinite(Number(stop.lat)) &&
+          Number.isFinite(Number(stop.lng))
+        ) {
+          return { lat: Number(stop.lat), lng: Number(stop.lng) };
+        }
+      }
+      return null;
     };
 
     const currentCoords = findCoords(currentDay?.items);
@@ -293,6 +298,11 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
      
      return ordered;
   }, [currentDay?.items]);
+
+  const mapItems = React.useMemo(
+    () => displayItems.map((item) => enrichAirportCoords(item)),
+    [displayItems]
+  );
 
   // Recalculates transport times/durations based on neighbor items
   const recalculateTransport = (prev: ItineraryItem, transport: ItineraryItem, next: ItineraryItem): ItineraryItem => {
@@ -775,7 +785,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               </div>
             }>
               <MapView
-                items={displayItems}
+                items={mapItems}
                 onAddSearchResult={handleAddSearchResult}
                 activeItemId={highlightedId}
                 onMarkerClick={(id) => { selectionSourceRef.current = 'map'; setHighlightedId(id); }}
@@ -785,7 +795,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
             {/* ── Mobile map mode: Floating Bottom Horizontal Cards Carousel (Apple Maps Style) ── */}
             {viewMode === 'map' && (() => {
-              const validItems = displayItems.filter(i =>
+              const validItems = mapItems.filter(i =>
                 i.lat != null && i.lng != null &&
                 !isNaN(Number(i.lat)) && !isNaN(Number(i.lng)) &&
                 i.type !== 'Transport'
