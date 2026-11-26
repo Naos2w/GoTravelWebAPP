@@ -54,7 +54,14 @@ export const BoardingPass: React.FC<Props> = ({ segment, passengerName = "TRAVEL
         {/* Top Airline Bar */}
         <div className="flex justify-between items-start mb-6 sm:mb-8 border-b border-black/[0.05] dark:border-white/[0.07] pb-5">
            <div className="flex items-center gap-3.5">
-             <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] rounded-2xl flex items-center justify-center p-2 shadow-sm overflow-hidden shrink-0">
+             <div
+               data-testid="airline-logo-container"
+               className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-sm overflow-hidden shrink-0 ${
+                 !logoUrl || logoError
+                   ? 'p-2 bg-slate-100 dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12]'
+                   : 'p-1.5 bg-white dark:bg-white/95 border border-black/10 dark:border-white/20'
+               }`}
+             >
                 {!logoUrl || logoError ? (
                   <div className="flex flex-col items-center justify-center gap-0.5 text-primary">
                     <Plane size={15} className="opacity-80" />

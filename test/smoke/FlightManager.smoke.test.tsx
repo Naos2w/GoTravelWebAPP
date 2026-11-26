@@ -77,6 +77,19 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     expect(screen.getByText("Alex Chen")).toBeInTheDocument();
   });
 
+  it("renders airline logo on a light surface in light and dark mode", () => {
+    render(
+      <LocalizationProvider>
+        <BoardingPass segment={mockSegment} passengerName="Alex Chen" cabinClass="Economy" />
+      </LocalizationProvider>
+    );
+
+    const container = screen.getByTestId("airline-logo-container");
+    expect(container.querySelector("img")).not.toBeNull();
+    expect(container.className).toContain("bg-white");
+    expect(container.className).toContain("dark:bg-white/95");
+  });
+
   it("renders FlightManager without crashing", () => {
     render(
       <LocalizationProvider>
