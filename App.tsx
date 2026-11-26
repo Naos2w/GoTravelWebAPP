@@ -1384,6 +1384,8 @@ const App: React.FC = () => {
     if (newFlights.length > 0) {
       newFlights[0] = { ...newFlights[0], budget: newBudget };
       updateCurrentTrip({ ...currentTrip, flights: newFlights });
+    } else {
+      updateCurrentTrip({ ...currentTrip, budget: newBudget });
     }
     setIsEditingBudget(false);
   };
@@ -1492,7 +1494,7 @@ const App: React.FC = () => {
     dockScrubStateRef.current = null;
   };
   const spentTotal = currentTrip ? calculateTripTotal(currentTrip) : 0;
-  const budgetLimit = currentTrip?.flights?.[0]?.budget || 50000;
+  const budgetLimit = currentTrip?.flights?.[0]?.budget || currentTrip?.budget || 50000;
   const budgetPercent = Math.min(100, (spentTotal / budgetLimit) * 100);
   const today = new Date();
   today.setHours(0, 0, 0, 0);

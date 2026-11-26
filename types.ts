@@ -133,6 +133,7 @@ export interface Trip {
   itinerary: DayPlan[];
   allowed_emails?: string[]; // New: List of emails allowed to view/edit
   collaborators?: Collaborator[]; // New: Mapping of user_id to email
+  budget?: number; // Starting budget for trips created without flights (budget otherwise lives on flights[0])
 }
 
 declare global {

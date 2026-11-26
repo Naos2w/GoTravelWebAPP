@@ -91,7 +91,8 @@ describe("Modals & Input Components Smoke Tests", () => {
       );
 
       expect(screen.getByText("新增旅程")).toBeInTheDocument();
-      expect(screen.getByPlaceholderText("KIX")).toBeInTheDocument();
+      // Quick Create is the default mode; see TripForm.smoke.test.tsx for full coverage
+      expect(screen.getByPlaceholderText("例如：東京 5 日遊")).toBeInTheDocument();
     });
   });
 
