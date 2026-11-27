@@ -171,6 +171,45 @@ describe("TripForm UX upgrade", () => {
     });
   });
 
+  describe("Mobile RWD layout", () => {
+    it("renders YYYY/MM/DD date fields in a single-column-on-mobile grid with a non-overlapping calendar button", () => {
+      renderForm();
+      const grid = screen.getByTestId("quick-date-grid");
+      expect(grid).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+      expect(grid).not.toHaveClass("grid-cols-2");
+
+      const inputs = screen.getAllByPlaceholderText("YYYY/MM/DD");
+      expect(inputs).toHaveLength(2);
+      fireEvent.change(inputs[0], { target: { value: "20270315" } });
+      expect(inputs[0]).toHaveValue("2027/03/15");
+      expect(inputs[0]).toHaveClass("min-w-0", "flex-1", "tabular-nums");
+      // text field and calendar button are siblings (no absolute icon over the digits)
+      const picker = screen.getAllByRole("button", { name: /pick date/i })[0];
+      expect(picker).toHaveClass("shrink-0");
+      expect(picker.parentElement).toBe(inputs[0].parentElement);
+    });
+
+    it("uses responsive grids and scrollable airport chips in flight search", () => {
+      const { container } = renderForm();
+      openFlightMode();
+      expect(screen.getByTestId("outbound-date-grid")).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+      const chips = Array.from(container.querySelectorAll('[role="group"]'));
+      expect(chips).toHaveLength(2);
+      chips.forEach(g => expect(g).toHaveClass("flex-nowrap", "sm:flex-wrap", "overflow-x-auto"));
+      expect(byId(container, "outbound-origin")).toBeInTheDocument();
+    });
+
+    it("stacks manual flight entry fields on mobile", async () => {
+      mockedFetch.mockResolvedValue([]);
+      const { container } = renderForm();
+      openFlightMode();
+      fillOutboundSearch(container);
+      await screen.findByRole("alert");
+      fireEvent.click(screen.getByRole("button", { name: /改為手動輸入航班/ }));
+      expect(screen.getByTestId("manual-flight-grid")).toHaveClass("grid-cols-1", "sm:grid-cols-2");
+    });
+  });
+
   describe("Flight import mode", () => {
     it("shows the 3-step indicator and popular airport chips", () => {
       const { container } = renderForm();

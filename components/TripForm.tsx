@@ -96,14 +96,14 @@ const SegmentRow: React.FC<{ seg: FlightSegment; onRemove?: () => void }> = ({ s
 };
 
 const AirportChips: React.FC<{ value: string; onPick: (code: string) => void; label: string }> = ({ value, onPick, label }) => (
-  <div className="flex flex-wrap gap-1 pt-1" role="group" aria-label={label}>
+  <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto no-scrollbar gap-1.5 pb-0.5 pt-1" role="group" aria-label={label}>
     {POPULAR_AIRPORTS.map(code => (
       <button
         key={code}
         type="button"
         aria-pressed={value === code}
         onClick={() => onPick(code)}
-        className={`px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider border transition-all active:scale-95 ${value === code ? 'bg-primary text-white border-primary' : 'bg-slate-50 dark:bg-white/[0.05] text-slate-400 border-slate-100 dark:border-white/[0.08] hover:text-primary'}`}
+        className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider border transition-all active:scale-95 ${value === code ? 'bg-primary text-white border-primary' : 'bg-slate-50 dark:bg-white/[0.05] text-slate-400 border-slate-100 dark:border-white/[0.08] hover:text-primary'}`}
       >
         {code}
       </button>
@@ -599,7 +599,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   const stepLabels = [t('outbound'), t('inbound'), t('review')];
 
   const renderStepIndicator = () => (
-    <ol aria-label={t('tfStepsLabel')} className="flex items-center mb-6">
+    <ol aria-label={t('tfStepsLabel')} className="flex items-center mb-6 min-w-0">
       {stepLabels.map((label, i) => {
         const done = i < stepIndex;
         const active = i === stepIndex;
@@ -608,15 +608,15 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
             <li
               aria-current={active ? 'step' : undefined}
               data-state={done ? 'done' : active ? 'active' : 'pending'}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1.5 sm:gap-2 shrink-0 whitespace-nowrap"
             >
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black tabular-nums transition-all ${active ? 'bg-primary text-white shadow-lg' : done ? 'bg-primary/15 text-primary' : 'bg-slate-100 dark:bg-white/[0.08] text-slate-400'}`}>
                 {done ? <Check size={12} strokeWidth={3} /> : i + 1}
               </span>
-              <span className={`text-xs font-black ${active ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{label}</span>
+              <span className={`text-[11px] sm:text-xs font-black whitespace-nowrap ${active ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>{label}</span>
             </li>
             {i < stepLabels.length - 1 && (
-              <div className={`flex-1 h-px mx-3 ${done ? 'bg-primary/40' : 'bg-slate-100 dark:bg-white/[0.08]'}`} />
+              <div className={`flex-1 min-w-3 h-px mx-2 sm:mx-3 ${done ? 'bg-primary/40' : 'bg-slate-100 dark:bg-white/[0.08]'}`} />
             )}
           </React.Fragment>
         );
@@ -657,9 +657,9 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
       setManualError(false);
     };
     return (
-      <div className="rounded-2xl border border-slate-100 dark:border-white/[0.08] bg-slate-50/60 dark:bg-white/[0.03] p-4 space-y-3" data-testid="manual-flight-form">
+      <div className="rounded-2xl border border-slate-100 dark:border-white/[0.08] bg-slate-50/60 dark:bg-white/[0.03] p-3 sm:p-4 space-y-3" data-testid="manual-flight-form">
         <h4 className="text-xs font-black text-slate-800 dark:text-white">{t('tfManualTitle')}</h4>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="manual-flight-grid">
           <div className="space-y-1">
             <label htmlFor="manual-airline" className={labelClass(manualError && !manual.airline.trim())}>{t('tfAirline')}</label>
             <input id="manual-airline" value={manual.airline} onChange={e => setField('airline', e.target.value)} className={inputClass(manualError && !manual.airline.trim())} />
@@ -735,24 +735,24 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         {showForm && (
           <>
             {segments.length > 0 && <div className="w-full h-px bg-slate-100 dark:bg-white/[0.08]" />}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-1 min-w-0">
                 <label htmlFor={`${dir}-origin`} className={labelClass(errors.origin)}>{labels.origin}</label>
                 <input id={`${dir}-origin`} value={origin} onChange={e => {setOrigin(e.target.value.toUpperCase()); setErrors({...errors, origin: false})}} className={inputClass(errors.origin)} placeholder="TPE" />
                 <AirportChips value={origin} label={`${t('tfPopularAirports')} · ${labels.origin}`} onPick={code => {setOrigin(code); setErrors({...errors, origin: false})}} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <label htmlFor={`${dir}-destination`} className={labelClass(errors.destination)}>{labels.destination}</label>
                 <input id={`${dir}-destination`} value={destination} onChange={e => {setDestination(e.target.value.toUpperCase()); setErrors({...errors, destination: false})}} className={inputClass(errors.destination)} placeholder="KIX" />
                 <AirportChips value={destination} label={`${t('tfPopularAirports')} · ${labels.destination}`} onPick={code => {setDestination(code); setErrors({...errors, destination: false})}} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" data-testid={`${dir}-date-grid`}>
+              <div className="space-y-1 min-w-0">
                 <label className={labelClass(errors[dateKey])}>{labels.date}</label>
                 <SegmentedDateInput value={date} onChange={val => {setDate(val); setErrors({...errors, [dateKey]: false})}} hasError={errors[dateKey]} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <label htmlFor={`${dir}-flight-number`} className={labelClass(errors[fnKey])}>{labels.flightNo}</label>
                 <input id={`${dir}-flight-number`} value={flightNo} onChange={e => {setFlightNo(e.target.value.toUpperCase()); setErrors({...errors, [fnKey]: false})}} className={inputClass(errors[fnKey])} placeholder={isOut ? 'BR198' : 'BR197'} />
               </div>
@@ -818,13 +818,13 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
         <input id="trip-name" value={tripName} onChange={e => { setTripName(e.target.value); setQuickErrors({ ...quickErrors, tripName: '' }); }} className={inputClass(!!quickErrors.tripName)} placeholder={t('tfTripNamePlaceholder')} autoFocus />
         {quickErrors.tripName && <p className="text-[11px] font-black text-red-500">{quickErrors.tripName}</p>}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" data-testid="quick-date-grid">
+        <div className="space-y-1 min-w-0">
           <label className={labelClass(!!quickErrors.startDate)}>{t('tfStartDate')}</label>
           <SegmentedDateInput value={startDate} onChange={val => { setStartDate(val); setQuickErrors({ ...quickErrors, startDate: '', endDate: '' }); }} hasError={!!quickErrors.startDate} />
           {quickErrors.startDate && <p className="text-[11px] font-black text-red-500">{quickErrors.startDate}</p>}
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 min-w-0">
           <label className={labelClass(!!quickErrors.endDate)}>{t('tfEndDate')}</label>
           <SegmentedDateInput value={endDate} onChange={val => { setEndDate(val); setQuickErrors({ ...quickErrors, endDate: '' }); }} hasError={!!quickErrors.endDate} />
           {quickErrors.endDate && <p className="text-[11px] font-black text-red-500">{quickErrors.endDate}</p>}
@@ -886,11 +886,11 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
   return (
     <div
       data-testid="trip-form-backdrop"
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div role="dialog" aria-modal="true" aria-label={labels.title} className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-8 pb-5 border-b border-gray-100 dark:border-white/[0.08] space-y-5">
+        <div className="p-5 sm:p-8 pb-4 sm:pb-5 border-b border-gray-100 dark:border-white/[0.08] space-y-5">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">{labels.title}</h2>
             <button type="button" onClick={onClose} aria-label={t('tfClose')} className="p-3 hover:bg-gray-100 dark:hover:bg-white/[0.08] rounded-full text-slate-400"><X size={20} /></button>
@@ -910,7 +910,7 @@ export const TripForm: React.FC<Props> = ({ onClose, onSubmit }) => {
             ))}
           </div>
         </div>
-        <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="p-5 sm:p-8 flex-1 min-w-0 overflow-y-auto overflow-x-hidden custom-scrollbar">
           {mode === 'quick' ? renderQuickMode() : (
             <>
               {renderStepIndicator()}
