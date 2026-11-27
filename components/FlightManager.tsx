@@ -26,10 +26,12 @@ import {
   AlertCircle,
   Briefcase,
   Luggage,
+  Printer,
   ArrowRight,
 } from "lucide-react";
 import { fetchTdxFlights } from "../services/tdxService";
 import { BoardingPass } from "./BoardingPass";
+import { BoardingPassIssueModal } from "./BoardingPassIssueModal";
 import { SegmentedDateInput } from "./SegmentedDateInput";
 import { DateTimeUtils } from "../services/dateTimeUtils";
 import { useTranslation } from "../contexts/LocalizationContext";
@@ -636,6 +638,7 @@ export const FlightManager: React.FC<Props> = ({
     inbound: { carryOn?: boolean; checked?: boolean };
   }>({ outbound: {}, inbound: {} });
   const [showManualDetails, setShowManualDetails] = useState(false);
+  const [previewFlight, setPreviewFlight] = useState<FlightInfo | null>(null);
 
   const isOwner = trip.user_id === currentUser?.id || !trip.user_id;
   const [isSyncingWithOwner, setIsSyncingWithOwner] = useState(false);
@@ -1652,6 +1655,17 @@ export const FlightManager: React.FC<Props> = ({
                         <span className="opacity-70 font-bold">({t("you")})</span>
                       )}
                     </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="replay-boarding-pass-btn"
+                        onClick={() => setPreviewFlight(flight)}
+                        aria-label={t("bpPreviewAnimation")}
+                        className="px-3.5 py-1.5 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
+                      >
+                        <Printer size={13} />
+                        <span>{t("bpPreviewAnimation")}</span>
+                      </button>
                     {flight.user_id === currentUser?.id && (
                       <button
                         onClick={() => startEdit(flight)}
@@ -1662,6 +1676,7 @@ export const FlightManager: React.FC<Props> = ({
                         <span>{t("edit")}</span>
                       </button>
                     )}
+                    </div>
                   </div>
                   <div className="space-y-4">
                     {renderFlightBoardingPasses(
@@ -1685,6 +1700,14 @@ export const FlightManager: React.FC<Props> = ({
             </div>
           )}
         </div>
+      )}
+
+      {previewFlight && (
+        <BoardingPassIssueModal
+          flight={previewFlight}
+          previewMode
+          onContinue={() => setPreviewFlight(null)}
+        />
       )}
 
       {isSelectorOpen && (

@@ -104,6 +104,23 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
   });
 
+  it("opens the boarding pass print animation from the Print Pass button and closes it cleanly", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={mockTrip} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    expect(screen.queryByTestId("boarding-pass-issue-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("replay-boarding-pass-btn"));
+    expect(screen.getByTestId("boarding-pass-issue-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("boarding-pass-continue").textContent).toMatch(/關閉預覽|Close Preview/);
+
+    fireEvent.click(screen.getByTestId("boarding-pass-continue"));
+    expect(screen.queryByTestId("boarding-pass-issue-modal")).toBeNull();
+    expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
+  });
+
   it("auto-opens edit mode, focuses ticket price, updates baggage on cabin change, and calls onGuidedPriceSaved", () => {
     const onUpdate = vi.fn();
     const onGuidedPriceSaved = vi.fn();

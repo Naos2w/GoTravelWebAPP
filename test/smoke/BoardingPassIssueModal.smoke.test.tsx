@@ -139,6 +139,55 @@ describe("BoardingPassIssueModal Smoke Tests", () => {
     expect(screen.getByTestId("boarding-pass-status").textContent).toContain("✓");
   });
 
+  it("renders carry-on (Briefcase) and checked (Luggage) icon badges on desktop and mobile passes", () => {
+    render(
+      <LocalizationProvider>
+        <BoardingPassIssueModal flight={roundTripFlight} onContinue={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const carryOn = screen.getAllByTestId("bp-baggage-carryon");
+    const checked = screen.getAllByTestId("bp-baggage-checked");
+    // 2 passes x (desktop + mobile)
+    expect(carryOn).toHaveLength(4);
+    expect(checked).toHaveLength(4);
+    carryOn.forEach((el) => {
+      expect(el.querySelector("svg.lucide-briefcase")).not.toBeNull();
+      expect(el.textContent).toContain("1×7kg");
+      expect(el.className).toContain("tabular-nums");
+    });
+    checked.forEach((el) => {
+      expect(el.querySelector("svg.lucide-luggage")).not.toBeNull();
+      expect(el.textContent).toContain("1×23kg");
+    });
+  });
+
+  it("renders a muted 0 checked badge for low-cost carriers with no checked bag", () => {
+    const lccFlight: FlightInfo = {
+      ...oneWayFlight,
+      baggage: { carryOn: { count: 2, weight: "7kg" }, checked: { count: 0, weight: "0kg" } },
+    };
+    render(
+      <LocalizationProvider>
+        <BoardingPassIssueModal flight={lccFlight} onContinue={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const checked = screen.getAllByTestId("bp-baggage-checked")[0];
+    expect(checked.textContent).toBe("0");
+    expect(checked.className).toContain("text-slate-400");
+    expect(screen.getAllByTestId("bp-baggage-carryon")[0].textContent).toContain("2×7kg");
+  });
+
+  it("uses a close-preview CTA in previewMode", () => {
+    render(
+      <LocalizationProvider>
+        <BoardingPassIssueModal flight={oneWayFlight} onContinue={vi.fn()} previewMode />
+      </LocalizationProvider>
+    );
+    expect(screen.getByTestId("boarding-pass-continue").textContent).toMatch(/關閉預覽|Close Preview/);
+  });
+
   it("expands multi-segment layover flights into individual boarding passes", () => {
     render(
       <LocalizationProvider>

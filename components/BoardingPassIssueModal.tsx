@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CheckCircle2, Plane } from 'lucide-react';
-import { FlightInfo, FlightSegment } from '../types';
+import { ArrowRight, Briefcase, CheckCircle2, Luggage, Plane } from 'lucide-react';
+import { BaggageInfo, FlightInfo, FlightSegment } from '../types';
 import { DateTimeUtils } from '../services/dateTimeUtils';
-import { formatBaggageSummary } from '../services/airlineBaggageService';
 import { useTranslation } from '../contexts/LocalizationContext';
 
 export const STAGGER_MS = 850;
@@ -50,7 +49,58 @@ interface Props {
   onContinue: () => void;
   /** Optional override for total auto-advance delay in ms. Defaults to sequential print time + 2200ms dwell. */
   durationMs?: number;
+  /** Replay mode (e.g. from the Flights tab): the CTA reads "Close preview" instead of "View itinerary". */
+  previewMode?: boolean;
 }
+
+interface BaggagePillProps {
+  testId: string;
+  icon: React.ReactNode;
+  label: string;
+  allowance?: { count: number; weight: string };
+}
+
+/** Apple Wallet-style baggage pill: icon + "count×weight" (muted "0" when nothing is included). */
+const BaggagePill: React.FC<BaggagePillProps> = ({ testId, icon, label, allowance }) => {
+  const included = !!allowance && allowance.count > 0;
+  const text = included ? `${allowance!.count}×${allowance!.weight || ''}`.trim() : '0';
+  return (
+    <span
+      data-testid={testId}
+      title={`${label} ${text}`}
+      aria-label={`${label} ${text}`}
+      className={`inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-full border text-[11px] font-black leading-none tabular-nums whitespace-nowrap ${
+        included
+          ? 'bg-slate-900/[0.06] border-slate-900/10 text-slate-800 dark:bg-white/[0.12] dark:border-white/20 dark:text-white'
+          : 'bg-transparent border-slate-300/70 text-slate-400 dark:border-white/15 dark:text-slate-500'
+      }`}
+    >
+      <span className="shrink-0 inline-flex" aria-hidden="true">{icon}</span>
+      <span className="truncate">{text}</span>
+    </span>
+  );
+};
+
+const BaggageBadges: React.FC<{ baggage?: BaggageInfo; carryOnLabel: string; checkedLabel: string }> = ({
+  baggage,
+  carryOnLabel,
+  checkedLabel,
+}) => (
+  <div data-testid="boarding-pass-baggage" className="flex flex-wrap items-center gap-1.5 min-w-0">
+    <BaggagePill
+      testId="bp-baggage-carryon"
+      icon={<Briefcase size={11} />}
+      label={carryOnLabel}
+      allowance={baggage?.carryOn}
+    />
+    <BaggagePill
+      testId="bp-baggage-checked"
+      icon={<Luggage size={11} />}
+      label={checkedLabel}
+      allowance={baggage?.checked}
+    />
+  </div>
+);
 
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' &&
@@ -122,7 +172,7 @@ const PerforatedLine: React.FC<{ vertical?: boolean }> = ({ vertical }) => (
   </div>
 );
 
-export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, durationMs }) => {
+export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, durationMs, previewMode = false }) => {
   const { t, language } = useTranslation();
   const doneRef = useRef(false);
   const onContinueRef = useRef(onContinue);
@@ -201,11 +251,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
     const date = seg.departureTime.split('T')[0];
     const dep = DateTimeUtils.formatTime24(seg.departureTime);
     const arr = DateTimeUtils.formatTime24(seg.arrivalTime);
-    const baggage = formatBaggageSummary(flight.baggage || seg.baggage, {
-      carryOn: t('carryOn'),
-      checked: t('checked'),
-      none: t('bpNoBaggage'),
-    });
+    const baggage = flight.baggage || seg.baggage;
 
     const isOutbound = item.direction === 'outbound';
     const dirLabel = isOutbound ? t('outbound') : t('inbound');
@@ -297,12 +343,11 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
             {flight.cabinClass}
           </div>
-          <div
-            data-testid="boarding-pass-baggage"
-            className="text-xs font-black text-slate-700 dark:text-slate-200 leading-snug tabular-nums"
-          >
-            {baggage}
-          </div>
+          <BaggageBadges
+            baggage={baggage}
+            carryOnLabel={t('carryOn')}
+            checkedLabel={t('checked')}
+          />
         </div>
         {!reduced && (
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -398,7 +443,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
             className="w-full bg-white text-slate-900 py-3.5 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
             autoFocus
           >
-            {t('bpViewItinerary')}
+            {previewMode ? t('bpClosePreview') : t('bpViewItinerary')}
           </button>
         </div>
       </div>
