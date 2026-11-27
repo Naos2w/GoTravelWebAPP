@@ -70,6 +70,7 @@ const isItineraryItemEqual = (
     (a.lat ?? null) === (b.lat ?? null) &&
     (a.lng ?? null) === (b.lng ?? null) &&
     (a.note ?? "") === (b.note ?? "") &&
+    (a.googleMapsUrl ?? "") === (b.googleMapsUrl ?? "") &&
     (a.transportType ?? null) === (b.transportType ?? null)
   );
 };

@@ -39,6 +39,17 @@ import { LoginModal } from "../shared/components/LoginModal";
 import { DeleteTripModal } from "../features/trips/DeleteTripModal";
 import { ExportModal } from "../features/trips/ExportModal";
 import {
+  InstallPwaPromptModal,
+  usePwaInstall,
+} from "../shared/components/InstallPwaPrompt";
+import { ShareTargetModal } from "../shared/components/ShareTargetModal";
+import {
+  cleanPwaLaunchUrl,
+  parsePwaLaunchIntent,
+  pickBestTripForShortcut,
+  PwaLaunchIntent,
+} from "../shared/services/pwaService";
+import {
   Plane,
   Calendar,
   CheckSquare,
@@ -111,7 +122,17 @@ const App: React.FC = () => {
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isInstallPwaOpen, setIsInstallPwaOpen] = useState(false);
+  const [pendingPwaIntent, setPendingPwaIntent] = useState<PwaLaunchIntent>(
+    () => parsePwaLaunchIntent()
+  );
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null);
+  const {
+    env: pwaEnv,
+    isStandalone: isPwaStandalone,
+    canNativeInstall,
+    triggerNativeInstall,
+  } = usePwaInstall();
   const [profileMenuOpen, setProfileMenuOpen] = useState<
     "desktop" | "mobile" | null
   >(null);
@@ -306,6 +327,26 @@ const App: React.FC = () => {
     if (idx !== -1) prevTabIndexRef.current = idx;
   }, [activeTab]);
 
+  // Handle PWA launch intents: Home Screen shortcuts (?shortcut=today|expenses|flights)
+  useEffect(() => {
+    if (isLoading || !pendingPwaIntent) return;
+
+    if (pendingPwaIntent.type === "shortcut") {
+      if (!user) return;
+      if (trips.length === 0) return;
+
+      const targetTrip = pickBestTripForShortcut(trips, currentTripId);
+      if (targetTrip) {
+        navigateToTrip(targetTrip.id);
+        selectTabWithDirection(pendingPwaIntent.tab);
+      }
+      cleanPwaLaunchUrl(
+        targetTrip ? `/trips/${encodeURIComponent(targetTrip.id)}` : "/trips"
+      );
+      setPendingPwaIntent(null);
+    }
+  }, [isLoading, pendingPwaIntent, user, trips, currentTripId, navigateToTrip]);
+
   const {
     isDeletingTrip,
     updateCurrentTrip,
@@ -428,6 +469,8 @@ const App: React.FC = () => {
       onLogout={handleLogout}
       onOpenLogin={() => setIsLoginModalOpen(true)}
       onCloseMenu={() => setProfileMenuOpen(null)}
+      onOpenInstallPwa={() => setIsInstallPwaOpen(true)}
+      isPwaStandalone={isPwaStandalone}
     />
   );
 
@@ -683,6 +726,52 @@ const App: React.FC = () => {
             redirectTripId={pendingTripId || currentTripId}
             reason={loginReason}
           />
+
+          <InstallPwaPromptModal
+            isOpen={isInstallPwaOpen}
+            onClose={() => setIsInstallPwaOpen(false)}
+            canNativeInstall={canNativeInstall}
+            onNativeInstall={triggerNativeInstall}
+            envOverride={pwaEnv}
+          />
+
+          {pendingPwaIntent?.type === "share-target" && user && (
+            <ShareTargetModal
+              isOpen={true}
+              initialTitle={pendingPwaIntent.title}
+              initialText={pendingPwaIntent.text}
+              initialUrl={
+                pendingPwaIntent.extractedUrl || pendingPwaIntent.url
+              }
+              trips={trips}
+              defaultTripId={currentTripId}
+              currentUserId={user.id}
+              onSave={(updatedTrip, savedItem) => {
+                updateCurrentTrip(updatedTrip, "ADD_ITINERARY_ITEM");
+                navigateToTrip(updatedTrip.id);
+                selectTabWithDirection("itinerary");
+                setNotification({
+                  message: t("pwaShareSavedToast").replace(
+                    "{name}",
+                    savedItem.placeName
+                  ),
+                  type: "success",
+                });
+                cleanPwaLaunchUrl(
+                  `/trips/${encodeURIComponent(updatedTrip.id)}`
+                );
+                setPendingPwaIntent(null);
+              }}
+              onClose={() => {
+                cleanPwaLaunchUrl(
+                  currentTripId
+                    ? `/trips/${encodeURIComponent(currentTripId)}`
+                    : "/trips"
+                );
+                setPendingPwaIntent(null);
+              }}
+            />
+          )}
         </div>
       </ErrorBoundary>
     </LocalizationProvider>
