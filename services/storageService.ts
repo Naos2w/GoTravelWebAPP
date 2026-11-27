@@ -102,6 +102,69 @@ export interface DbTripRow {
   }[];
 }
 
+export const mapDbItineraryRow = (it: any): ItineraryItem => ({
+  id: it.id,
+  trip_id: it.trip_id,
+  user_id: it.user_id,
+  time: it.time,
+  placeName: it.place_name,
+  lat: it.lat,
+  lng: it.lng,
+  note: it.note,
+  type: it.type,
+  transportType: it.transport_type,
+  date: it.date,
+});
+
+export const mapDbFlightRow = (f: any): FlightInfo => ({
+  id: f.id,
+  user_id: f.user_id,
+  traveler_name: f.traveler_name,
+  outbound: f.outbound,
+  inbound: f.inbound,
+  price: f.price,
+  currency: f.currency,
+  exchangeRate:
+    typeof f.baggage?.exchangeRate === "number" && f.baggage.exchangeRate > 0
+      ? f.baggage.exchangeRate
+      : undefined,
+  cabinClass: f.cabin_class,
+  baggage: f.baggage,
+  budget: f.budget,
+});
+
+export const mapDbChecklistRow = (ci: any): ChecklistItem => ({
+  id: ci.id,
+  ...(ci.trip_id !== undefined ? { trip_id: ci.trip_id } : {}),
+  user_id: ci.user_id,
+  text: ci.text,
+  isCompleted: ci.is_completed,
+  category: ci.category,
+});
+
+export const mapDbExpenseRow = (ex: any): Expense => {
+  const splitMeta = decodeExpenseSplitMeta(ex.note);
+  return {
+    id: ex.id,
+    ...(ex.trip_id !== undefined ? { trip_id: ex.trip_id } : {}),
+    user_id: ex.user_id,
+    user_name: ex.user_name,
+    amount: typeof ex.amount === "string" ? parseFloat(ex.amount) : ex.amount,
+    currency: ex.currency,
+    category: ex.category,
+    date: ex.date,
+    note: splitMeta.note,
+    ...(splitMeta.paidBy ? { paidBy: splitMeta.paidBy } : {}),
+    ...(splitMeta.paidByName ? { paidByName: splitMeta.paidByName } : {}),
+    ...(splitMeta.splitWith ? { splitWith: splitMeta.splitWith } : {}),
+    exchangeRate:
+      typeof ex.exchange_rate === "string"
+        ? parseFloat(ex.exchange_rate)
+        : ex.exchange_rate,
+    createdAt: ex.created_at,
+  };
+};
+
 export const transformTripRow = (row: DbTripRow): Trip => {
   const start = new Date(row.start_date + "T00:00:00");
   const end = new Date(row.end_date + "T00:00:00");
@@ -120,19 +183,7 @@ export const transformTripRow = (row: DbTripRow): Trip => {
 
   (row.itinerary_items || []).forEach((it: any) => {
     if (itineraryMap[it.date]) {
-      itineraryMap[it.date].push({
-        id: it.id,
-        trip_id: it.trip_id,
-        user_id: it.user_id,
-        time: it.time,
-        placeName: it.place_name,
-        lat: it.lat,
-        lng: it.lng,
-        note: it.note,
-        type: it.type,
-        transportType: it.transport_type,
-        date: it.date,
-      });
+      itineraryMap[it.date].push(mapDbItineraryRow(it));
     }
   });
 
@@ -160,49 +211,9 @@ export const transformTripRow = (row: DbTripRow): Trip => {
       email: c.email || "",
       role: c.role,
     })),
-    flights: (row.flights || []).map((f: any) => ({
-      id: f.id,
-      user_id: f.user_id,
-      traveler_name: f.traveler_name,
-      outbound: f.outbound,
-      inbound: f.inbound,
-      price: f.price,
-      currency: f.currency,
-      exchangeRate:
-        typeof f.baggage?.exchangeRate === "number" && f.baggage.exchangeRate > 0
-          ? f.baggage.exchangeRate
-          : undefined,
-      cabinClass: f.cabin_class,
-      baggage: f.baggage,
-      budget: f.budget,
-    })),
-    checklist: (row.checklist_items || []).map((ci: any) => ({
-      id: ci.id,
-      user_id: ci.user_id,
-      text: ci.text,
-      isCompleted: ci.is_completed,
-      category: ci.category,
-    })),
-    expenses: (row.expenses || []).map((ex: any) => {
-      const splitMeta = decodeExpenseSplitMeta(ex.note);
-      return {
-        id: ex.id,
-        user_id: ex.user_id,
-        user_name: ex.user_name,
-        // TODO: [Type Safety] Prevent parseFloat crash if amount is already a parsed number from DB
-        amount: typeof ex.amount === "string" ? parseFloat(ex.amount) : ex.amount,
-        currency: ex.currency,
-        category: ex.category,
-        date: ex.date,
-        note: splitMeta.note,
-        ...(splitMeta.paidBy ? { paidBy: splitMeta.paidBy } : {}),
-        ...(splitMeta.paidByName ? { paidByName: splitMeta.paidByName } : {}),
-        ...(splitMeta.splitWith ? { splitWith: splitMeta.splitWith } : {}),
-        // TODO: [Type Safety] Prevent parseFloat crash if exchange_rate is already a parsed number from DB
-        exchangeRate: typeof ex.exchange_rate === "string" ? parseFloat(ex.exchange_rate) : ex.exchange_rate,
-        createdAt: ex.created_at,
-      };
-    }),
+    flights: (row.flights || []).map(mapDbFlightRow),
+    checklist: (row.checklist_items || []).map(mapDbChecklistRow),
+    expenses: (row.expenses || []).map(mapDbExpenseRow),
     itinerary,
   };
 };
@@ -436,7 +447,7 @@ export const saveExpenseOnly = async (
     currency: expense.currency,
     category: expense.category,
     date: expense.date,
-    note: expense.note,
+    note: encodeExpenseSplitMeta(expense),
     exchange_rate: expense.exchangeRate,
   };
 
@@ -444,7 +455,42 @@ export const saveExpenseOnly = async (
   if (error) throw error;
 };
 
-const buildFlightRowPayload = (
+export const buildItineraryRowPayload = (
+  item: ItineraryItem & { date: string },
+  tripId: string,
+  fallbackUserId: string
+) => ({
+  id: item.id,
+  trip_id: tripId,
+  user_id: item.user_id || fallbackUserId,
+  date: item.date,
+  time: item.time,
+  type: item.type,
+  place_name: item.placeName,
+  lat: item.lat,
+  lng: item.lng,
+  note: item.note,
+  transport_type: item.transportType,
+});
+
+export const buildExpenseRowPayload = (
+  e: Expense,
+  tripId: string,
+  fallbackUserId: string
+) => ({
+  id: e.id,
+  trip_id: tripId,
+  user_id: e.user_id || fallbackUserId,
+  user_name: e.user_name,
+  amount: e.amount,
+  currency: e.currency,
+  category: e.category,
+  date: e.date,
+  note: encodeExpenseSplitMeta(e),
+  exchange_rate: e.exchangeRate,
+});
+
+export const buildFlightRowPayload = (
   f: FlightInfo,
   tripId: string,
   fallbackUserId: string
@@ -465,150 +511,162 @@ const buildFlightRowPayload = (
   budget: f.budget || 0,
 });
 
+export const upsertItineraryItems = async (
+  tripId: string,
+  userId: string,
+  items: Array<ItineraryItem & { date: string }>
+): Promise<void> => {
+  if (!items || items.length === 0) return;
+  const payloads = items.map((item) =>
+    buildItineraryRowPayload(item, tripId, userId)
+  );
+  const { error } = await supabase.from("itinerary_items").upsert(payloads);
+  if (error) {
+    console.error("Failed to upsert itinerary items:", error);
+    throw error;
+  }
+};
+
+export const upsertExpense = async (
+  tripId: string,
+  userId: string,
+  expense: Expense
+): Promise<void> => {
+  const payload = buildExpenseRowPayload(expense, tripId, userId);
+  const { error } = await supabase.from("expenses").upsert(payload);
+  if (error) {
+    console.error("Failed to upsert expense:", error);
+    throw error;
+  }
+};
+
+export const upsertFlight = async (
+  tripId: string,
+  userId: string,
+  flight: FlightInfo
+): Promise<void> => {
+  const payload = buildFlightRowPayload(flight, tripId, userId);
+  const { error } = await supabase.from("flights").upsert(payload);
+  if (error) {
+    console.error("Failed to upsert flight:", error);
+    throw error;
+  }
+};
+
+export const deleteFlight = async (
+  id: string,
+  tripId: string
+): Promise<void> => {
+  const { error } = await supabase
+    .from("flights")
+    .delete()
+    .eq("id", id)
+    .eq("trip_id", tripId);
+  if (error) {
+    console.error("Failed to delete flight:", error);
+    throw error;
+  }
+};
+
+export const upsertChecklistItems = async (
+  tripId: string,
+  userId: string,
+  items: ChecklistItem[]
+): Promise<void> => {
+  if (!items || items.length === 0) return;
+  const payloads = items.map((c) => ({
+    id: c.id,
+    trip_id: tripId,
+    user_id: c.user_id || userId,
+    text: c.text,
+    category: c.category,
+    is_completed: c.isCompleted || false,
+  }));
+  const { error } = await supabase.from("checklist_items").upsert(payloads);
+  if (error) {
+    console.error("Failed to upsert checklist items:", error);
+    throw error;
+  }
+};
+
+export const updateTripMeta = async (
+  tripId: string,
+  patch: Partial<{
+    name: string;
+    destination: string;
+    startDate: string;
+    endDate: string;
+    allowed_emails: string[];
+  }>
+): Promise<void> => {
+  const payload: Record<string, any> = {};
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.destination !== undefined) payload.destination = patch.destination;
+  if (patch.startDate !== undefined) payload.start_date = patch.startDate;
+  if (patch.endDate !== undefined) payload.end_date = patch.endDate;
+  if (patch.allowed_emails !== undefined) {
+    payload.allowed_emails = patch.allowed_emails.map((e) => e.toLowerCase());
+  }
+  if (Object.keys(payload).length === 0) return;
+
+  const { error } = await supabase
+    .from("trips")
+    .update(payload)
+    .eq("id", tripId);
+  if (error) {
+    console.error("Failed to update trip metadata:", error);
+    throw error;
+  }
+};
+
 export const saveTrip = async (trip: Trip, userId: string): Promise<void> => {
   if (!userId || SUPABASE_URL.includes("placeholder"))
     throw new Error("Database configuration missing.");
 
   // 1. Checklist Items (Upsert First)
   if (trip.checklist && trip.checklist.length > 0) {
-    const checkPayloads = trip.checklist.map((c) => ({
-      id: c.id,
-      trip_id: trip.id,
-      user_id: c.user_id || userId,
-      text: c.text,
-      category: c.category,
-      is_completed: c.isCompleted || false,
-    }));
-    const { error: cErr } = await supabase
-      .from("checklist_items")
-      .upsert(checkPayloads);
-    if (cErr) {
-      console.error("Failed to upsert checklist:", cErr);
-      // TODO: [Error Handling] Propagate database error to UI instead of silently eating it
-      throw cErr;
-    }
+    await upsertChecklistItems(trip.id, userId, trip.checklist);
   }
 
-  // 2. Itinerary Items
+  // 2. Itinerary Items (Upsert only — never delete DB rows unseen locally to prevent lost updates)
   if (trip.itinerary) {
-    const itineraryPayloads: any[] = [];
-    const keepItineraryIds = new Set<string>();
+    const itineraryItems: Array<ItineraryItem & { date: string }> = [];
     trip.itinerary.forEach((day) => {
       day.items.forEach((item) => {
-        keepItineraryIds.add(item.id);
-        itineraryPayloads.push({
-          id: item.id,
-          trip_id: trip.id,
-          user_id: item.user_id || userId,
-          date: day.date,
-          time: item.time,
-          type: item.type,
-          place_name: item.placeName,
-          lat: item.lat,
-          lng: item.lng,
-          note: item.note,
-          transport_type: item.transportType,
-        });
+        itineraryItems.push({ ...item, date: day.date });
       });
     });
 
-    try {
-      const { data: dbItems, error: fetchErr } = await supabase
-        .from("itinerary_items")
-        .select("id")
-        .eq("trip_id", trip.id);
-
-      if (!fetchErr && dbItems) {
-        const dbIds = dbItems.map((it: any) => it.id);
-        const toDeleteIds = dbIds.filter((id: string) => !keepItineraryIds.has(id));
-        if (toDeleteIds.length > 0) {
-          const { error: deleteErr } = await supabase
-            .from("itinerary_items")
-            .delete()
-            .in("id", toDeleteIds);
-          if (deleteErr) {
-            console.error("Failed to delete stale itinerary items:", deleteErr);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Stale itinerary cleanup query failed:", err);
-    }
-
-    if (itineraryPayloads.length > 0) {
-      const { error: iErr } = await supabase.from("itinerary_items").upsert(itineraryPayloads);
-      if (iErr) {
-        console.error("Failed to upsert itinerary:", iErr);
-        // TODO: [Error Handling] Propagate database error to UI
-        throw iErr;
-      }
+    if (itineraryItems.length > 0) {
+      await upsertItineraryItems(trip.id, userId, itineraryItems);
     }
   }
 
-  // 3. Flights
-  if (trip.flights) {
-    const keepFlightIds = new Set(trip.flights.map((f) => f.id));
-    try {
-      const { data: dbFlights, error: fetchFErr } = await supabase
-        .from("flights")
-        .select("id")
-        .eq("trip_id", trip.id);
-
-      if (!fetchFErr && dbFlights) {
-        const dbFlightIds = dbFlights.map((f: any) => f.id);
-        const toDeleteFlightIds = dbFlightIds.filter((id: string) => !keepFlightIds.has(id));
-        if (toDeleteFlightIds.length > 0) {
-          const { error: deleteFErr } = await supabase
-            .from("flights")
-            .delete()
-            .in("id", toDeleteFlightIds);
-          if (deleteFErr) {
-            console.error("Failed to delete stale flights:", deleteFErr);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Stale flights cleanup query failed:", err);
-    }
-
-    if (trip.flights.length > 0) {
-      const flightPayloads = trip.flights.map((f) =>
-        buildFlightRowPayload(f, trip.id, userId)
-      );
-      const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
-      if (fErr) {
-        console.error("Failed to upsert flights:", fErr);
-        // TODO: [Error Handling] Propagate database error to UI
-        throw fErr;
-      }
+  // 3. Flights (Upsert only — deletions use deleteFlight)
+  if (trip.flights && trip.flights.length > 0) {
+    const flightPayloads = trip.flights.map((f) =>
+      buildFlightRowPayload(f, trip.id, userId)
+    );
+    const { error: fErr } = await supabase.from("flights").upsert(flightPayloads);
+    if (fErr) {
+      console.error("Failed to upsert flights:", fErr);
+      throw fErr;
     }
   }
 
   // 4. Expenses
   if (trip.expenses && trip.expenses.length > 0) {
-    const expensePayloads = trip.expenses.map((e) => ({
-      id: e.id,
-      trip_id: trip.id,
-      user_id: e.user_id,
-      user_name: e.user_name,
-      amount: e.amount,
-      currency: e.currency,
-      category: e.category,
-      date: e.date,
-      note: encodeExpenseSplitMeta(e),
-      exchange_rate: e.exchangeRate,
-    }));
+    const expensePayloads = trip.expenses.map((e) =>
+      buildExpenseRowPayload(e, trip.id, userId)
+    );
     const { error: eErr } = await supabase.from("expenses").upsert(expensePayloads);
     if (eErr) {
       console.error("Failed to upsert expenses:", eErr);
-      // TODO: [Error Handling] Propagate database error to UI
       throw eErr;
     }
   }
 
-  // 4. Trip Meta (Last)
-  // Updating this last ensures that if the 'trips' update triggers a refetch in the client,
-  // the child data above has likely already been committed.
+  // 5. Trip Meta (Last)
   const { error: tripError } = await supabase.from("trips").upsert({
     id: trip.id,
     user_id: trip.user_id || userId,

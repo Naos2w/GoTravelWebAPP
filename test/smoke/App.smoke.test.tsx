@@ -5,12 +5,17 @@ import { render, screen, waitFor, act, fireEvent, within } from "@testing-librar
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
 // Mock supabase client to avoid external network calls during smoke tests
-vi.mock("../../services/storageService", () => {
+vi.mock("../../services/storageService", async () => {
+  const actual = await vi.importActual<typeof import("../../services/storageService")>(
+    "../../services/storageService"
+  );
   const mockChannel = {
     on: vi.fn().mockReturnThis(),
     subscribe: vi.fn().mockReturnThis(),
+    send: vi.fn().mockResolvedValue("ok"),
   };
   return {
+    ...actual,
     supabase: {
       auth: {
         getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
@@ -43,19 +48,45 @@ vi.mock("../../services/storageService", () => {
     saveTrip: vi.fn().mockResolvedValue(undefined),
     deleteTrip: vi.fn().mockResolvedValue(undefined),
     leaveTrip: vi.fn().mockResolvedValue(undefined),
+    deleteExpense: vi.fn().mockResolvedValue(undefined),
+    deleteItineraryItem: vi.fn().mockResolvedValue(undefined),
+    deleteFlight: vi.fn().mockResolvedValue(undefined),
+    deleteChecklistItem: vi.fn().mockResolvedValue(undefined),
     updateChecklistItem: vi.fn().mockResolvedValue(undefined),
     addChecklistItem: vi.fn().mockResolvedValue(undefined),
+    upsertItineraryItems: vi.fn().mockResolvedValue(undefined),
+    upsertExpense: vi.fn().mockResolvedValue(undefined),
+    upsertFlight: vi.fn().mockResolvedValue(undefined),
+    upsertChecklistItems: vi.fn().mockResolvedValue(undefined),
+    updateTripMeta: vi.fn().mockResolvedValue(undefined),
     isSupabaseConfigured: vi.fn().mockReturnValue(true),
   };
 });
 
 // Mock leaflet & MapView to avoid canvas/DOM errors in jsdom
 vi.mock("../../components/MapView", () => ({
-  MapView: () => <div data-testid="mock-map-view">Mock Map</div>,
+  MapView: ({ onAddSearchResult }: any) => (
+    <div data-testid="mock-map-view">
+      Mock Map
+      {onAddSearchResult && (
+        <button
+          type="button"
+          data-testid="mock-map-add-stop"
+          onClick={() => onAddSearchResult("Fushimi Inari", undefined, undefined)}
+        >
+          Mock Add Stop
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 vi.mock("../../services/tdxService", () => ({
   fetchTdxFlights: vi.fn(),
+}));
+
+vi.mock("../../services/searchPlaceService", () => ({
+  searchFreePlaces: vi.fn().mockResolvedValue([]),
 }));
 
 import App from "../../App";
@@ -884,6 +915,784 @@ describe("App Component (Smoke Test)", () => {
       expect(window.location.pathname).toBe("/trips");
       expect(screen.getAllByRole("heading", { name: "Taipei Weekend" })).toHaveLength(1);
     });
+  });
+
+  it("patches itinerary_items, expenses, and flights incrementally via Realtime without triggering 6-table refetch and ignores unrelated DELETE IDs", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+
+    type HandlerKey = `${string}:${string}`;
+    const activeHandlers = new Map<HandlerKey, (payload: any) => void>();
+    let activeSubscribeCb: ((status: string) => void) | null = null;
+
+    const activeChannel = {
+      on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
+        if (type === "postgres_changes" && filter?.table && filter?.event) {
+          activeHandlers.set(`${filter.table}:${filter.event}`, cb);
+        }
+        return this;
+      }),
+      subscribe: vi.fn().mockImplementation(function (this: any, cb?: (status: string) => void) {
+        activeSubscribeCb = cb || null;
+        return this;
+      }),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    const globalChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("realtime-sync-") ? (activeChannel as any) : (globalChannel as any)
+    );
+
+    const mockTrip = {
+      id: "trip-rt-1",
+      user_id: "user-rt-1",
+      name: "Tokyo Live",
+      destination: "Tokyo, Japan",
+      startDate: "2026-10-01",
+      endDate: "2026-10-02",
+      allowed_emails: ["rt@example.com"],
+      expenses: [
+        {
+          id: "exp-existing",
+          user_id: "user-rt-1",
+          user_name: "RT User",
+          amount: 1000,
+          currency: "TWD",
+          category: "Food",
+          date: "2026-10-01",
+          note: "Existing Coffee",
+          exchangeRate: 1,
+        },
+      ],
+      flights: [
+        {
+          id: "flight-existing",
+          user_id: "user-rt-1",
+          traveler_name: "RT User",
+          price: 15000,
+          currency: "TWD",
+          cabinClass: "Economy",
+          outbound: {
+            airline: "EVA Air",
+            flightNumber: "BR198",
+            departureTime: "2026-10-01T08:50",
+            arrivalTime: "2026-10-01T13:15",
+            departureAirport: "TPE",
+            arrivalAirport: "NRT",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+        },
+      ],
+      checklist: [
+        {
+          id: "check-existing",
+          user_id: "user-rt-1",
+          text: "Passport",
+          isCompleted: false,
+          category: "Documents",
+        },
+      ],
+      itinerary: [
+        {
+          date: "2026-10-01",
+          items: [
+            {
+              id: "it-existing",
+              user_id: "user-rt-1",
+              time: "09:00",
+              placeName: "Senso-ji",
+              type: "Place",
+              date: "2026-10-01",
+            },
+          ],
+        },
+        { date: "2026-10-02", items: [] },
+      ],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-rt-1",
+            email: "rt@example.com",
+            user_metadata: { full_name: "RT User" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip as any);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Tokyo Live")).toBeInTheDocument());
+
+    act(() => {
+      screen.getByText("Tokyo Live").click();
+    });
+
+    // Switch to Itinerary tab to verify live UI patching
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /行程|Itinerary/i }).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /行程|Itinerary/i })[0]);
+    await waitFor(() => expect(screen.getByText("Senso-ji")).toBeInTheDocument());
+
+    // Capture baseline getTripById call count after initial trip entry
+    const baselineRefetchCalls = vi.mocked(getTripById).mock.calls.length;
+
+    // 1. Itinerary INSERT (from collaborator) -> appears immediately without calling getTripById
+    act(() => {
+      activeHandlers.get("itinerary_items:INSERT")?.({
+        new: {
+          id: "it-collab-5",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          time: "14:00",
+          place_name: "Shibuya Sky",
+          lat: 35.6584,
+          lng: 139.7022,
+          type: "Place",
+          date: "2026-10-01",
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getByText("Shibuya Sky")).toBeInTheDocument());
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+
+    // 2. Itinerary UPDATE -> updates name in place without duplicates
+    act(() => {
+      activeHandlers.get("itinerary_items:UPDATE")?.({
+        new: {
+          id: "it-collab-5",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          time: "15:00",
+          place_name: "Shibuya Sky Sunset",
+          lat: 35.6584,
+          lng: 139.7022,
+          type: "Place",
+          date: "2026-10-01",
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText("Shibuya Sky Sunset")).toHaveLength(1);
+    });
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+
+    // 3. Unrelated DELETE IDs across all tables -> completely ignored (zero getTripById calls!)
+    act(() => {
+      activeHandlers.get("itinerary_items:DELETE")?.({ old: { id: "other-trip-it-999" } });
+      activeHandlers.get("expenses:DELETE")?.({ old: { id: "other-trip-exp-999" } });
+      activeHandlers.get("flights:DELETE")?.({ old: { id: "other-trip-fl-999" } });
+      activeHandlers.get("checklist_items:DELETE")?.({ old: { id: "other-trip-ci-999" } });
+    });
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+    expect(screen.getByText("Shibuya Sky Sunset")).toBeInTheDocument();
+
+    // 4. Local Itinerary DELETE -> removes only that item without refetching
+    act(() => {
+      activeHandlers.get("itinerary_items:DELETE")?.({ old: { id: "it-collab-5" } });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Shibuya Sky Sunset")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Senso-ji")).toBeInTheDocument();
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+
+    // 5. Expenses INSERT / UPDATE / DELETE incrementally on Expenses tab
+    fireEvent.click(screen.getAllByRole("button", { name: /花費|Expenses/i })[0]);
+    await waitFor(() => expect(screen.getByText("Existing Coffee")).toBeInTheDocument());
+
+    act(() => {
+      activeHandlers.get("expenses:INSERT")?.({
+        new: {
+          id: "exp-collab-2",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          user_name: "Bob",
+          amount: 2500,
+          currency: "JPY",
+          category: "Food",
+          date: "2026-10-01",
+          note: "Ramen Bowl",
+          exchange_rate: 0.22,
+          created_at: "2026-10-01T12:00:00Z",
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getByText("Ramen Bowl")).toBeInTheDocument());
+
+    act(() => {
+      activeHandlers.get("expenses:UPDATE")?.({
+        new: {
+          id: "exp-collab-2",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          user_name: "Bob",
+          amount: 3200,
+          currency: "JPY",
+          category: "Food",
+          date: "2026-10-01",
+          note: "Deluxe Ramen",
+          exchange_rate: 0.22,
+          created_at: "2026-10-01T12:00:00Z",
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getByText("Deluxe Ramen")).toBeInTheDocument());
+
+    act(() => {
+      activeHandlers.get("expenses:DELETE")?.({ old: { id: "exp-collab-2" } });
+    });
+    await waitFor(() => expect(screen.queryByText("Deluxe Ramen")).not.toBeInTheDocument());
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+
+    // 6. Flights INSERT / UPDATE / DELETE incrementally on Flights tab
+    fireEvent.click(screen.getAllByRole("button", { name: /機票|Tickets/i })[0]);
+    await waitFor(() => expect(screen.getAllByText("BR198").length).toBeGreaterThan(0));
+
+    act(() => {
+      activeHandlers.get("flights:INSERT")?.({
+        new: {
+          id: "flight-collab-2",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          traveler_name: "Bob",
+          price: 18000,
+          currency: "TWD",
+          cabin_class: "Economy",
+          outbound: {
+            airline: "Starlux",
+            flightNumber: "JX800",
+            departureTime: "2026-10-01T08:30",
+            arrivalTime: "2026-10-01T12:45",
+            departureAirport: "TPE",
+            arrivalAirport: "NRT",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getAllByText("JX800").length).toBeGreaterThan(0));
+
+    act(() => {
+      activeHandlers.get("flights:UPDATE")?.({
+        new: {
+          id: "flight-collab-2",
+          trip_id: "trip-rt-1",
+          user_id: "user-collab",
+          traveler_name: "Bob",
+          price: 19500,
+          currency: "TWD",
+          cabin_class: "Business",
+          outbound: {
+            airline: "Starlux",
+            flightNumber: "JX802",
+            departureTime: "2026-10-01T10:30",
+            arrivalTime: "2026-10-01T14:45",
+            departureAirport: "TPE",
+            arrivalAirport: "NRT",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 2, weight: "32kg" } },
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getAllByText("JX802").length).toBeGreaterThan(0));
+
+    act(() => {
+      activeHandlers.get("flights:DELETE")?.({ old: { id: "flight-collab-2" } });
+    });
+    await waitFor(() => expect(screen.queryByText("JX802")).not.toBeInTheDocument());
+    expect(vi.mocked(getTripById).mock.calls.length).toBe(baselineRefetchCalls);
+    expect(activeSubscribeCb).not.toBeNull();
+  });
+
+  it("handles offline -> online transitions, channel error status, and one-click retry resync in the header", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    let activeSubscribeCb: ((status: string) => void) | null = null;
+
+    const activeChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockImplementation(function (this: any, cb?: (status: string) => void) {
+        activeSubscribeCb = cb || null;
+        return this;
+      }),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    const globalChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("realtime-sync-") ? (activeChannel as any) : (globalChannel as any)
+    );
+
+    const mockTrip = {
+      id: "trip-net-1",
+      user_id: "user-net-1",
+      name: "Hokkaido Winter",
+      destination: "Sapporo, Japan",
+      startDate: "2026-12-01",
+      endDate: "2026-12-03",
+      allowed_emails: ["net@example.com"],
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [{ date: "2026-12-01", items: [] }],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-net-1",
+            email: "net@example.com",
+            user_metadata: { full_name: "Net Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip as any);
+
+    const onLineSpy = vi.spyOn(window.navigator, "onLine", "get");
+    onLineSpy.mockReturnValue(true);
+
+    try {
+      render(<App />);
+      await waitFor(() => expect(screen.getByText("Hokkaido Winter")).toBeInTheDocument());
+
+      act(() => {
+        screen.getByText("Hokkaido Winter").click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sync-status-pill")).toHaveAttribute("data-sync-status", "synced");
+      });
+
+      // 1. Browser goes offline -> status pill switches to offline
+      onLineSpy.mockReturnValue(false);
+      act(() => {
+        window.dispatchEvent(new Event("offline"));
+      });
+      await waitFor(() => {
+        const pill = screen.getByTestId("sync-status-pill");
+        expect(pill).toHaveAttribute("data-sync-status", "offline");
+        expect(pill.className).toContain("whitespace-nowrap");
+      });
+
+      const callsBeforeOnline = vi.mocked(getTripById).mock.calls.length;
+      const tripsCallsBeforeOnline = vi.mocked(getTrips).mock.calls.length;
+
+      // 2. Browser comes back online -> triggers resync & restores synced status
+      onLineSpy.mockReturnValue(true);
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      await waitFor(() => {
+        expect(vi.mocked(getTripById).mock.calls.length).toBeGreaterThan(callsBeforeOnline);
+        expect(vi.mocked(getTrips).mock.calls.length).toBeGreaterThan(tripsCallsBeforeOnline);
+        expect(screen.getByTestId("sync-status-pill")).toHaveAttribute("data-sync-status", "synced");
+      });
+
+      // 3. Realtime channel drops (CHANNEL_ERROR) -> exposes one-click retry button
+      act(() => {
+        activeSubscribeCb?.("CHANNEL_ERROR");
+      });
+      await waitFor(() => {
+        const retryBtn = screen.getByTestId("sync-retry-btn");
+        expect(retryBtn).toHaveAttribute("data-sync-status", "error");
+        expect(retryBtn.className).toContain("whitespace-nowrap");
+      });
+
+      const callsBeforeRetry = vi.mocked(getTripById).mock.calls.length;
+      const tripsCallsBeforeRetry = vi.mocked(getTrips).mock.calls.length;
+
+      // 4. Clicking retry resyncs active trip + trips list and restores synced state
+      fireEvent.click(screen.getByTestId("sync-retry-btn"));
+      await waitFor(() => {
+        expect(vi.mocked(getTripById).mock.calls.length).toBeGreaterThan(callsBeforeRetry);
+        expect(vi.mocked(getTrips).mock.calls.length).toBeGreaterThan(tripsCallsBeforeRetry);
+        expect(screen.getByTestId("sync-status-pill")).toHaveAttribute("data-sync-status", "synced");
+      });
+
+      // 5. Tab becoming visible triggers gentle resync
+      const callsBeforeVisible = vi.mocked(getTripById).mock.calls.length;
+      const visSpy = vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      try {
+        act(() => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await waitFor(() => {
+          expect(vi.mocked(getTripById).mock.calls.length).toBeGreaterThan(callsBeforeVisible);
+        });
+      } finally {
+        visSpy.mockRestore();
+      }
+    } finally {
+      onLineSpy.mockRestore();
+    }
+  });
+
+  it("uses granular upsertExpense (never saveTrip), rolls back on write error, and exposes sync retry button", async () => {
+    const { supabase, getTrips, getTripById, upsertExpense, saveTrip } = await import(
+      "../../services/storageService"
+    );
+
+    const mockTrip = {
+      id: "trip-gran-1",
+      user_id: "user-gran-1",
+      name: "Fukuoka Eats",
+      destination: "Fukuoka, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-03",
+      allowed_emails: ["gran@example.com"],
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [{ date: "2026-11-01", items: [] }],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-gran-1",
+            email: "gran@example.com",
+            user_metadata: { full_name: "Granular User" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip as any);
+    vi.mocked(upsertExpense).mockRejectedValueOnce(new Error("Simulated DB timeout"));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Fukuoka Eats")).toBeInTheDocument());
+
+    act(() => {
+      screen.getByText("Fukuoka Eats").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /花費|Expenses/i }).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /花費|Expenses/i })[0]);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /新增支出|Add Expense/i })).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /新增支出|Add Expense/i }));
+
+    const amountInput = screen.getByPlaceholderText("0");
+    const noteInput = screen.getByPlaceholderText(/備註|Note/i);
+    fireEvent.change(amountInput, { target: { value: "850" } });
+    fireEvent.change(noteInput, { target: { value: "Hakata Ramen" } });
+    fireEvent.click(screen.getByRole("button", { name: /^確認$|^Save$/i }));
+
+    await waitFor(() => {
+      expect(upsertExpense).toHaveBeenCalledTimes(1);
+      expect(saveTrip).not.toHaveBeenCalled();
+      expect(screen.getByTestId("sync-retry-btn")).toHaveAttribute("data-sync-status", "error");
+    });
+
+    // Failed optimistic insert must be rolled back from UI
+    expect(screen.queryByText("Hakata Ramen")).not.toBeInTheDocument();
+
+    // Clicking retry resyncs and clears error state
+    fireEvent.click(screen.getByTestId("sync-retry-btn"));
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-status-pill")).toHaveAttribute("data-sync-status", "synced");
+    });
+  });
+
+  it("preserves concurrent Realtime expense and itinerary INSERTs arriving during an async Itinerary save (zero spurious deletes)", async () => {
+    const {
+      supabase,
+      getTrips,
+      getTripById,
+      upsertItineraryItems,
+      deleteExpense,
+      deleteItineraryItem,
+    } = await import("../../services/storageService");
+    const { searchFreePlaces } = await import("../../services/searchPlaceService");
+
+    type HandlerKey = `${string}:${string}`;
+    const activeHandlers = new Map<HandlerKey, (payload: any) => void>();
+    const activeChannel = {
+      on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
+        if (type === "postgres_changes" && filter?.table && filter?.event) {
+          activeHandlers.set(`${filter.table}:${filter.event}`, cb);
+        }
+        return this;
+      }),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    const globalChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("realtime-sync-") ? (activeChannel as any) : (globalChannel as any)
+    );
+
+    let resolveGeocode!: (results: any[]) => void;
+    vi.mocked(searchFreePlaces).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveGeocode = resolve;
+        })
+    );
+
+    const mockTrip = {
+      id: "trip-async-race-1",
+      user_id: "user-b",
+      name: "Kyoto Concurrent",
+      destination: "Kyoto, Japan",
+      startDate: "2026-10-01",
+      endDate: "2026-10-02",
+      allowed_emails: ["b@example.com", "a@example.com"],
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [
+        {
+          date: "2026-10-01",
+          items: [
+            {
+              id: "it-initial",
+              user_id: "user-b",
+              time: "09:00",
+              placeName: "Kiyomizu-dera",
+              lat: 34.9949,
+              lng: 135.785,
+              type: "Place",
+              date: "2026-10-01",
+            },
+          ],
+        },
+        { date: "2026-10-02", items: [] },
+      ],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-b",
+            email: "b@example.com",
+            user_metadata: { full_name: "User B" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip as any);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Kyoto Concurrent")).toBeInTheDocument());
+    act(() => {
+      screen.getByText("Kyoto Concurrent").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /行程|Itinerary/i }).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /行程|Itinerary/i })[0]);
+    await waitFor(() => expect(screen.getByText("Kiyomizu-dera")).toBeInTheDocument());
+
+    // User B triggers Add Stop from MapView and clicks Save (suspends on searchFreePlaces await)
+    await waitFor(() => expect(screen.getByTestId("mock-map-add-stop")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("mock-map-add-stop"));
+    await waitFor(() => expect(screen.getByDisplayValue("Fushimi Inari")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /^確認$|^Save$/i }));
+
+    await waitFor(() => expect(searchFreePlaces).toHaveBeenCalledTimes(1));
+
+    // While User B's async geocode is in flight, User A inserts an expense & an itinerary stop via Realtime!
+    act(() => {
+      activeHandlers.get("expenses:INSERT")?.({
+        new: {
+          id: "exp-collab-live",
+          trip_id: "trip-async-race-1",
+          user_id: "user-a",
+          user_name: "User A",
+          amount: 1800,
+          currency: "JPY",
+          category: "Food",
+          date: "2026-10-01",
+          note: "Matcha Parfait",
+          exchange_rate: 0.22,
+          created_at: "2026-10-01T11:00:00Z",
+        },
+      });
+      activeHandlers.get("itinerary_items:INSERT")?.({
+        new: {
+          id: "it-collab-live",
+          trip_id: "trip-async-race-1",
+          user_id: "user-a",
+          time: "16:00",
+          place_name: "Arashiyama Bamboo Grove",
+          lat: 35.017,
+          lng: 135.6713,
+          type: "Place",
+          date: "2026-10-01",
+        },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText("Arashiyama Bamboo Grove")).toBeInTheDocument());
+
+    // Now User B's geocode resolves and Itinerary calls onUpdate
+    await act(async () => {
+      resolveGeocode([{ lat: 34.9671, lng: 135.7727 }]);
+    });
+
+    await waitFor(() => {
+      expect(upsertItineraryItems).toHaveBeenCalledTimes(1);
+      expect(screen.getByText("Fushimi Inari")).toBeInTheDocument();
+    });
+
+    // CRITICAL: User A's concurrent rows must NEVER be deleted or dropped!
+    expect(deleteExpense).not.toHaveBeenCalled();
+    expect(deleteItineraryItem).not.toHaveBeenCalled();
+    expect(screen.getByText("Arashiyama Bamboo Grove")).toBeInTheDocument();
+
+    // Switch to Expenses tab to verify User A's concurrent Realtime expense is still intact
+    fireEvent.click(screen.getAllByRole("button", { name: /花費|Expenses/i })[0]);
+    await waitFor(() => expect(screen.getByText("Matcha Parfait")).toBeInTheDocument());
+  });
+
+  it("surgically rolls back a failed granular write without wiping concurrent Realtime-inserted rows", async () => {
+    const { supabase, getTrips, getTripById, upsertExpense } = await import(
+      "../../services/storageService"
+    );
+
+    type HandlerKey = `${string}:${string}`;
+    const activeHandlers = new Map<HandlerKey, (payload: any) => void>();
+    const activeChannel = {
+      on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
+        if (type === "postgres_changes" && filter?.table && filter?.event) {
+          activeHandlers.set(`${filter.table}:${filter.event}`, cb);
+        }
+        return this;
+      }),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    const globalChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      send: vi.fn().mockResolvedValue("ok"),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("realtime-sync-") ? (activeChannel as any) : (globalChannel as any)
+    );
+
+    let rejectWrite!: (err: Error) => void;
+    vi.mocked(upsertExpense).mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectWrite = reject;
+        })
+    );
+
+    const mockTrip = {
+      id: "trip-rollback-1",
+      user_id: "user-rb-1",
+      name: "Osaka Rollback",
+      destination: "Osaka, Japan",
+      startDate: "2026-11-01",
+      endDate: "2026-11-02",
+      allowed_emails: ["rb@example.com", "collab@example.com"],
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [{ date: "2026-11-01", items: [] }],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-rb-1",
+            email: "rb@example.com",
+            user_metadata: { full_name: "Rollback User" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([mockTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(mockTrip as any);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Osaka Rollback")).toBeInTheDocument());
+    act(() => {
+      screen.getByText("Osaka Rollback").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /花費|Expenses/i }).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: /花費|Expenses/i })[0]);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /新增支出|Add Expense/i })).toBeInTheDocument();
+    });
+
+    // User B adds an expense whose DB write stays in flight
+    fireEvent.click(screen.getByRole("button", { name: /新增支出|Add Expense/i }));
+    fireEvent.change(screen.getByPlaceholderText("0"), { target: { value: "500" } });
+    fireEvent.change(screen.getByPlaceholderText(/備註|Note/i), {
+      target: { value: "Failing Takoyaki" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^確認$|^Save$/i }));
+
+    await waitFor(() => expect(screen.getByText("Failing Takoyaki")).toBeInTheDocument());
+
+    // While Failing Takoyaki write is in flight, User A inserts an expense via Realtime
+    act(() => {
+      activeHandlers.get("expenses:INSERT")?.({
+        new: {
+          id: "exp-collab-survive",
+          trip_id: "trip-rollback-1",
+          user_id: "user-collab",
+          user_name: "User A",
+          amount: 1200,
+          currency: "JPY",
+          category: "Food",
+          date: "2026-11-01",
+          note: "Collab Okonomiyaki",
+          exchange_rate: 0.22,
+          created_at: "2026-11-01T13:00:00Z",
+        },
+      });
+    });
+    await waitFor(() => expect(screen.getByText("Collab Okonomiyaki")).toBeInTheDocument());
+
+    // Now User B's write fails -> ONLY Failing Takoyaki rolls back; Collab Okonomiyaki MUST survive!
+    await act(async () => {
+      rejectWrite(new Error("Write rejected"));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Failing Takoyaki")).not.toBeInTheDocument();
+      expect(screen.getByTestId("sync-retry-btn")).toHaveAttribute("data-sync-status", "error");
+    });
+    expect(screen.getByText("Collab Okonomiyaki")).toBeInTheDocument();
   });
 });
 
