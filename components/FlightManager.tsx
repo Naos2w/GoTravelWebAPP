@@ -1682,33 +1682,34 @@ export const FlightManager: React.FC<Props> = ({
               })
               .map((flight) => (
                 <div key={flight.id} className="relative group space-y-3">
-                  <div className="flex items-center justify-between px-1">
-                    <div className="inline-flex items-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">
-                      <UserIcon size={12} />
-                      <span>{flight.traveler_name}</span>
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    <div className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full min-w-0 max-w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-black uppercase tracking-widest shadow-sm">
+                      <UserIcon size={12} className="shrink-0" />
+                      <span className="truncate whitespace-nowrap">{flight.traveler_name}</span>
                       {flight.user_id === currentUser?.id && (
-                        <span className="opacity-70 font-bold">({t("you")})</span>
+                        <span className="opacity-70 font-bold shrink-0 whitespace-nowrap">({t("you")})</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         data-testid="replay-boarding-pass-btn"
                         onClick={() => setPreviewFlight(flight)}
                         aria-label={t("bpPreviewAnimation")}
-                        className="px-3.5 py-1.5 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
+                        title={t("bpPreviewAnimation")}
+                        className="h-9 w-9 sm:w-auto px-0 sm:px-3.5 justify-center whitespace-nowrap shrink-0 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
                       >
-                        <Printer size={13} />
-                        <span>{t("bpPreviewAnimation")}</span>
+                        <Printer size={14} className="shrink-0" />
+                        <span className="hidden sm:inline">{t("bpPreviewAnimation")}</span>
                       </button>
                     {flight.user_id === currentUser?.id && (
                       <button
                         onClick={() => startEdit(flight)}
                         aria-label={t("edit")}
-                        className="px-3.5 py-1.5 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
+                        className="h-9 px-3 sm:px-3.5 whitespace-nowrap shrink-0 justify-center bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
                       >
-                        <Edit2 size={13} />
-                        <span>{t("edit")}</span>
+                        <Edit2 size={13} className="shrink-0" />
+                        <span className="whitespace-nowrap">{t("edit")}</span>
                       </button>
                     )}
                     </div>

@@ -121,6 +121,26 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
   });
 
+  it("keeps the traveler header actions on a single non-wrapping row", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={mockTrip} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const printBtn = screen.getByTestId("replay-boarding-pass-btn");
+    expect(printBtn.className).toContain("h-9");
+    expect(printBtn.className).toContain("w-9");
+    expect(printBtn.className).toContain("whitespace-nowrap");
+    expect(printBtn.getAttribute("aria-label")).toBeTruthy();
+    expect(printBtn.getAttribute("title")).toBe(printBtn.getAttribute("aria-label"));
+
+    const editBtn = screen.getAllByRole("button").find((b) => b.getAttribute("aria-label") === "編輯" || b.getAttribute("aria-label") === "Edit");
+    expect(editBtn).toBeTruthy();
+    expect(editBtn!.className).toContain("h-9");
+    expect(editBtn!.className).toContain("whitespace-nowrap");
+  });
+
   it("auto-opens edit mode, focuses ticket price, updates baggage on cabin change, and calls onGuidedPriceSaved", () => {
     const onUpdate = vi.fn();
     const onGuidedPriceSaved = vi.fn();
