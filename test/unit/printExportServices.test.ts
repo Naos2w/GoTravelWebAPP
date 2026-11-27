@@ -20,6 +20,9 @@ import {
 } from "../../src/features/export/services/printBookletService";
 import {
   renderPrintableCanvas,
+  renderPrintableCanvasAsync,
+  deduplicateAirlineName,
+  loadAirlineLogoImage,
   canvasToDataUrl,
   shareOrDownloadCanvas,
   PrintableCardType,
@@ -494,9 +497,12 @@ describe("printExportServices", () => {
         shadowOffsetY: 0,
         globalAlpha: 1,
         lineWidth: 1,
+        lineCap: "butt",
+        lineJoin: "miter",
         font: "",
         textAlign: "left",
         textBaseline: "alphabetic",
+        drawImage: vi.fn(),
       };
 
       const origCreateElement = document.createElement.bind(document);
@@ -561,6 +567,155 @@ describe("printExportServices", () => {
       expect(await shareOrDownloadCanvas(realishCanvas, "receipt-card.png", "Trip Receipt")).toBe("shared");
       expect(canShare).toHaveBeenCalledTimes(1);
       expect(share).toHaveBeenCalledTimes(1);
+    });
+
+    it("deduplicates repeated airline names joined by ' + ' (case-insensitive, preserving order) and renders vector baggage pills without OS emojis", () => {
+      expect(deduplicateAirlineName("Emirates + Emirates")).toBe("Emirates");
+      expect(deduplicateAirlineName("Emirates + emirates")).toBe("Emirates");
+      expect(deduplicateAirlineName("Emirates + EVA Air + emirates")).toBe("Emirates + EVA Air");
+      expect(deduplicateAirlineName("STARLUX")).toBe("STARLUX");
+
+      const drawnText: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        scale: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        clip: vi.fn(),
+        closePath: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        fillRect: vi.fn(),
+        setLineDash: vi.fn(),
+        drawImage: vi.fn(),
+        measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
+        fillText: vi.fn((text: string) => {
+          drawnText.push(text);
+        }),
+        createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        fillStyle: "",
+        strokeStyle: "",
+        shadowColor: "",
+        shadowBlur: 0,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        globalAlpha: 1,
+        lineWidth: 1,
+        lineCap: "butt",
+        lineJoin: "miter",
+        font: "",
+        textAlign: "left",
+        textBaseline: "alphabetic",
+      };
+
+      const origCreateElement = document.createElement.bind(document);
+      vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+        const el = origCreateElement(tagName);
+        if (tagName.toLowerCase() === "canvas") {
+          (el as HTMLCanvasElement).getContext = (() => mockCtx) as unknown as HTMLCanvasElement["getContext"];
+        }
+        return el;
+      });
+
+      const baseTrip = makeTrip();
+      const dupTrip = makeTrip({
+        flights: [
+          {
+            ...baseTrip.flights[0],
+            outbound: {
+              ...baseTrip.flights[0].outbound,
+              airline: "Emirates + Emirates",
+              airlineID: "EK",
+              flightNumber: "EK367",
+            },
+          },
+        ],
+      });
+
+      renderPrintableCanvas("boarding-pass", {
+        trip: dupTrip,
+        lang: "en",
+        theme: "dark",
+        airlineLogos: {
+          EK: { naturalWidth: 200, naturalHeight: 200 } as unknown as HTMLImageElement,
+        },
+      });
+
+      expect(drawnText).toContain("Emirates");
+      expect(drawnText.some((t) => t.includes("Emirates + Emirates"))).toBe(false);
+      // Vector baggage icons replace OS emojis (🎒 / 🧳) while keeping allowances visible
+      expect(drawnText).toContain("1×7kg");
+      expect(drawnText).toContain("1×23kg");
+      expect(drawnText.some((t) => t.includes("🎒") || t.includes("🧳"))).toBe(false);
+      // Real airline logo drawn inside white Apple Wallet squircle
+      expect(mockCtx.drawImage).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves renderPrintableCanvasAsync and loadAirlineLogoImage cleanly in jsdom", async () => {
+      const trip = makeTrip();
+
+      // Non-boarding-pass card types delegate immediately
+      const receiptCanvas = await renderPrintableCanvasAsync("receipt", { trip, lang: "en" });
+      expect(receiptCanvas).toBeInstanceOf(HTMLCanvasElement);
+      expect(receiptCanvas.width).toBe(760);
+
+      // Boarding pass resolves cleanly even when pics.avs.io cannot load in jsdom
+      const origImage = globalThis.Image;
+      class MockErrorImage {
+        crossOrigin = "";
+        naturalWidth = 0;
+        naturalHeight = 0;
+        complete = false;
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(_url: string) {
+          queueMicrotask(() => this.onerror?.());
+        }
+      }
+      vi.stubGlobal("Image", MockErrorImage);
+
+      const missingLogo = await loadAirlineLogoImage("ZZ", 50);
+      expect(missingLogo).toBeNull();
+
+      const bpCanvas = await renderPrintableCanvasAsync("boarding-pass", {
+        trip,
+        lang: "zh",
+        theme: "dark",
+      });
+      expect(bpCanvas).toBeInstanceOf(HTMLCanvasElement);
+      expect(bpCanvas.width).toBe(1080);
+      expect(bpCanvas.height).toBe(1350);
+
+      // Verify successful CORS image load caches & draws logo
+      class MockSuccessImage {
+        crossOrigin = "";
+        naturalWidth = 200;
+        naturalHeight = 200;
+        complete = false;
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          if (url.includes("/JX.png")) {
+            queueMicrotask(() => this.onload?.());
+          } else {
+            queueMicrotask(() => this.onerror?.());
+          }
+        }
+      }
+      vi.stubGlobal("Image", MockSuccessImage);
+
+      const loadedLogo = await loadAirlineLogoImage("JX", 50);
+      expect(loadedLogo).not.toBeNull();
+      expect(loadedLogo?.naturalWidth).toBe(200);
+
+      vi.stubGlobal("Image", origImage);
     });
   });
 });

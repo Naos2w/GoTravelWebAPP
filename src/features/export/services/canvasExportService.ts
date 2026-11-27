@@ -13,6 +13,79 @@ export interface CanvasRenderOptions {
   dayIndex?: number;
   flightIndex?: number;
   theme?: "light" | "dark";
+  airlineLogos?: Record<string, HTMLImageElement | null>;
+}
+
+const airlineLogoCache = new Map<string, HTMLImageElement | null>();
+
+/**
+ * Loads an airline logo PNG from pics.avs.io with CORS enabled and caches it in memory.
+ * Resolves `null` cleanly on error, timeout, invalid code, or SSR so export never hangs or fails.
+ */
+export function loadAirlineLogoImage(
+  airlineID: string,
+  timeoutMs = 2000
+): Promise<HTMLImageElement | null> {
+  const code = (airlineID || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!code || typeof Image === "undefined") {
+    return Promise.resolve(null);
+  }
+  if (airlineLogoCache.has(code)) {
+    return Promise.resolve(airlineLogoCache.get(code) ?? null);
+  }
+
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    let settled = false;
+    const finish = (img: HTMLImageElement | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      airlineLogoCache.set(code, img);
+      resolve(img);
+    };
+
+    const timer = setTimeout(() => finish(null), Math.max(0, timeoutMs));
+
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        finish(img.naturalWidth > 0 ? img : null);
+      };
+      img.onerror = () => {
+        finish(null);
+      };
+      img.src = `https://pics.avs.io/200/200/${code}.png`;
+      if (img.complete && img.naturalWidth > 0) {
+        finish(img);
+      }
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+/**
+ * Deduplicates repeated airline names joined by `' + '` (case-insensitive, preserving order).
+ * Example: `"Emirates + Emirates"` -> `"Emirates"`.
+ */
+export function deduplicateAirlineName(name: string): string {
+  const trimmed = (name || "").trim();
+  if (!trimmed || !trimmed.includes("+")) return trimmed;
+  const parts = trimmed
+    .split(/\s*\+\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const part of parts) {
+    const key = part.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(part);
+    }
+  }
+  return unique.join(" + ");
 }
 
 const FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", "Noto Sans TC", sans-serif';
@@ -749,6 +822,158 @@ function formatBaggagePillLabel(allowance?: { count: number; weight: string }): 
   return w ? `${allowance.count}×${w}` : `${allowance.count}pc`;
 }
 
+/**
+ * Draws a crisp vector carry-on briefcase icon centered at (cx, cy).
+ */
+function drawCarryOnBriefcaseIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string
+): void {
+  const s = size / 12;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Top handle arch
+  ctx.beginPath();
+  ctx.moveTo(-2.1, -2.1);
+  ctx.lineTo(-2.1, -3.5);
+  ctx.quadraticCurveTo(-2.1, -4.3, -1.3, -4.3);
+  ctx.lineTo(1.3, -4.3);
+  ctx.quadraticCurveTo(2.1, -4.3, 2.1, -3.5);
+  ctx.lineTo(2.1, -2.1);
+  ctx.stroke();
+
+  // Briefcase body
+  drawRoundedRect(ctx, -5.2, -2.1, 10.4, 6.8, 1.5);
+  ctx.stroke();
+
+  // Horizontal latch seam
+  ctx.beginPath();
+  ctx.moveTo(-5.0, 0.5);
+  ctx.lineTo(5.0, 0.5);
+  ctx.stroke();
+
+  // Center clasp tick
+  ctx.fillRect(-0.85, -0.35, 1.7, 1.7);
+  ctx.restore();
+}
+
+/**
+ * Draws a crisp vector checked rolling suitcase icon centered at (cx, cy).
+ */
+function drawCheckedLuggageIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string
+): void {
+  const s = size / 12;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  // Telescoping handle
+  ctx.beginPath();
+  ctx.moveTo(-1.8, -2.6);
+  ctx.lineTo(-1.8, -4.7);
+  ctx.quadraticCurveTo(-1.8, -5.3, -1.2, -5.3);
+  ctx.lineTo(1.2, -5.3);
+  ctx.quadraticCurveTo(1.8, -5.3, 1.8, -4.7);
+  ctx.lineTo(1.8, -2.6);
+  ctx.stroke();
+
+  // Upright suitcase body
+  drawRoundedRect(ctx, -3.9, -2.6, 7.8, 7.2, 1.4);
+  ctx.stroke();
+
+  // Vertical Rimowa-style ribs
+  ctx.lineWidth = 0.95;
+  ctx.beginPath();
+  ctx.moveTo(-1.4, -1.2);
+  ctx.lineTo(-1.4, 3.3);
+  ctx.moveTo(1.4, -1.2);
+  ctx.lineTo(1.4, 3.3);
+  ctx.stroke();
+
+  // Bottom spinner wheels
+  ctx.fillRect(-2.8, 4.7, 1.3, 1.1);
+  ctx.fillRect(1.5, 4.7, 1.3, 1.1);
+  ctx.restore();
+}
+
+/**
+ * Draws a baggage allowance pill with a crisp vector icon (no OS emojis).
+ */
+function drawBaggagePill(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  kind: "carryOn" | "checked",
+  text: string,
+  opts: {
+    bg: string;
+    border?: string;
+    color: string;
+    iconColor?: string;
+    font: string;
+    padX?: number;
+    height?: number;
+    alignRight?: boolean;
+  }
+): { x: number; w: number; h: number } {
+  const padX = opts.padX ?? 7;
+  const h = opts.height ?? 18;
+  const iconSize = 10;
+  const iconGap = 4.5;
+
+  ctx.save();
+  ctx.font = opts.font;
+  const tw = ctx.measureText(text).width;
+  const w = Math.ceil(padX + iconSize + iconGap + tw + padX);
+  const drawX = opts.alignRight ? x - w : x;
+
+  drawRoundedRect(ctx, drawX, y, w, h, h / 2);
+  ctx.fillStyle = opts.bg;
+  ctx.fill();
+  if (opts.border) {
+    ctx.strokeStyle = opts.border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  const iconCx = drawX + padX + iconSize / 2;
+  const iconCy = y + h / 2;
+  const iconStroke = opts.iconColor || opts.color;
+  if (kind === "checked") {
+    drawCheckedLuggageIcon(ctx, iconCx, iconCy, iconSize, iconStroke);
+  } else {
+    drawCarryOnBriefcaseIcon(ctx, iconCx, iconCy, iconSize, iconStroke);
+  }
+
+  ctx.fillStyle = opts.color;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, drawX + padX + iconSize + iconGap, y + h / 2 + 0.5);
+  ctx.restore();
+
+  return { x: drawX, w, h };
+}
+
 function drawNotchedFlightPass(
   ctx: CanvasRenderingContext2D,
   opts: {
@@ -758,6 +983,7 @@ function drawNotchedFlightPass(
     cabinClass?: string;
     seat?: string;
     fallbackBaggage?: Trip["flights"][number]["baggage"];
+    logoImg?: HTMLImageElement | null;
     lang: Language;
     theme: "light" | "dark";
     x: number;
@@ -774,6 +1000,7 @@ function drawNotchedFlightPass(
     cabinClass,
     seat,
     fallbackBaggage,
+    logoImg,
     lang,
     theme,
     x,
@@ -848,32 +1075,73 @@ function drawNotchedFlightPass(
   const topY = y + (compact ? 16 : 24);
   const sqSize = compact ? 34 : 42;
   const airlineCode = (seg.airlineID || inferAirlineId(seg.flightNumber) || "AIR").toUpperCase().slice(0, 3);
-  const airlineName =
+  const rawAirlineName =
     (lang === "zh" ? seg.airlineNameZh : seg.airlineNameEn) ||
     seg.airlineNameEn ||
     seg.airline ||
     airlineCode;
+  const airlineName = deduplicateAirlineName(rawAirlineName) || airlineCode;
 
-  // Airline badge squircle
-  drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
-  ctx.fillStyle = isDark ? "rgba(56,189,248,0.12)" : "#F1F5F9";
-  ctx.fill();
-  ctx.strokeStyle = isDark ? "rgba(56,189,248,0.28)" : "rgba(15,23,42,0.08)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Airline badge squircle: draw real airline logo on Apple Wallet white squircle when available
+  let drewAirlineLogo = false;
+  if (logoImg && logoImg.naturalWidth > 0 && typeof ctx.drawImage === "function") {
+    try {
+      drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fill();
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.10)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
-  drawAirplaneVector(
-    ctx,
-    innerLeft + sqSize / 2,
-    topY + sqSize * 0.36,
-    compact ? 11 : 13,
-    isOutbound ? (isDark ? "#38BDF8" : "#0284C7") : isDark ? "#34D399" : "#059669"
-  );
-  ctx.fillStyle = isDark ? "#E2E8F0" : "#0F172A";
-  ctx.font = `800 ${compact ? 9 : 10}px ${MONO_STACK}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(airlineCode, innerLeft + sqSize / 2, topY + sqSize - 5);
+      const logoPad = compact ? 4.5 : 5.5;
+      const boxW = sqSize - logoPad * 2;
+      const boxH = sqSize - logoPad * 2;
+      const natW = logoImg.naturalWidth;
+      const natH = logoImg.naturalHeight > 0 ? logoImg.naturalHeight : natW;
+      const imgRatio = natW / natH;
+      const drawW = imgRatio >= 1 ? boxW : boxH * imgRatio;
+      const drawH = imgRatio >= 1 ? boxW / imgRatio : boxH;
+      const drawX = innerLeft + (sqSize - drawW) / 2;
+      const drawY = topY + (sqSize - drawH) / 2;
+
+      ctx.save();
+      drawRoundedRect(ctx, innerLeft + 1, topY + 1, sqSize - 2, sqSize - 2, 9);
+      if (typeof ctx.clip === "function") {
+        ctx.clip();
+      }
+      ctx.drawImage(logoImg, drawX, drawY, drawW, drawH);
+      ctx.restore();
+      drewAirlineLogo = true;
+    } catch {
+      // Clear white squircle before falling back so dark mode has no white tint artifact
+      drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
+      ctx.fillStyle = isDark ? "#12141C" : "#FFFFFF";
+      ctx.fill();
+      drewAirlineLogo = false;
+    }
+  }
+
+  if (!drewAirlineLogo) {
+    drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
+    ctx.fillStyle = isDark ? "rgba(56,189,248,0.12)" : "#F1F5F9";
+    ctx.fill();
+    ctx.strokeStyle = isDark ? "rgba(56,189,248,0.28)" : "rgba(15,23,42,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    drawAirplaneVector(
+      ctx,
+      innerLeft + sqSize / 2,
+      topY + sqSize * 0.36,
+      compact ? 11 : 13,
+      isOutbound ? (isDark ? "#38BDF8" : "#0284C7") : isDark ? "#34D399" : "#059669"
+    );
+    ctx.fillStyle = isDark ? "#E2E8F0" : "#0F172A";
+    ctx.font = `800 ${compact ? 9 : 10}px ${MONO_STACK}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(airlineCode, innerLeft + sqSize / 2, topY + sqSize - 5);
+  }
 
   // Direction label + Airline name
   const nameX = innerLeft + sqSize + 11;
@@ -917,7 +1185,7 @@ function drawNotchedFlightPass(
     alignRight: true,
   });
 
-  // Baggage icon pills row (carry-on & checked)
+  // Baggage icon pills row (carry-on & checked with crisp vector icons)
   const baggage =
     seg.baggage ||
     fallbackBaggage ||
@@ -927,10 +1195,11 @@ function drawNotchedFlightPass(
   let bagCursorX = innerRight;
   const bagPillY = topY + 25;
   if (checkedLabel) {
-    const p = drawPill(ctx, bagCursorX, bagPillY, `🧳 ${checkedLabel}`, {
+    const p = drawBaggagePill(ctx, bagCursorX, bagPillY, "checked", checkedLabel, {
       bg: isDark ? "rgba(255,255,255,0.06)" : "#F8FAFC",
       border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.07)",
       color: isDark ? "#94A3B8" : "#475569",
+      iconColor: isDark ? "#CBD5E1" : "#334155",
       font: `700 9.5px ${MONO_STACK}`,
       padX: 7,
       height: 18,
@@ -939,10 +1208,11 @@ function drawNotchedFlightPass(
     bagCursorX = p.x - 5;
   }
   if (carryLabel) {
-    drawPill(ctx, bagCursorX, bagPillY, `🎒 ${carryLabel}`, {
+    drawBaggagePill(ctx, bagCursorX, bagPillY, "carryOn", carryLabel, {
       bg: isDark ? "rgba(255,255,255,0.06)" : "#F8FAFC",
       border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.07)",
       color: isDark ? "#94A3B8" : "#475569",
+      iconColor: isDark ? "#CBD5E1" : "#334155",
       font: `700 9.5px ${MONO_STACK}`,
       padX: 7,
       height: 18,
@@ -1155,6 +1425,15 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
   const hasOutbound = Boolean(flight.outbound);
   const hasInbound = Boolean(flight.inbound && (flight.inbound.flightNumber || flight.inbound.departureAirport));
 
+  const resolveSegmentLogo = (seg?: FlightSegment): HTMLImageElement | null => {
+    if (!seg || !options.airlineLogos) return null;
+    const code = (seg.airlineID || inferAirlineId(seg.flightNumber) || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+    return code ? options.airlineLogos[code] ?? null : null;
+  };
+
   if (hasOutbound && hasInbound) {
     drawNotchedFlightPass(ctx, {
       seg: flight.outbound,
@@ -1163,6 +1442,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
       cabinClass: flight.cabinClass,
       seat: flight.seat,
       fallbackBaggage: flight.baggage,
+      logoImg: resolveSegmentLogo(flight.outbound),
       lang,
       theme,
       x: 24,
@@ -1179,6 +1459,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
       cabinClass: flight.cabinClass,
       seat: flight.seat,
       fallbackBaggage: flight.baggage,
+      logoImg: resolveSegmentLogo(flight.inbound),
       lang,
       theme,
       x: 24,
@@ -1196,6 +1477,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
       cabinClass: flight.cabinClass,
       seat: flight.seat,
       fallbackBaggage: flight.baggage,
+      logoImg: resolveSegmentLogo(seg),
       lang,
       theme,
       x: 24,
@@ -1653,6 +1935,63 @@ export function renderPrintableCanvas(
   }
 
   return canvas;
+}
+
+/**
+ * Async printable canvas renderer that preloads real airline logos in parallel
+ * for `boarding-pass` cards before drawing. Other card types delegate directly.
+ */
+export async function renderPrintableCanvasAsync(
+  type: PrintableCardType,
+  options: CanvasRenderOptions
+): Promise<HTMLCanvasElement> {
+  if (type !== "boarding-pass") {
+    return renderPrintableCanvas(type, options);
+  }
+
+  const { trip, flightIndex = 0 } = options;
+  const flight = trip.flights?.[flightIndex] || trip.flights?.[0];
+  if (!flight) {
+    return renderPrintableCanvas(type, options);
+  }
+
+  const codes = new Set<string>();
+  const collectCode = (seg?: FlightSegment) => {
+    if (!seg) return;
+    const raw = (seg.airlineID || inferAirlineId(seg.flightNumber) || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+    if (raw) codes.add(raw);
+  };
+
+  collectCode(flight.outbound);
+  if (flight.inbound && (flight.inbound.flightNumber || flight.inbound.departureAirport)) {
+    collectCode(flight.inbound);
+  }
+
+  if (codes.size === 0) {
+    return renderPrintableCanvas(type, options);
+  }
+
+  const airlineLogos: Record<string, HTMLImageElement | null> = {
+    ...(options.airlineLogos || {}),
+  };
+  const missingCodes = Array.from(codes).filter((code) => !(code in airlineLogos));
+
+  if (missingCodes.length > 0) {
+    const loaded = await Promise.all(
+      missingCodes.map(async (code) => [code, await loadAirlineLogoImage(code)] as const)
+    );
+    for (const [code, img] of loaded) {
+      airlineLogos[code] = img;
+    }
+  }
+
+  return renderPrintableCanvas(type, {
+    ...options,
+    airlineLogos,
+  });
 }
 
 /**

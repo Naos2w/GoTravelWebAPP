@@ -33,6 +33,7 @@ import {
 import {
   PrintableCardType,
   renderPrintableCanvas,
+  renderPrintableCanvasAsync,
   canvasToDataUrl,
   shareOrDownloadCanvas,
 } from "./services/canvasExportService";
@@ -177,14 +178,17 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   // Render live canvas preview when on Image Printer tab
   useEffect(() => {
     if (!isOpen || activeTab !== "images") return;
+    let cancelled = false;
+    const renderOptions = {
+      trip,
+      lang: language,
+      dayIndex: safeDayIdx,
+      flightIndex: safeFlightIdx,
+      theme: canvasTheme,
+    };
+
     try {
-      const canvas = renderPrintableCanvas(selectedCard, {
-        trip,
-        lang: language,
-        dayIndex: safeDayIdx,
-        flightIndex: safeFlightIdx,
-        theme: canvasTheme,
-      });
+      const canvas = renderPrintableCanvas(selectedCard, renderOptions);
       canvasRef.current = canvas;
       const url = canvasToDataUrl(canvas);
       setPreviewUrl(url);
@@ -192,6 +196,23 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
       canvasRef.current = null;
       setPreviewUrl("");
     }
+
+    if (selectedCard === "boarding-pass") {
+      renderPrintableCanvasAsync("boarding-pass", renderOptions)
+        .then((upgradedCanvas) => {
+          if (cancelled) return;
+          canvasRef.current = upgradedCanvas;
+          const upgradedUrl = canvasToDataUrl(upgradedCanvas);
+          setPreviewUrl(upgradedUrl);
+        })
+        .catch(() => {
+          // Keep synchronous preview silently if logo upgrade fails
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     isOpen,
     activeTab,
@@ -263,15 +284,14 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   const handleShareOrSavePng = async () => {
     setIsExportingPng(true);
     try {
-      const canvas =
-        canvasRef.current ||
-        renderPrintableCanvas(selectedCard, {
-          trip,
-          lang: language,
-          dayIndex: safeDayIdx,
-          flightIndex: safeFlightIdx,
-          theme: canvasTheme,
-        });
+      const canvas = await renderPrintableCanvasAsync(selectedCard, {
+        trip,
+        lang: language,
+        dayIndex: safeDayIdx,
+        flightIndex: safeFlightIdx,
+        theme: canvasTheme,
+      });
+      canvasRef.current = canvas;
       const safeName = (trip.name || "gotravel")
         .replace(/[^\w\u4e00-\u9fff-]+/g, "-")
         .slice(0, 40);
