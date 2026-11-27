@@ -8,8 +8,8 @@ import {
   getAuthRedirectUrl,
   signInWithGoogle,
   signInWithEmail,
-} from "../../services/authService";
-import { supabase } from "../../services/storageService";
+} from "../../src/shared/services/authService";
+import { supabase } from "../../src/shared/services/storageService";
 
 describe("authService (Unit Tests)", () => {
   beforeEach(() => {

@@ -7,9 +7,9 @@ import {
   buildFlightArc,
   computeFlightBearing,
   createCustomIcon,
-} from "../../components/MapView";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { ItineraryItem } from "../../types";
+} from "../../src/features/itinerary/MapView";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { ItineraryItem } from "../../src/types";
 
 const mockMapInstance = {
   setView: vi.fn(),

@@ -4,7 +4,7 @@ import {
   buildPathForRoute,
   buildTripShareUrl,
   syncUrlWithRoute,
-} from "../../services/routerService";
+} from "../../src/shared/services/routerService";
 
 describe("routerService (Unit Tests)", () => {
   beforeEach(() => {

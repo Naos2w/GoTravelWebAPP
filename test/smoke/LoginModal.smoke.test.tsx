@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { LoginModal } from "../../components/LoginModal";
-import { LocalizationProvider, translations } from "../../contexts/LocalizationContext";
+import { LoginModal } from "../../src/shared/components/LoginModal";
+import { LocalizationProvider, translations } from "../../src/shared/contexts/LocalizationContext";
 
 const renderWithContext = (ui: React.ReactElement) => {
   return render(

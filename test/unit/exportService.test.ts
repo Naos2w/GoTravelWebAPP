@@ -3,8 +3,8 @@ import {
   generateTripNotesMarkdown,
   exportToAppleNotes,
   generateICalendar,
-} from "../../services/exportService";
-import { Trip, Currency } from "../../types";
+} from "../../src/features/trips/services/exportService";
+import { Trip, Currency } from "../../src/types";
 
 describe("exportService", () => {
   const mockTrip: Trip = {

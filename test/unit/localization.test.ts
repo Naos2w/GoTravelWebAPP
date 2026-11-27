@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { translations } from "../../contexts/LocalizationContext";
+import { translations } from "../../src/shared/contexts/LocalizationContext";
 
 describe("LocalizationContext (Unit Tests)", () => {
   it("should have identical translation keys in both zh and en", () => {

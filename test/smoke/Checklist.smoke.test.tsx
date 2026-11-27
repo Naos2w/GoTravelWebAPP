@@ -1,9 +1,9 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { Checklist } from "../../components/Checklist";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, User } from "../../types";
+import { Checklist } from "../../src/features/checklist/Checklist";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, User } from "../../src/types";
 
 describe("Checklist Component Smoke Test", () => {
   const mockUser: User = {

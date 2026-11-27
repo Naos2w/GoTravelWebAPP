@@ -1,12 +1,12 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { BudgetModal } from "../../components/BudgetModal";
-import { ShareModal } from "../../components/ShareModal";
-import { TripForm } from "../../components/TripForm";
-import { CustomDateTimeInput } from "../../components/CustomDateTimeInput";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, User } from "../../types";
+import { BudgetModal } from "../../src/features/expenses/BudgetModal";
+import { ShareModal } from "../../src/features/trips/ShareModal";
+import { TripForm } from "../../src/features/trips/TripForm";
+import { CustomDateTimeInput } from "../../src/shared/components/CustomDateTimeInput";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, User } from "../../src/types";
 
 describe("Modals & Input Components Smoke Tests", () => {
   const mockUser: User = {

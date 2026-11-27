@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { reorderAnchorsWithSmartTime } from '../../services/itineraryReorderService';
-import { ItineraryItem } from '../../types';
+import { reorderAnchorsWithSmartTime } from '../../src/features/itinerary/services/itineraryReorderService';
+import { ItineraryItem } from '../../src/types';
 
 const makeStop = (id: string, placeName: string, time: string): ItineraryItem => ({
   id,

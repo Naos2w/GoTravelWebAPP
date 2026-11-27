@@ -3,8 +3,8 @@ import {
   diffTripChanges,
   applyTripDelta,
   revertTripDelta,
-} from "../../services/tripDiffService";
-import { Currency, FlightInfo, Trip } from "../../types";
+} from "../../src/features/trips/services/tripDiffService";
+import { Currency, FlightInfo, Trip } from "../../src/types";
 
 const createBaseTrip = (): Trip => ({
   id: "trip-1",

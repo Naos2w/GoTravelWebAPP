@@ -1,9 +1,9 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { ExportModal } from "../../components/ExportModal";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, Currency } from "../../types";
+import { ExportModal } from "../../src/features/trips/ExportModal";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, Currency } from "../../src/types";
 
 describe("ExportModal Smoke Test", () => {
   const mockTrip: Trip = {

@@ -3,8 +3,8 @@ import {
   calculateSplitwiseSettlement,
   encodeExpenseSplitMeta,
   decodeExpenseSplitMeta,
-} from '../../services/splitwiseService';
-import { Currency, Expense } from '../../types';
+} from '../../src/features/expenses/services/splitwiseService';
+import { Currency, Expense } from '../../src/types';
 
 const makeExp = (overrides: Partial<Expense>): Expense => ({
   id: 'exp-1',

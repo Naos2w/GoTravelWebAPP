@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Currency } from "../../types";
+import { Currency } from "../../src/types";
 import {
   EXCHANGE_RATE_STORAGE_KEY,
   FALLBACK_RATES_TO_TWD,
@@ -12,7 +12,7 @@ import {
   convertFromTwd,
   formatCurrencyAmount,
   formatWithCurrencySymbol,
-} from "../../services/exchangeRateService";
+} from "../../src/features/expenses/services/exchangeRateService";
 
 describe("exchangeRateService (Unit Tests)", () => {
   beforeEach(() => {

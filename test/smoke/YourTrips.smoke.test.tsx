@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { TripCard, getTripTiming, getTripCollaboratorCount, getTripPlacesCount } from "../../components/TripCard";
-import { DeleteTripModal } from "../../components/DeleteTripModal";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip } from "../../types";
+import { TripCard, getTripTiming, getTripCollaboratorCount, getTripPlacesCount } from "../../src/features/trips/TripCard";
+import { DeleteTripModal } from "../../src/features/trips/DeleteTripModal";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip } from "../../src/types";
 
 const mockTrip: Trip = {
   id: "trip-1",

@@ -5,9 +5,9 @@ import { render, screen, waitFor, act, fireEvent, within } from "@testing-librar
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
 // Mock supabase client to avoid external network calls during smoke tests
-vi.mock("../../services/storageService", async () => {
-  const actual = await vi.importActual<typeof import("../../services/storageService")>(
-    "../../services/storageService"
+vi.mock("../../src/shared/services/storageService", async () => {
+  const actual = await vi.importActual<typeof import("../../src/shared/services/storageService")>(
+    "../../src/shared/services/storageService"
   );
   const mockChannel = {
     on: vi.fn().mockReturnThis(),
@@ -64,7 +64,7 @@ vi.mock("../../services/storageService", async () => {
 });
 
 // Mock leaflet & MapView to avoid canvas/DOM errors in jsdom
-vi.mock("../../components/MapView", () => ({
+vi.mock("../../src/features/itinerary/MapView", () => ({
   MapView: ({ onAddSearchResult }: any) => (
     <div data-testid="mock-map-view">
       Mock Map
@@ -81,15 +81,15 @@ vi.mock("../../components/MapView", () => ({
   ),
 }));
 
-vi.mock("../../services/tdxService", () => ({
+vi.mock("../../src/features/flights/services/tdxService", () => ({
   fetchTdxFlights: vi.fn(),
 }));
 
-vi.mock("../../services/searchPlaceService", () => ({
+vi.mock("../../src/features/itinerary/services/searchPlaceService", () => ({
   searchFreePlaces: vi.fn().mockResolvedValue([]),
 }));
 
-import App from "../../App";
+import App from "../../src/app/App";
 
 describe("App Component (Smoke Test)", () => {
   beforeEach(() => {
@@ -109,7 +109,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("renders mobile navigation and FAB without crashing when authenticated", async () => {
-    const { supabase, getTrips } = await import("../../services/storageService");
+    const { supabase, getTrips } = await import("../../src/shared/services/storageService");
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: {
         session: {
@@ -146,7 +146,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("does not enter full-screen loading state when onAuthStateChange fires SIGNED_IN or TOKEN_REFRESHED for the active user", async () => {
-    const { supabase, getTrips } = await import("../../services/storageService");
+    const { supabase, getTrips } = await import("../../src/shared/services/storageService");
     const mockUser = {
       id: "user-123",
       email: "test@example.com",
@@ -192,7 +192,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("allows deleting a trip from the Your Trips list view using DeleteTripModal", async () => {
-    const { supabase, getTrips, deleteTrip } = await import("../../services/storageService");
+    const { supabase, getTrips, deleteTrip } = await import("../../src/shared/services/storageService");
     const mockUser = {
       id: "user-123",
       email: "test@example.com",
@@ -263,7 +263,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("toggles profile dropdown menu with theme, language, and logout options", async () => {
-    const { supabase, getTrips } = await import("../../services/storageService");
+    const { supabase, getTrips } = await import("../../src/shared/services/storageService");
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: {
         session: {
@@ -303,7 +303,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("renders Instagram-style mobile dock profile button and toggles upward popover in trip detail view", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     const mockTrip = {
       id: "trip-dock-1",
       user_id: "user-dock-123",
@@ -364,7 +364,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("supports press-and-slide scrubbing on mobile dock with synchronized screen follow and tab switching", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     const mockTrip = {
       id: "trip-scrub-1",
       user_id: "user-scrub-123",
@@ -444,7 +444,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("synchronizes URL path across /trips, /trips/:tripId, and upgrades legacy ?tripId= links", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     const mockTrip = {
       id: "trip-route-42",
       user_id: "user-route-1",
@@ -499,7 +499,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("never locks tabs when flight price is 0", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     const zeroPriceTrip = {
       id: "trip-zero-price",
       user_id: "user-zp-1",
@@ -571,7 +571,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   const openUnpricedTrip = async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     const trip = {
       id: "trip-pill",
       user_id: "user-pill-1",
@@ -650,8 +650,8 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("runs guided post-flight-creation flow: BoardingPassIssueModal -> Itinerary banner -> Flights price edit -> Overview", async () => {
-    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
-    const { fetchTdxFlights } = await import("../../services/tdxService");
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../src/shared/services/storageService");
+    const { fetchTdxFlights } = await import("../../src/features/flights/services/tdxService");
 
     let createdTrip: any = null;
     vi.mocked(createFullTrip).mockImplementation(async (trip: any) => {
@@ -768,7 +768,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("quick-creates a trip without flights directly onto the Overview tab without boarding pass animation", async () => {
-    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../src/shared/services/storageService");
     let createdTrip: any = null;
     vi.mocked(createFullTrip).mockImplementation(async (trip: any) => {
       createdTrip = trip;
@@ -810,7 +810,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("deduplicates trip IDs and skips Realtime list refresh during trip creation so no duplicate trip card appears", async () => {
-    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../src/shared/services/storageService");
     let globalTripsInsertHandler: ((payload: any) => void) | null = null;
     const globalChannel = {
       on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
@@ -918,7 +918,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("patches itinerary_items, expenses, and flights incrementally via Realtime without triggering 6-table refetch and ignores unrelated DELETE IDs", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
 
     type HandlerKey = `${string}:${string}`;
     const activeHandlers = new Map<HandlerKey, (payload: any) => void>();
@@ -1214,7 +1214,7 @@ describe("App Component (Smoke Test)", () => {
   });
 
   it("handles offline -> online transitions, channel error status, and one-click retry resync in the header", async () => {
-    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const { supabase, getTrips, getTripById } = await import("../../src/shared/services/storageService");
     let activeSubscribeCb: ((status: string) => void) | null = null;
 
     const activeChannel = {
@@ -1344,7 +1344,7 @@ describe("App Component (Smoke Test)", () => {
 
   it("uses granular upsertExpense (never saveTrip), rolls back on write error, and exposes sync retry button", async () => {
     const { supabase, getTrips, getTripById, upsertExpense, saveTrip } = await import(
-      "../../services/storageService"
+      "../../src/shared/services/storageService"
     );
 
     const mockTrip = {
@@ -1424,8 +1424,8 @@ describe("App Component (Smoke Test)", () => {
       upsertItineraryItems,
       deleteExpense,
       deleteItineraryItem,
-    } = await import("../../services/storageService");
-    const { searchFreePlaces } = await import("../../services/searchPlaceService");
+    } = await import("../../src/shared/services/storageService");
+    const { searchFreePlaces } = await import("../../src/features/itinerary/services/searchPlaceService");
 
     type HandlerKey = `${string}:${string}`;
     const activeHandlers = new Map<HandlerKey, (payload: any) => void>();
@@ -1578,7 +1578,7 @@ describe("App Component (Smoke Test)", () => {
 
   it("surgically rolls back a failed granular write without wiping concurrent Realtime-inserted rows", async () => {
     const { supabase, getTrips, getTripById, upsertExpense } = await import(
-      "../../services/storageService"
+      "../../src/shared/services/storageService"
     );
 
     type HandlerKey = `${string}:${string}`;

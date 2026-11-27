@@ -1,12 +1,12 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, act } from "@testing-library/react";
-import { Itinerary } from "../../components/Itinerary";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, User } from "../../types";
+import { Itinerary } from "../../src/features/itinerary/Itinerary";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, User } from "../../src/types";
 
 // Mock MapView to avoid Leaflet canvas initialization in jsdom
-vi.mock("../../components/MapView", () => ({
+vi.mock("../../src/features/itinerary/MapView", () => ({
   MapView: () => <div data-testid="mock-mapview">Mocked MapView</div>,
 }));
 

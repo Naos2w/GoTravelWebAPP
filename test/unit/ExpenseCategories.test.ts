@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CATEGORY_UI, getCategoryName } from "../../components/ExpenseCategories";
+import { CATEGORY_UI, getCategoryName } from "../../src/features/expenses/ExpenseCategories";
 
 describe("ExpenseCategories", () => {
   const expectedCategories = [

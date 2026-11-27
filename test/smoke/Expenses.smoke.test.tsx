@@ -1,10 +1,10 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { Expenses } from "../../components/Expenses";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, User, Currency } from "../../types";
-import { EXCHANGE_RATE_STORAGE_KEY } from "../../services/exchangeRateService";
+import { Expenses } from "../../src/features/expenses/Expenses";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, User, Currency } from "../../src/types";
+import { EXCHANGE_RATE_STORAGE_KEY } from "../../src/features/expenses/services/exchangeRateService";
 
 vi.mock("recharts", () => ({
   ResponsiveContainer: ({ children }: any) => <div>{children}</div>,

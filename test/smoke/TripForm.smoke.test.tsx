@@ -1,11 +1,11 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within, waitFor, act } from "@testing-library/react";
-import { TripForm } from "../../components/TripForm";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { fetchTdxFlights } from "../../services/tdxService";
+import { TripForm } from "../../src/features/trips/TripForm";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { fetchTdxFlights } from "../../src/features/flights/services/tdxService";
 
-vi.mock("../../services/tdxService", () => ({
+vi.mock("../../src/features/flights/services/tdxService", () => ({
   fetchTdxFlights: vi.fn(),
 }));
 

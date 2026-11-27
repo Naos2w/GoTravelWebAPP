@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { TAIWAN_AIRPORTS, parseTdxTime } from "../../services/tdxService";
+import { TAIWAN_AIRPORTS, parseTdxTime } from "../../src/features/flights/services/tdxService";
 
 describe("tdxService", () => {
   describe("TAIWAN_AIRPORTS", () => {
@@ -57,7 +57,7 @@ describe("tdxService", () => {
     });
 
     const loadFetchTdxFlights = async () => {
-      const mod = await import("../../services/tdxService");
+      const mod = await import("../../src/features/flights/services/tdxService");
       return mod.fetchTdxFlights;
     };
 

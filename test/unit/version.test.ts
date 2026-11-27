@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { APP_VERSION } from "../../services/version";
+import { APP_VERSION } from "../../src/shared/services/version";
 import pkg from "../../package.json";
 
 describe("version", () => {
