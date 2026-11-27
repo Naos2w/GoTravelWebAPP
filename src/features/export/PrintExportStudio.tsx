@@ -37,7 +37,7 @@ import {
   shareOrDownloadCanvas,
 } from "./services/canvasExportService";
 import {
-  buildGoogleMapsDayRouteUrl,
+  buildGoogleMapsDayRouteSegments,
   downloadTripKml,
 } from "./services/mapExportService";
 import {
@@ -214,12 +214,12 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   );
 
   const selectedMapDay = itinerary[safeMapDayIdx];
-  const dayRouteUrl = useMemo(() => {
-    if (!selectedMapDay) return null;
+  const dayRouteSegments = useMemo(() => {
+    if (!selectedMapDay) return [];
     try {
-      return buildGoogleMapsDayRouteUrl(selectedMapDay);
+      return buildGoogleMapsDayRouteSegments(selectedMapDay);
     } catch {
-      return null;
+      return [];
     }
   }, [selectedMapDay]);
 
@@ -763,9 +763,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   </p>
                 )}
 
-                {dayRouteUrl ? (
+                {dayRouteSegments.length === 1 ? (
                   <a
-                    href={dayRouteUrl}
+                    href={dayRouteSegments[0].url}
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="gmaps-day-route-link"
@@ -775,6 +775,42 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                     <span>{t("exportStudioMapsRouteBtn")}</span>
                     <ExternalLink size={13} className="shrink-0 opacity-80" />
                   </a>
+                ) : dayRouteSegments.length > 1 ? (
+                  <div className="space-y-2.5">
+                    <div
+                      data-testid="gmaps-chunk-notice"
+                      className="px-3 py-2 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/25 text-amber-800 dark:text-amber-200 text-[11px] font-bold leading-relaxed flex items-start gap-2"
+                    >
+                      <Info size={14} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-300" />
+                      <span>
+                        {t("exportStudioGmapsChunkNotice").replace(
+                          "{count}",
+                          String(dayRouteSegments.length)
+                        )}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {dayRouteSegments.map((seg) => (
+                        <a
+                          key={seg.index}
+                          href={seg.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid={`gmaps-day-route-segment-${seg.index}`}
+                          className="h-10 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer tabular-nums"
+                        >
+                          <Navigation size={14} className="shrink-0" />
+                          <span>
+                            {t("exportStudioGmapsLegLabel")
+                              .replace("{index}", String(seg.index))
+                              .replace("{from}", String(seg.fromStop))
+                              .replace("{to}", String(seg.toStop))}
+                          </span>
+                          <ExternalLink size={12} className="shrink-0 opacity-80" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
                   <div className="space-y-1.5">
                     <button

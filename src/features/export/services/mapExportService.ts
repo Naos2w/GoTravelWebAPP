@@ -2,7 +2,18 @@ import { DayPlan, ItineraryItem, Language, TransportType, Trip } from "../../../
 import { enrichAirportCoords } from "../../flights/services/airportCoordsService";
 import { sanitizeFilenameBase, triggerBlobDownload } from "./exportHelpers";
 
-const MAX_GOOGLE_MAPS_WAYPOINTS = 8;
+/**
+ * Google Maps official URL limit: 1 origin + 8 intermediate waypoints + 1 destination = 10 stops.
+ */
+const MAX_STOPS_PER_SEGMENT = 10;
+
+export interface GoogleMapsRouteSegment {
+  index: number;
+  total: number;
+  fromStop: number;
+  toStop: number;
+  url: string;
+}
 
 const TRAVEL_MODE_MAP: Record<TransportType, string> = {
   Public: "transit",
@@ -59,29 +70,10 @@ function resolveStopLocation(item: ItineraryItem): string | null {
   return name || null;
 }
 
-/**
- * Builds an official zero-cost Google Maps multi-stop route URL for a single day.
- * Enriches airport coordinates automatically and caps intermediate waypoints at 8.
- */
-export function buildGoogleMapsDayRouteUrl(day: DayPlan): string | null {
-  const items = day?.items || [];
-  const stops = items
-    .filter((item) => item.type !== "Transport")
-    .map(resolveStopLocation)
-    .filter((loc): loc is string => loc !== null);
-
-  if (stops.length === 0) {
-    return null;
-  }
-
-  if (stops.length === 1) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`;
-  }
-
-  const origin = stops[0];
-  const destination = stops[stops.length - 1];
-  const waypoints = stops.slice(1, -1).slice(0, MAX_GOOGLE_MAPS_WAYPOINTS);
-  const travelMode = resolveDayTravelMode(items);
+function buildDirectionsUrl(stopsSlice: string[], travelMode: string): string {
+  const origin = stopsSlice[0];
+  const destination = stopsSlice[stopsSlice.length - 1];
+  const waypoints = stopsSlice.slice(1, -1);
 
   const params = new URLSearchParams({
     api: "1",
@@ -94,6 +86,86 @@ export function buildGoogleMapsDayRouteUrl(day: DayPlan): string | null {
   params.set("travelmode", travelMode);
 
   return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+/**
+ * Splits a day's stops into 1 or more continuous Google Maps route segments.
+ * Google Maps enforces a maximum of 10 stops per URL (origin + 8 waypoints + destination).
+ * When a day has > 10 stops, consecutive legs overlap by 1 stop so navigation continues seamlessly.
+ */
+export function buildGoogleMapsDayRouteSegments(day: DayPlan): GoogleMapsRouteSegment[] {
+  const items = day?.items || [];
+  const stops = items
+    .filter((item) => item.type !== "Transport")
+    .map(resolveStopLocation)
+    .filter((loc): loc is string => loc !== null);
+
+  if (stops.length === 0) {
+    return [];
+  }
+
+  if (stops.length === 1) {
+    return [
+      {
+        index: 1,
+        total: 1,
+        fromStop: 1,
+        toStop: 1,
+        url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`,
+      },
+    ];
+  }
+
+  const travelMode = resolveDayTravelMode(items);
+
+  if (stops.length <= MAX_STOPS_PER_SEGMENT) {
+    return [
+      {
+        index: 1,
+        total: 1,
+        fromStop: 1,
+        toStop: stops.length,
+        url: buildDirectionsUrl(stops, travelMode),
+      },
+    ];
+  }
+
+  const rawSegments: Array<{ fromStop: number; toStop: number; url: string }> = [];
+  let startIdx = 0;
+
+  while (startIdx < stops.length - 1) {
+    const endIdxExclusive = Math.min(startIdx + MAX_STOPS_PER_SEGMENT, stops.length);
+    const slice = stops.slice(startIdx, endIdxExclusive);
+    rawSegments.push({
+      fromStop: startIdx + 1,
+      toStop: endIdxExclusive,
+      url: buildDirectionsUrl(slice, travelMode),
+    });
+
+    if (endIdxExclusive >= stops.length) {
+      break;
+    }
+    // Overlap by 1 stop so the destination of leg N becomes the origin of leg N+1
+    startIdx = endIdxExclusive - 1;
+  }
+
+  const total = rawSegments.length;
+  return rawSegments.map((seg, i) => ({
+    index: i + 1,
+    total,
+    fromStop: seg.fromStop,
+    toStop: seg.toStop,
+    url: seg.url,
+  }));
+}
+
+/**
+ * Builds an official zero-cost Google Maps multi-stop route URL for a single day.
+ * Returns the first segment URL from `buildGoogleMapsDayRouteSegments(day)` for backward compatibility.
+ */
+export function buildGoogleMapsDayRouteUrl(day: DayPlan): string | null {
+  const segments = buildGoogleMapsDayRouteSegments(day);
+  return segments[0]?.url ?? null;
 }
 
 /**

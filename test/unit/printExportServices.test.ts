@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Currency, DayPlan, FlightSegment, Trip } from "../../src/types";
 import {
+  buildGoogleMapsDayRouteSegments,
   buildGoogleMapsDayRouteUrl,
   generateTripKml,
   downloadTripKml,
@@ -13,6 +14,7 @@ import {
   shareChecklistToNotes,
 } from "../../src/features/export/services/calendarChecklistExportService";
 import {
+  generateDayRouteSvg,
   generatePrintableBookletHtml,
   openPrintableTravelBooklet,
 } from "../../src/features/export/services/printBookletService";
@@ -190,28 +192,46 @@ describe("printExportServices", () => {
       expect(parsed.searchParams.get("travelmode")).toBe("transit");
     });
 
-    it("caps intermediate waypoints at 8 when a day has 12 stops and uses placeName fallback", () => {
-      const items = Array.from({ length: 12 }, (_, idx) => ({
+    it("chunks a 14-stop day into 2 overlapping Google Maps route segments (1–10 and 10–14) and keeps buildGoogleMapsDayRouteUrl backward-compatible", () => {
+      const items = Array.from({ length: 14 }, (_, idx) => ({
         id: `s-${idx}`,
         time: `${String(8 + idx).padStart(2, "0")}:00`,
         placeName: `Stop ${idx + 1}`,
-        ...(idx < 11 ? { lat: 35 + idx * 0.01, lng: 139 + idx * 0.01 } : {}),
+        ...(idx < 13 ? { lat: 35 + idx * 0.01, lng: 139 + idx * 0.01 } : {}),
         type: "Place" as const,
         transportType: "Car" as const,
         date: "2026-10-10",
       }));
 
-      const url = buildGoogleMapsDayRouteUrl({ date: "2026-10-10", items });
-      expect(url).not.toBeNull();
-      const parsed = new URL(url!);
-      expect(parsed.searchParams.get("origin")).toBe("35,139");
-      expect(parsed.searchParams.get("destination")).toBe("Stop 12");
-      expect(parsed.searchParams.get("travelmode")).toBe("driving");
+      const day: DayPlan = { date: "2026-10-10", items };
+      const segments = buildGoogleMapsDayRouteSegments(day);
 
-      const waypoints = parsed.searchParams.get("waypoints")!.split("|");
-      expect(waypoints).toHaveLength(8);
-      expect(waypoints[0]).toBe("35.01,139.01");
-      expect(waypoints[7]).toBe("35.08,139.08");
+      expect(segments).toHaveLength(2);
+      expect(segments[0]).toMatchObject({ index: 1, total: 2, fromStop: 1, toStop: 10 });
+      expect(segments[1]).toMatchObject({ index: 2, total: 2, fromStop: 10, toStop: 14 });
+
+      // Leg 1: stops 1..10 (1 origin + 8 waypoints + 1 destination)
+      const leg1 = new URL(segments[0].url);
+      expect(leg1.searchParams.get("origin")).toBe("35,139");
+      expect(leg1.searchParams.get("destination")).toBe("35.09,139.09");
+      expect(leg1.searchParams.get("travelmode")).toBe("driving");
+      const leg1Waypoints = leg1.searchParams.get("waypoints")!.split("|");
+      expect(leg1Waypoints).toHaveLength(8);
+      expect(leg1Waypoints[0]).toBe("35.01,139.01");
+      expect(leg1Waypoints[7]).toBe("35.08,139.08");
+
+      // Leg 2: stops 10..14 (stop 10 overlaps as origin, stop 14 uses placeName fallback)
+      const leg2 = new URL(segments[1].url);
+      expect(leg2.searchParams.get("origin")).toBe("35.09,139.09");
+      expect(leg2.searchParams.get("destination")).toBe("Stop 14");
+      expect(leg2.searchParams.get("travelmode")).toBe("driving");
+      const leg2Waypoints = leg2.searchParams.get("waypoints")!.split("|");
+      expect(leg2Waypoints).toHaveLength(3);
+      expect(leg2Waypoints[0]).toBe("35.1,139.1");
+      expect(leg2Waypoints[2]).toBe("35.12,139.12");
+
+      // Backward-compatible single-URL wrapper returns leg 1
+      expect(buildGoogleMapsDayRouteUrl(day)).toBe(segments[0].url);
     });
 
     it("generates valid KML 2.2 with per-day Folder, lng,lat,0 coordinate order, and XML escaping", () => {
@@ -365,6 +385,36 @@ describe("printExportServices", () => {
       expect(html).toContain("☑");
     });
 
+    it("renders inline vector SVG mini-map for 2+ geocoded stops, compact transport-connector, expense SVG bar chart, and 2-column checklist", () => {
+      const trip = makeTrip();
+      const html = generatePrintableBookletHtml(trip, "zh");
+
+      // Inline SVG mini route map generated from FUK airport (enriched) + Ichiran Ramen coords
+      expect(html).toContain('class="route-map-card"');
+      expect(html).toContain("<svg");
+      expect(html).toContain("<polyline");
+
+      // Direct unit check on generateDayRouteSvg
+      const svg = generateDayRouteSvg(trip.itinerary[0], "zh");
+      expect(svg).not.toBeNull();
+      expect(svg).toContain("<svg");
+      expect(svg).toContain(">1<");
+      expect(svg).toContain(">2<");
+
+      // Transport items render as compact .transport-connector, NOT bulky .stop cards
+      expect(html).toContain('class="transport-connector"');
+      expect(html).toContain("Subway to Hakata");
+      const stopMatches = html.match(/class="stop avoid-break"/g) || [];
+      expect(stopMatches).toHaveLength(2);
+
+      // Expense summary SVG horizontal bar chart + Splitwise settlement
+      expect(html).toContain('class="expense-chart-box"');
+      expect(html).toContain("bob → Alice");
+
+      // 2-column compact packing checklist
+      expect(html).toContain("grid-template-columns: 1fr 1fr");
+    });
+
     it("opens a print window and triggers print(), returning true", () => {
       const printMock = vi.fn();
       const focusMock = vi.fn();
@@ -423,6 +473,8 @@ describe("printExportServices", () => {
         moveTo: vi.fn(),
         lineTo: vi.fn(),
         quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        clip: vi.fn(),
         closePath: vi.fn(),
         fill: vi.fn(),
         stroke: vi.fn(),
@@ -433,11 +485,18 @@ describe("printExportServices", () => {
           drawnText.push(text);
         }),
         createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
         fillStyle: "",
         strokeStyle: "",
+        shadowColor: "",
+        shadowBlur: 0,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        globalAlpha: 1,
         lineWidth: 1,
         font: "",
         textAlign: "left",
+        textBaseline: "alphabetic",
       };
 
       const origCreateElement = document.createElement.bind(document);
@@ -456,9 +515,18 @@ describe("printExportServices", () => {
       expect(drawnText.some((t) => t.includes("bob → Alice"))).toBe(true);
 
       drawnText.length = 0;
+      mockCtx.arc.mockClear();
       renderPrintableCanvas("boarding-pass", { trip, lang: "en", theme: "dark" });
       expect(drawnText).toContain("TPE");
       expect(drawnText).toContain("FUK");
+      expect(drawnText).toContain("BR106");
+      expect(drawnText).toContain("BR105");
+      // Authentic PKPass semicircular cutouts & vector circles invoke ctx.arc
+      expect(mockCtx.arc).toHaveBeenCalled();
+
+      drawnText.length = 0;
+      renderPrintableCanvas("lockscreen", { trip, lang: "zh", theme: "dark" });
+      expect(drawnText.some((t) => t.includes("Subway to Hakata"))).toBe(true);
 
       drawnText.length = 0;
       renderPrintableCanvas("story", { trip, lang: "en", theme: "light" });

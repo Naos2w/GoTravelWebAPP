@@ -231,6 +231,46 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
     expect(kmlSpy).toHaveBeenCalledWith(mockTrip, "zh");
   });
 
+  it("auto-chunks a day with >10 stops into multiple Google Maps leg buttons with a chunk notice", () => {
+    const busyDayTrip: Trip = {
+      ...mockTrip,
+      itinerary: [
+        {
+          date: "2026-10-01",
+          items: Array.from({ length: 14 }, (_, idx) => ({
+            id: `busy-${idx}`,
+            placeName: `Tokyo Spot ${idx + 1}`,
+            time: `${String(8 + idx).padStart(2, "0")}:00`,
+            type: "Place" as const,
+            date: "2026-10-01",
+            lat: 35.65 + idx * 0.005,
+            lng: 139.7 + idx * 0.005,
+          })),
+        },
+      ],
+    };
+
+    render(
+      <LocalizationProvider>
+        <ExportModal trip={busyDayTrip} isOpen={true} onClose={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    fireEvent.click(screen.getByTestId("studio-tab-maps"));
+
+    expect(screen.getByTestId("gmaps-chunk-notice")).toHaveTextContent(
+      "超過 Google Maps 單次 10 站上限，已自動拆分為 2 段連續導航"
+    );
+
+    const seg1 = screen.getByTestId("gmaps-day-route-segment-1");
+    const seg2 = screen.getByTestId("gmaps-day-route-segment-2");
+
+    expect(seg1).toHaveTextContent("第 1 段 (站 1–10)");
+    expect(seg1).toHaveAttribute("href", expect.stringContaining("google.com/maps/dir/"));
+    expect(seg2).toHaveTextContent("第 2 段 (站 10–14)");
+    expect(seg2).toHaveAttribute("href", expect.stringContaining("google.com/maps/dir/"));
+  });
+
   it("supports classic Notes/ICS/Markdown, 1-tap Google Calendar flight links, and Checklist Notes/VTODO sync on Calendar & Notes tab", async () => {
     const vtodoSpy = vi
       .spyOn(calendarChecklistExportService, "downloadChecklistVtodoIcs")
