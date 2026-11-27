@@ -1,7 +1,8 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { ExportModal } from "../../src/features/trips/ExportModal";
+import { PRINT_ANIMATION_MS } from "../../src/features/export/PrintExportStudio";
 import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
 import { Trip, Currency } from "../../src/types";
 import * as mapExportService from "../../src/features/export/services/mapExportService";
@@ -97,6 +98,10 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
     vi.restoreAllMocks();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("does not render when isOpen is false", () => {
     const { container } = render(
       <LocalizationProvider>
@@ -135,7 +140,12 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
     expect(handleClose).toHaveBeenCalledTimes(3);
   });
 
-  it("supports switching card types (receipt, boarding-pass, lockscreen, story) and exporting PNG on Image Printer tab", async () => {
+  it("renders compact card selector without static preview, runs print animation stage, and triggers shareOrDownloadCanvas on completion", async () => {
+    vi.useFakeTimers();
+    const fakeCanvas = document.createElement("canvas");
+    vi.spyOn(canvasExportService, "renderPrintableCanvasAsync").mockResolvedValue(
+      fakeCanvas
+    );
     const shareSpy = vi
       .spyOn(canvasExportService, "shareOrDownloadCanvas")
       .mockResolvedValue("downloaded");
@@ -152,12 +162,14 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
       </LocalizationProvider>
     );
 
-    // Default card is receipt & clean fallback preview renders in jsdom
+    // Default card is receipt & NO always-visible static preview box exists
     expect(screen.getByTestId("card-selector-receipt")).toHaveAttribute(
       "aria-pressed",
       "true"
     );
-    expect(screen.getByTestId("canvas-fallback-preview")).toBeInTheDocument();
+    expect(screen.queryByTestId("canvas-preview-img")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("canvas-fallback-preview")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("print-animation-stage")).not.toBeInTheDocument();
 
     // Switch to boarding-pass
     fireEvent.click(screen.getByTestId("card-selector-boarding-pass"));
@@ -183,12 +195,66 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
     );
     fireEvent.click(screen.getByTestId("image-day-pill-1"));
 
-    // Trigger Share / Save PNG and await async completion
-    fireEvent.click(screen.getByTestId("share-save-png-btn"));
-    await waitFor(() => {
-      expect(shareSpy).toHaveBeenCalledTimes(1);
-      expect(onNotify).toHaveBeenCalledWith(expect.any(String), "success");
+    // Click Print CTA -> enters print animation stage first without saving yet
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("share-save-png-btn"));
     });
+    expect(screen.getByTestId("print-animation-stage")).toBeInTheDocument();
+    expect(screen.getByTestId("print-skip-btn")).toBeInTheDocument();
+    expect(shareSpy).not.toHaveBeenCalled();
+
+    // After ~1.5s print animation completes -> auto-triggers shareOrDownloadCanvas
+    await act(async () => {
+      vi.advanceTimersByTime(PRINT_ANIMATION_MS);
+    });
+    expect(shareSpy).toHaveBeenCalledTimes(1);
+    expect(onNotify).toHaveBeenCalledWith(expect.any(String), "success");
+    expect(screen.getByTestId("print-stage-status").textContent).toContain("✓");
+    expect(screen.getByTestId("print-save-again-btn")).toBeInTheDocument();
+    expect(screen.getByTestId("print-back-btn")).toBeInTheDocument();
+
+    // Manual fallback button works on direct user gesture
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("print-save-again-btn"));
+    });
+    expect(shareSpy).toHaveBeenCalledTimes(2);
+
+    // Back button returns cleanly to selector layout
+    fireEvent.click(screen.getByTestId("print-back-btn"));
+    expect(screen.queryByTestId("print-animation-stage")).not.toBeInTheDocument();
+    expect(screen.getByTestId("share-save-png-btn")).toBeInTheDocument();
+  });
+
+  it("allows skipping the print animation immediately without double-triggering save", async () => {
+    vi.useFakeTimers();
+    const fakeCanvas = document.createElement("canvas");
+    vi.spyOn(canvasExportService, "renderPrintableCanvasAsync").mockResolvedValue(
+      fakeCanvas
+    );
+    const shareSpy = vi
+      .spyOn(canvasExportService, "shareOrDownloadCanvas")
+      .mockResolvedValue("shared");
+
+    render(
+      <LocalizationProvider>
+        <ExportModal trip={mockTrip} isOpen={true} onClose={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("share-save-png-btn"));
+    });
+    expect(screen.getByTestId("print-animation-stage")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("print-skip-btn"));
+    });
+    expect(shareSpy).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(PRINT_ANIMATION_MS * 2);
+    });
+    expect(shareSpy).toHaveBeenCalledTimes(1);
   });
 
   it("supports Travel Booklet PDF, Google Maps Day Route (active & empty day), and KML download on Maps & PDF tab", () => {

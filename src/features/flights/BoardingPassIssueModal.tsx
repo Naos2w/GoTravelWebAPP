@@ -474,7 +474,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
           onWheel={markUserInteracted}
           onTouchStart={markUserInteracted}
           onPointerDown={markUserInteracted}
-          className="hidden sm:flex items-start justify-center w-full min-h-0 max-h-[58vh] overflow-y-auto px-2 py-2"
+          className="hidden sm:flex items-start justify-center w-full min-h-0 max-h-[58vh] overflow-y-auto no-scrollbar px-2 py-2"
         >
           <div className="flex items-stretch justify-center w-full max-w-[600px]">
             {metalSlot(true)}
@@ -493,7 +493,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
             onWheel={markUserInteracted}
             onTouchStart={markUserInteracted}
             onPointerDown={markUserInteracted}
-            className="w-full overflow-y-auto overflow-x-hidden px-3 pt-1 pb-3 flex flex-col items-center gap-2.5"
+            className="w-full overflow-y-auto overflow-x-hidden no-scrollbar px-3 pt-1 pb-3 flex flex-col items-center gap-2.5"
           >
             {passes.map((item, idx) => renderPassFace(item, idx, 'y'))}
           </div>

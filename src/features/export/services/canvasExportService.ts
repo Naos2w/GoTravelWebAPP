@@ -956,11 +956,66 @@ function drawBaggagePill(
   return { x: drawX, w, h };
 }
 
+interface ExpandedBoardingPass {
+  seg: FlightSegment;
+  direction: "outbound" | "inbound";
+  legIndex: number;
+  legCount: number;
+  parentBaggage?: Trip["flights"][number]["baggage"];
+}
+
+function expandFlightPasses(flight?: Trip["flights"][number]): ExpandedBoardingPass[] {
+  if (!flight) return [];
+  const passes: ExpandedBoardingPass[] = [];
+
+  if (flight.outbound) {
+    const outSegs =
+      flight.outbound.segments && flight.outbound.segments.length > 0
+        ? flight.outbound.segments
+        : [flight.outbound];
+    outSegs.forEach((seg, idx) => {
+      passes.push({
+        seg,
+        direction: "outbound",
+        legIndex: idx + 1,
+        legCount: outSegs.length,
+        parentBaggage: flight.outbound.baggage || flight.baggage,
+      });
+    });
+  }
+
+  const hasInbound = Boolean(
+    flight.inbound &&
+      (flight.inbound.segments?.length ||
+        flight.inbound.flightNumber ||
+        flight.inbound.departureAirport)
+  );
+  if (hasInbound && flight.inbound) {
+    const inSegs =
+      flight.inbound.segments && flight.inbound.segments.length > 0
+        ? flight.inbound.segments
+        : [flight.inbound];
+    inSegs.forEach((seg, idx) => {
+      passes.push({
+        seg,
+        direction: "inbound",
+        legIndex: idx + 1,
+        legCount: inSegs.length,
+        parentBaggage: flight.inbound?.baggage || flight.baggage,
+      });
+    });
+  }
+
+  return passes;
+}
+
 function drawNotchedFlightPass(
   ctx: CanvasRenderingContext2D,
   opts: {
     seg: FlightSegment;
     direction: "outbound" | "inbound";
+    legIndex?: number;
+    legCount?: number;
     traveler: string;
     cabinClass?: string;
     seat?: string;
@@ -978,6 +1033,8 @@ function drawNotchedFlightPass(
   const {
     seg,
     direction,
+    legIndex = 1,
+    legCount = 1,
     traveler,
     cabinClass,
     seat,
@@ -1124,9 +1181,22 @@ function drawNotchedFlightPass(
 
   // Direction label + Airline name
   const nameX = innerLeft + sqSize + 11;
-  const dirText = isOutbound
-    ? lang === "zh" ? "去程 OUTBOUND" : "OUTBOUND"
-    : lang === "zh" ? "回程 INBOUND" : "INBOUND";
+  const isMultiLeg = legCount > 1;
+  const dirText = isMultiLeg
+    ? isOutbound
+      ? lang === "zh"
+        ? `去程 · 航段 ${legIndex}`
+        : `OUTBOUND · LEG ${legIndex}`
+      : lang === "zh"
+        ? `回程 · 航段 ${legIndex}`
+        : `INBOUND · LEG ${legIndex}`
+    : isOutbound
+      ? lang === "zh"
+        ? "去程 OUTBOUND"
+        : "OUTBOUND"
+      : lang === "zh"
+        ? "回程 INBOUND"
+        : "INBOUND";
   ctx.fillStyle = isOutbound ? appleBlue : isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `800 9px ${MONO_STACK}`;
   ctx.textAlign = "left";
@@ -1344,8 +1414,21 @@ function drawNotchedFlightPass(
 
 function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions): void {
   const { trip, lang, flightIndex = 0, theme = "dark" } = options;
+  const flight = trip.flights?.[flightIndex] || trip.flights?.[0];
+  const passes = expandFlightPasses(flight);
+
   const logicalW = 540;
-  const logicalH = 675; // 1080x1350 at 2x
+  const passStartY = 80;
+  const compactPassH = 272;
+  const compactGap = 16;
+  const bottomFooterPad = 35;
+  const logicalH =
+    passes.length >= 2
+      ? passStartY +
+        passes.length * compactPassH +
+        (passes.length - 1) * compactGap +
+        bottomFooterPad
+      : 675; // 1080x1350 at 2x for 0–2 passes, expands cleanly for 3+ layover passes
   const dpr = 2;
   canvas.width = logicalW * dpr;
   canvas.height = logicalH * dpr;
@@ -1374,8 +1457,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
   ctx.font = `800 20px ${FONT_STACK}`;
   ctx.fillText(truncateText(ctx, trip.name || trip.destination || "Boarding Pass", logicalW - 52), 26, 62);
 
-  const flight = trip.flights?.[flightIndex] || trip.flights?.[0];
-  if (!flight) {
+  if (!flight || passes.length === 0) {
     drawNotchedPassCard(ctx, 26, 110, logicalW - 52, 240, 24, 270, 12);
     ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
     ctx.fill();
@@ -1390,9 +1472,6 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
     return;
   }
 
-  const hasOutbound = Boolean(flight.outbound);
-  const hasInbound = Boolean(flight.inbound && (flight.inbound.flightNumber || flight.inbound.departureAirport));
-
   const resolveSegmentLogo = (seg?: FlightSegment): HTMLImageElement | null => {
     if (!seg || !options.airlineLogos) return null;
     const code = (seg.airlineID || inferAirlineId(seg.flightNumber) || "")
@@ -1402,50 +1481,39 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
     return code ? options.airlineLogos[code] ?? null : null;
   };
 
-  if (hasOutbound && hasInbound) {
-    drawNotchedFlightPass(ctx, {
-      seg: flight.outbound,
-      direction: "outbound",
-      traveler: flight.traveler_name || "TRAVELER",
-      cabinClass: flight.cabinClass,
-      seat: flight.seat,
-      fallbackBaggage: flight.baggage,
-      logoImg: resolveSegmentLogo(flight.outbound),
-      lang,
-      theme,
-      x: 24,
-      y: 80,
-      w: logicalW - 48,
-      h: 272,
-      compact: true,
-    });
-
-    drawNotchedFlightPass(ctx, {
-      seg: flight.inbound!,
-      direction: "inbound",
-      traveler: flight.traveler_name || "TRAVELER",
-      cabinClass: flight.cabinClass,
-      seat: flight.seat,
-      fallbackBaggage: flight.baggage,
-      logoImg: resolveSegmentLogo(flight.inbound),
-      lang,
-      theme,
-      x: 24,
-      y: 368,
-      w: logicalW - 48,
-      h: 272,
-      compact: true,
+  if (passes.length >= 2) {
+    passes.forEach((pass, idx) => {
+      drawNotchedFlightPass(ctx, {
+        seg: pass.seg,
+        direction: pass.direction,
+        legIndex: pass.legIndex,
+        legCount: pass.legCount,
+        traveler: flight.traveler_name || "TRAVELER",
+        cabinClass: flight.cabinClass,
+        seat: flight.seat,
+        fallbackBaggage: pass.parentBaggage,
+        logoImg: resolveSegmentLogo(pass.seg),
+        lang,
+        theme,
+        x: 24,
+        y: passStartY + idx * (compactPassH + compactGap),
+        w: logicalW - 48,
+        h: compactPassH,
+        compact: true,
+      });
     });
   } else {
-    const seg = hasOutbound ? flight.outbound : flight.inbound!;
+    const pass = passes[0];
     drawNotchedFlightPass(ctx, {
-      seg,
-      direction: hasOutbound ? "outbound" : "inbound",
+      seg: pass.seg,
+      direction: pass.direction,
+      legIndex: pass.legIndex,
+      legCount: pass.legCount,
       traveler: flight.traveler_name || "TRAVELER",
       cabinClass: flight.cabinClass,
       seat: flight.seat,
-      fallbackBaggage: flight.baggage,
-      logoImg: resolveSegmentLogo(seg),
+      fallbackBaggage: pass.parentBaggage,
+      logoImg: resolveSegmentLogo(pass.seg),
       lang,
       theme,
       x: 24,
@@ -1889,6 +1957,7 @@ export async function renderPrintableCanvasAsync(
     return renderPrintableCanvas(type, options);
   }
 
+  const passes = expandFlightPasses(flight);
   const codes = new Set<string>();
   const collectCode = (seg?: FlightSegment) => {
     if (!seg) return;
@@ -1899,9 +1968,8 @@ export async function renderPrintableCanvasAsync(
     if (raw) codes.add(raw);
   };
 
-  collectCode(flight.outbound);
-  if (flight.inbound && (flight.inbound.flightNumber || flight.inbound.departureAirport)) {
-    collectCode(flight.inbound);
+  for (const pass of passes) {
+    collectCode(pass.seg);
   }
 
   if (codes.size === 0) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   X as CloseIcon,
@@ -10,6 +10,7 @@ import {
   CalendarPlus,
   Copy,
   Check,
+  CheckCircle2,
   ChevronRight,
   Info,
   Download,
@@ -22,6 +23,8 @@ import {
   Sun,
   Moon,
   Plane,
+  ArrowLeft,
+  FastForward,
 } from "lucide-react";
 import { FlightSegment, Trip } from "../../types";
 import { useTranslation } from "../../shared/contexts/LocalizationContext";
@@ -32,7 +35,6 @@ import {
 } from "../trips/services/exportService";
 import {
   PrintableCardType,
-  renderPrintableCanvas,
   renderPrintableCanvasAsync,
   canvasToDataUrl,
   shareOrDownloadCanvas,
@@ -49,6 +51,43 @@ import {
 import { openPrintableTravelBooklet } from "./services/printBookletService";
 
 export type StudioTab = "images" | "maps" | "sync";
+
+export const PRINT_ANIMATION_MS = 1500;
+
+type PrintStagePhase = "idle" | "preparing" | "printing" | "done";
+
+const prefersReducedMotion = (): boolean =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const PRINT_KEYFRAMES = `
+@keyframes studio-sheet-feed {
+  0% { opacity: 0.3; transform: translateY(-102%); }
+  16% { opacity: 1; }
+  82% { opacity: 1; transform: translateY(2%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes studio-print-progress {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+.studio-sheet-feed {
+  animation: studio-sheet-feed var(--studio-print-ms, 1500ms) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.studio-print-progress {
+  transform-origin: left;
+  animation: studio-print-progress var(--studio-print-ms, 1500ms) linear both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-sheet-feed,
+  .studio-print-progress {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+`;
 
 export interface PrintExportStudioProps {
   trip: Trip;
@@ -138,15 +177,22 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
       : "light"
   );
 
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
-  const [pngExportDone, setPngExportDone] = useState<boolean>(false);
+  const [printPhase, setPrintPhase] = useState<PrintStagePhase>("idle");
+  const [printedImageUrl, setPrintedImageUrl] = useState<string>("");
+  const [isSavingPng, setIsSavingPng] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
   const [isExportingNotes, setIsExportingNotes] = useState<boolean>(false);
   const [isSharingChecklist, setIsSharingChecklist] = useState<boolean>(false);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const printPayloadRef = useRef<{
+    canvas: HTMLCanvasElement;
+    filename: string;
+    title: string;
+  } | null>(null);
+  const printTimerRef = useRef<number | null>(null);
+  const printRunIdRef = useRef<number>(0);
+  const hasAutoSavedRef = useRef<boolean>(false);
 
   const itinerary = trip.itinerary || [];
   const flights = trip.flights || [];
@@ -162,6 +208,38 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   const safeFlightIdx =
     flights.length > 0 ? Math.min(selectedFlightIdx, flights.length - 1) : 0;
 
+  const clearPrintTimer = useCallback(() => {
+    if (printTimerRef.current !== null) {
+      window.clearTimeout(printTimerRef.current);
+      printTimerRef.current = null;
+    }
+  }, []);
+
+  const resetPrintStage = useCallback(() => {
+    printRunIdRef.current += 1;
+    clearPrintTimer();
+    hasAutoSavedRef.current = false;
+    printPayloadRef.current = null;
+    setPrintPhase("idle");
+    setPrintedImageUrl("");
+    setIsSavingPng(false);
+  }, [clearPrintTimer]);
+
+  // Clean up pending timers and invalidate in-flight prints on unmount
+  useEffect(() => {
+    return () => {
+      printRunIdRef.current += 1;
+      clearPrintTimer();
+    };
+  }, [clearPrintTimer]);
+
+  // Reset print stage whenever modal closes or user switches away from Image Printer tab
+  useEffect(() => {
+    if (!isOpen || activeTab !== "images") {
+      resetPrintStage();
+    }
+  }, [isOpen, activeTab, resetPrintStage]);
+
   // Escape key to close
   useEffect(() => {
     if (!isOpen) return;
@@ -174,55 +252,6 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
-
-  // Render live canvas preview when on Image Printer tab
-  useEffect(() => {
-    if (!isOpen || activeTab !== "images") return;
-    let cancelled = false;
-    const renderOptions = {
-      trip,
-      lang: language,
-      dayIndex: safeDayIdx,
-      flightIndex: safeFlightIdx,
-      theme: canvasTheme,
-    };
-
-    try {
-      const canvas = renderPrintableCanvas(selectedCard, renderOptions);
-      canvasRef.current = canvas;
-      const url = canvasToDataUrl(canvas);
-      setPreviewUrl(url);
-    } catch {
-      canvasRef.current = null;
-      setPreviewUrl("");
-    }
-
-    if (selectedCard === "boarding-pass") {
-      renderPrintableCanvasAsync("boarding-pass", renderOptions)
-        .then((upgradedCanvas) => {
-          if (cancelled) return;
-          canvasRef.current = upgradedCanvas;
-          const upgradedUrl = canvasToDataUrl(upgradedCanvas);
-          setPreviewUrl(upgradedUrl);
-        })
-        .catch(() => {
-          // Keep synchronous preview silently if logo upgrade fails
-        });
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isOpen,
-    activeTab,
-    selectedCard,
-    trip,
-    language,
-    safeDayIdx,
-    safeFlightIdx,
-    canvasTheme,
-  ]);
 
   const totalStops = useMemo(
     () => itinerary.reduce((acc, day) => acc + (day.items?.length || 0), 0),
@@ -280,9 +309,51 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   const activeCardMeta =
     CARD_META.find((c) => c.type === selectedCard) || CARD_META[0];
 
-  // Handlers — Tab 1: Image Printer
-  const handleShareOrSavePng = async () => {
-    setIsExportingPng(true);
+  // Handlers — Tab 1: Image Printer (Direct Print-Animation-Then-Save Flow)
+  const triggerSavePrintedCanvas = async (runId: number) => {
+    const payload = printPayloadRef.current;
+    if (!payload || runId !== printRunIdRef.current) return;
+    setIsSavingPng(true);
+    try {
+      const method = await shareOrDownloadCanvas(
+        payload.canvas,
+        payload.filename,
+        payload.title
+      );
+      if (runId !== printRunIdRef.current) return;
+      onNotify?.(
+        method === "shared"
+          ? t("exportStudioPngShared")
+          : t("exportStudioPngDownloaded"),
+        "success"
+      );
+    } catch {
+      if (runId !== printRunIdRef.current) return;
+      onNotify?.(t("exportStudioPngError"), "error");
+    } finally {
+      if (runId === printRunIdRef.current) {
+        setIsSavingPng(false);
+      }
+    }
+  };
+
+  const finishPrintAnimation = (runId: number) => {
+    if (runId !== printRunIdRef.current || hasAutoSavedRef.current) return;
+    hasAutoSavedRef.current = true;
+    clearPrintTimer();
+    setPrintPhase("done");
+    void triggerSavePrintedCanvas(runId);
+  };
+
+  const handleStartPrint = async () => {
+    const runId = printRunIdRef.current + 1;
+    printRunIdRef.current = runId;
+    clearPrintTimer();
+    hasAutoSavedRef.current = false;
+    printPayloadRef.current = null;
+    setPrintedImageUrl("");
+    setPrintPhase("preparing");
+
     try {
       const canvas = await renderPrintableCanvasAsync(selectedCard, {
         trip,
@@ -291,7 +362,8 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
         flightIndex: safeFlightIdx,
         theme: canvasTheme,
       });
-      canvasRef.current = canvas;
+      if (runId !== printRunIdRef.current) return;
+
       const safeName = (trip.name || "gotravel")
         .replace(/[^\w\u4e00-\u9fff-]+/g, "-")
         .slice(0, 40);
@@ -302,20 +374,31 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
       const filename = `${safeName}-${selectedCard}${daySuffix}.png`;
       const title = `${trip.name || "Go Travel"} · ${t(activeCardMeta.labelKey)}`;
 
-      const method = await shareOrDownloadCanvas(canvas, filename, title);
-      setPngExportDone(true);
-      setTimeout(() => setPngExportDone(false), 2200);
-      onNotify?.(
-        method === "shared"
-          ? t("exportStudioPngShared")
-          : t("exportStudioPngDownloaded"),
-        "success"
-      );
+      printPayloadRef.current = { canvas, filename, title };
+      setPrintedImageUrl(canvasToDataUrl(canvas));
+
+      if (prefersReducedMotion()) {
+        finishPrintAnimation(runId);
+        return;
+      }
+
+      setPrintPhase("printing");
+      printTimerRef.current = window.setTimeout(() => {
+        finishPrintAnimation(runId);
+      }, PRINT_ANIMATION_MS);
     } catch {
+      if (runId !== printRunIdRef.current) return;
+      setPrintPhase("idle");
       onNotify?.(t("exportStudioPngError"), "error");
-    } finally {
-      setIsExportingPng(false);
     }
+  };
+
+  const handleSkipPrint = () => {
+    finishPrintAnimation(printRunIdRef.current);
+  };
+
+  const handleSaveAgain = () => {
+    void triggerSavePrintedCanvas(printRunIdRef.current);
   };
 
   // Handlers — Tab 2: Maps & PDF
@@ -520,186 +603,267 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
               data-testid="studio-panel-images"
               className="space-y-4"
             >
-              {/* 4 Visual Card Selectors */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {CARD_META.map((card) => {
-                  const isSelected = selectedCard === card.type;
-                  return (
-                    <button
-                      key={card.type}
-                      type="button"
-                      data-testid={`card-selector-${card.type}`}
-                      aria-pressed={isSelected}
-                      onClick={() => setSelectedCard(card.type)}
-                      className={`p-3 rounded-2xl border text-left transition-all active:scale-95 cursor-pointer flex flex-col gap-1.5 ${
-                        isSelected
-                          ? "bg-primary/10 dark:bg-primary/20 border-primary/50 shadow-sm ring-1 ring-primary/30"
-                          : "bg-slate-50/80 dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.07]"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xl leading-none" aria-hidden="true">
-                          {card.emoji}
-                        </span>
-                        <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 whitespace-nowrap shrink-0">
-                          {card.ratioBadge}
-                        </span>
-                      </div>
-                      <span className="text-xs font-black text-slate-900 dark:text-white whitespace-nowrap truncate">
-                        {t(card.labelKey)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {printPhase === "printing" || printPhase === "done" ? (
+                <div
+                  data-testid="print-animation-stage"
+                  className="rounded-3xl bg-slate-100/80 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.10] p-4 sm:p-6 flex flex-col items-center gap-4"
+                  style={{
+                    ["--studio-print-ms" as string]: `${PRINT_ANIMATION_MS}ms`,
+                  }}
+                >
+                  <style>{PRINT_KEYFRAMES}</style>
 
-              {/* Contextual Controls Row (Day / Flight Selector + Card Theme) */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                {(selectedCard === "lockscreen" || selectedCard === "story") &&
-                itinerary.length > 0 ? (
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
-                      {t("exportStudioSelectDay")}
-                    </span>
-                    <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto no-scrollbar gap-1.5 py-0.5">
-                      {itinerary.map((day, idx) => {
-                        const isPicked = safeDayIdx === idx;
-                        return (
-                          <button
-                            key={day.date || idx}
-                            type="button"
-                            data-testid={`image-day-pill-${idx}`}
-                            onClick={() => setSelectedDayIdx(idx)}
-                            className={`h-8 px-3 rounded-full text-xs font-bold tabular-nums whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer border ${
-                              isPicked
-                                ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm"
-                                : "bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border-black/[0.08] dark:border-white/[0.10] hover:border-primary/40"
-                            }`}
-                          >
-                            Day {idx + 1}
-                            {day.date ? ` · ${formatShortDate(day.date)}` : ""}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : selectedCard === "boarding-pass" && flights.length > 1 ? (
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
-                      {t("exportStudioSelectFlight")}
-                    </span>
-                    <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto no-scrollbar gap-1.5 py-0.5">
-                      {flights.map((f, idx) => {
-                        const isPicked = safeFlightIdx === idx;
-                        return (
-                          <button
-                            key={f.id || idx}
-                            type="button"
-                            onClick={() => setSelectedFlightIdx(idx)}
-                            className={`h-8 px-3 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer border ${
-                              isPicked
-                                ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm"
-                                : "bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border-black/[0.08] dark:border-white/[0.10]"
-                            }`}
-                          >
-                            {f.traveler_name || `#${idx + 1}`}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    {t(activeCardMeta.descKey)}
-                  </p>
-                )}
-
-                {selectedCard !== "receipt" && (
-                  <div className="inline-flex items-center p-0.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.10] self-start sm:self-auto shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setCanvasTheme("light")}
-                      className={`h-7 px-2.5 rounded-full text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-                        canvasTheme === "light"
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-500 dark:text-slate-400"
-                      }`}
-                    >
-                      <Sun size={12} className="shrink-0" />
-                      {t("exportStudioThemeLight")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCanvasTheme("dark")}
-                      className={`h-7 px-2.5 rounded-full text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
-                        canvasTheme === "dark"
-                          ? "bg-slate-900 text-white shadow-sm"
-                          : "text-slate-500 dark:text-slate-400"
-                      }`}
-                    >
-                      <Moon size={12} className="shrink-0" />
-                      {t("exportStudioThemeDark")}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Live Canvas Preview Box */}
-              <div className="rounded-3xl bg-slate-100/80 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.10] p-4 sm:p-5 flex flex-col items-center justify-center min-h-[240px] sm:min-h-[280px]">
-                {previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    alt={`${trip.name} ${t(activeCardMeta.labelKey)}`}
-                    data-testid="canvas-preview-img"
-                    className="max-h-[340px] w-auto rounded-2xl shadow-xl border border-black/[0.08] dark:border-white/[0.14] object-contain"
-                  />
-                ) : (
+                  {/* Status Pill */}
                   <div
-                    data-testid="canvas-fallback-preview"
-                    className="w-full max-w-xs rounded-2xl p-5 bg-white/90 dark:bg-[#181B24]/90 border border-black/[0.06] dark:border-white/[0.12] shadow-lg text-center space-y-2.5"
+                    data-testid="print-stage-status"
+                    aria-live="polite"
+                    className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-black tracking-wide border transition-colors ${
+                      printPhase === "done"
+                        ? "bg-emerald-500/12 text-emerald-700 border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/25"
+                        : "bg-primary/10 text-primary border-primary/20 dark:bg-primary/20 dark:border-primary/30"
+                    }`}
                   >
-                    <div className="text-4xl" aria-hidden="true">
-                      {activeCardMeta.emoji}
+                    {printPhase === "done" ? (
+                      <CheckCircle2 size={14} className="shrink-0" />
+                    ) : (
+                      <Printer size={14} className="shrink-0" />
+                    )}
+                    <span className="whitespace-nowrap">
+                      {printPhase === "done"
+                        ? t("exportStudioPrintDone")
+                        : t("exportStudioPrinting")}
+                    </span>
+                  </div>
+
+                  {/* Brushed-Metal Printer Slot + Animated Paper Chute */}
+                  <div className="w-full flex flex-col items-center">
+                    <div
+                      aria-hidden="true"
+                      className="relative z-10 h-3.5 w-full max-w-[340px] rounded-full border shadow-inner bg-gradient-to-r from-slate-200 via-white to-slate-200 border-slate-300/80 dark:from-slate-800 dark:via-slate-600 dark:to-slate-800 dark:border-white/20"
+                    >
+                      <div className="absolute inset-x-3 bottom-0.5 h-1 rounded-full bg-black/75" />
                     </div>
-                    <div className="text-sm font-black text-slate-900 dark:text-white">
-                      {t(activeCardMeta.labelKey)}
-                    </div>
-                    <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
-                      {trip.name}
-                      {(selectedCard === "lockscreen" ||
-                        selectedCard === "story") &&
-                      itinerary[safeDayIdx]
-                        ? ` · Day ${safeDayIdx + 1} (${itinerary[safeDayIdx].date})`
-                        : ""}
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold tabular-nums">
-                      <span>{t("exportStudioPreviewReady")}</span>
-                      <span>•</span>
-                      <span>{activeCardMeta.ratioBadge}</span>
+
+                    <div className="w-full overflow-hidden -mt-1.5 pt-2.5 pb-2 px-2 flex justify-center">
+                      <div className="studio-sheet-feed flex justify-center w-full">
+                        {printedImageUrl ? (
+                          <img
+                            src={printedImageUrl}
+                            alt={`${trip.name} ${t(activeCardMeta.labelKey)}`}
+                            data-testid="printed-card-img"
+                            className="max-h-[300px] sm:max-h-[340px] w-auto rounded-2xl shadow-ios-lg border border-black/[0.08] dark:border-white/[0.14] object-contain"
+                          />
+                        ) : (
+                          <div
+                            data-testid="printed-card-fallback"
+                            className="w-full max-w-xs rounded-2xl p-5 bg-white dark:bg-[#181B24] border border-black/[0.06] dark:border-white/[0.12] shadow-ios-md text-center space-y-2"
+                          >
+                            <div className="text-3xl" aria-hidden="true">
+                              {activeCardMeta.emoji}
+                            </div>
+                            <div className="text-sm font-black text-slate-900 dark:text-white">
+                              {t(activeCardMeta.labelKey)}
+                            </div>
+                            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+                              {trip.name}
+                              {(selectedCard === "lockscreen" ||
+                                selectedCard === "story") &&
+                              itinerary[safeDayIdx]
+                                ? ` · Day ${safeDayIdx + 1}`
+                                : ""}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* Primary CTA Button */}
-              <button
-                type="button"
-                data-testid="share-save-png-btn"
-                onClick={handleShareOrSavePng}
-                disabled={isExportingPng}
-                className="w-full h-12 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
-              >
-                {pngExportDone ? (
-                  <Check size={18} className="shrink-0" />
-                ) : (
-                  <Download size={18} className="shrink-0" />
-                )}
-                <span>
-                  {isExportingPng
-                    ? t("exportStudioSharingPng")
-                    : t("exportStudioShareSavePng")}
-                </span>
-              </button>
+                  {/* Stage Footer Controls */}
+                  {printPhase === "printing" ? (
+                    <div className="w-full max-w-sm space-y-3">
+                      <div
+                        className="h-1 rounded-full bg-slate-200 dark:bg-white/15 overflow-hidden"
+                        aria-hidden="true"
+                      >
+                        <div className="studio-print-progress h-full w-full rounded-full bg-primary" />
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="print-skip-btn"
+                        onClick={handleSkipPrint}
+                        className="w-full h-10 px-4 rounded-xl bg-white dark:bg-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.12] border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <FastForward size={14} className="shrink-0 text-primary" />
+                        <span>{t("exportStudioSkipPrint")}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        data-testid="print-save-again-btn"
+                        onClick={handleSaveAgain}
+                        disabled={isSavingPng}
+                        className="h-11 px-4 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+                      >
+                        <Download size={15} className="shrink-0" />
+                        <span>{t("exportStudioSaveAgain")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="print-back-btn"
+                        onClick={resetPrintStage}
+                        className="h-11 px-4 rounded-2xl bg-white dark:bg-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.12] border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <ArrowLeft size={15} className="shrink-0" />
+                        <span>{t("exportStudioBackToOptions")}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* 4 Crisp iOS 27 Visual Card Selectors */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {CARD_META.map((card) => {
+                      const isSelected = selectedCard === card.type;
+                      return (
+                        <button
+                          key={card.type}
+                          type="button"
+                          data-testid={`card-selector-${card.type}`}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedCard(card.type)}
+                          className={`p-3.5 rounded-2xl border text-left transition-all active:scale-95 cursor-pointer flex flex-col gap-1.5 ${
+                            isSelected
+                              ? "bg-primary/10 dark:bg-primary/20 border-primary/50 shadow-sm ring-1 ring-primary/30"
+                              : "bg-slate-50/80 dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.07]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xl leading-none" aria-hidden="true">
+                              {card.emoji}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold tabular-nums px-1.5 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 whitespace-nowrap shrink-0">
+                              {card.ratioBadge}
+                            </span>
+                          </div>
+                          <span className="text-xs font-black text-slate-900 dark:text-white whitespace-nowrap truncate">
+                            {t(card.labelKey)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Compact Options Row (Day / Flight Selector + Light/Dark Theme Toggle) */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {(selectedCard === "lockscreen" || selectedCard === "story") &&
+                    itinerary.length > 0 ? (
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+                          {t("exportStudioSelectDay")}
+                        </span>
+                        <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto no-scrollbar gap-1.5 py-0.5">
+                          {itinerary.map((day, idx) => {
+                            const isPicked = safeDayIdx === idx;
+                            return (
+                              <button
+                                key={day.date || idx}
+                                type="button"
+                                data-testid={`image-day-pill-${idx}`}
+                                onClick={() => setSelectedDayIdx(idx)}
+                                className={`h-8 px-3 rounded-full text-xs font-bold tabular-nums whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer border ${
+                                  isPicked
+                                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm"
+                                    : "bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border-black/[0.08] dark:border-white/[0.10] hover:border-primary/40"
+                                }`}
+                              >
+                                Day {idx + 1}
+                                {day.date ? ` · ${formatShortDate(day.date)}` : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : selectedCard === "boarding-pass" && flights.length > 1 ? (
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 whitespace-nowrap shrink-0">
+                          {t("exportStudioSelectFlight")}
+                        </span>
+                        <div className="flex flex-nowrap sm:flex-wrap overflow-x-auto no-scrollbar gap-1.5 py-0.5">
+                          {flights.map((f, idx) => {
+                            const isPicked = safeFlightIdx === idx;
+                            return (
+                              <button
+                                key={f.id || idx}
+                                type="button"
+                                onClick={() => setSelectedFlightIdx(idx)}
+                                className={`h-8 px-3 rounded-full text-xs font-bold whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer border ${
+                                  isPicked
+                                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm"
+                                    : "bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border-black/[0.08] dark:border-white/[0.10]"
+                                }`}
+                              >
+                                {f.traveler_name || `#${idx + 1}`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                        {t(activeCardMeta.descKey)}
+                      </p>
+                    )}
+
+                    {selectedCard !== "receipt" && (
+                      <div className="inline-flex items-center p-0.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.10] self-start sm:self-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setCanvasTheme("light")}
+                          className={`h-7 px-2.5 rounded-full text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                            canvasTheme === "light"
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          <Sun size={12} className="shrink-0" />
+                          {t("exportStudioThemeLight")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCanvasTheme("dark")}
+                          className={`h-7 px-2.5 rounded-full text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                            canvasTheme === "dark"
+                              ? "bg-slate-900 text-white shadow-sm"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          <Moon size={12} className="shrink-0" />
+                          {t("exportStudioThemeDark")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Single Clean Primary Print CTA Button (Zero Neon Glow) */}
+                  <button
+                    type="button"
+                    data-testid="share-save-png-btn"
+                    onClick={handleStartPrint}
+                    disabled={printPhase === "preparing"}
+                    className="w-full h-12 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+                  >
+                    <Printer size={18} className="shrink-0" />
+                    <span>
+                      {printPhase === "preparing"
+                        ? t("exportStudioSharingPng")
+                        : t("exportStudioStartPrint")}
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
           )}
 

@@ -717,5 +717,181 @@ describe("printExportServices", () => {
 
       vi.stubGlobal("Image", origImage);
     });
+
+    it("expands a 4-segment layover flight into 4 individual boarding passes with dynamic taller canvas height and preloads all segment airline logos", async () => {
+      const drawnText: string[] = [];
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        scale: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        arc: vi.fn(),
+        clip: vi.fn(),
+        closePath: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        fillRect: vi.fn(),
+        setLineDash: vi.fn(),
+        drawImage: vi.fn(),
+        measureText: vi.fn((text: string) => ({ width: text.length * 6 })),
+        fillText: vi.fn((text: string) => {
+          drawnText.push(text);
+        }),
+        createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+        fillStyle: "",
+        strokeStyle: "",
+        shadowColor: "",
+        shadowBlur: 0,
+        shadowOffsetX: 0,
+        shadowOffsetY: 0,
+        globalAlpha: 1,
+        lineWidth: 1,
+        lineCap: "butt",
+        lineJoin: "miter",
+        font: "",
+        textAlign: "left",
+        textBaseline: "alphabetic",
+      };
+
+      const origCreateElement = document.createElement.bind(document);
+      vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+        const el = origCreateElement(tagName);
+        if (tagName.toLowerCase() === "canvas") {
+          (el as HTMLCanvasElement).getContext = (() => mockCtx) as unknown as HTMLCanvasElement["getContext"];
+        }
+        return el;
+      });
+
+      const baseTrip = makeTrip();
+      const fourLegTrip = makeTrip({
+        flights: [
+          {
+            ...baseTrip.flights[0],
+            id: "fl-4-leg",
+            outbound: {
+              airline: "EVA Air + Air Canada",
+              airlineID: "BR",
+              flightNumber: "BR010 + AC8225",
+              departureAirport: "TPE",
+              arrivalAirport: "YZF",
+              departureTime: "2026-12-01T23:55:00",
+              arrivalTime: "2026-12-02T14:20:00",
+              segments: [
+                {
+                  airline: "EVA Air",
+                  airlineID: "BR",
+                  flightNumber: "BR010",
+                  departureAirport: "TPE",
+                  arrivalAirport: "YVR",
+                  departureTime: "2026-12-01T23:55:00",
+                  arrivalTime: "2026-12-01T18:25:00",
+                },
+                {
+                  airline: "Air Canada",
+                  airlineID: "AC",
+                  flightNumber: "AC8225",
+                  departureAirport: "YVR",
+                  arrivalAirport: "YZF",
+                  departureTime: "2026-12-02T09:10:00",
+                  arrivalTime: "2026-12-02T14:20:00",
+                },
+              ],
+            },
+            inbound: {
+              airline: "Air Canada + EVA Air",
+              airlineID: "AC",
+              flightNumber: "AC8226 + BR009",
+              departureAirport: "YZF",
+              arrivalAirport: "TPE",
+              departureTime: "2026-12-08T15:00:00",
+              arrivalTime: "2026-12-10T06:00:00",
+              segments: [
+                {
+                  airline: "Air Canada",
+                  airlineID: "AC",
+                  flightNumber: "AC8226",
+                  departureAirport: "YZF",
+                  arrivalAirport: "YVR",
+                  departureTime: "2026-12-08T15:00:00",
+                  arrivalTime: "2026-12-08T18:10:00",
+                },
+                {
+                  airline: "EVA Air",
+                  airlineID: "BR",
+                  flightNumber: "BR009",
+                  departureAirport: "YVR",
+                  arrivalAirport: "TPE",
+                  departureTime: "2026-12-09T01:05:00",
+                  arrivalTime: "2026-12-10T06:00:00",
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const twoPassCanvas = renderPrintableCanvas("boarding-pass", {
+        trip: baseTrip,
+        lang: "zh",
+        theme: "dark",
+      });
+      drawnText.length = 0;
+
+      const fourPassCanvasZh = renderPrintableCanvas("boarding-pass", {
+        trip: fourLegTrip,
+        lang: "zh",
+        theme: "dark",
+      });
+      expect(fourPassCanvasZh.width).toBe(1080);
+      expect(fourPassCanvasZh.height).toBeGreaterThan(twoPassCanvas.height);
+      expect(fourPassCanvasZh.height).toBe(2502);
+      expect(drawnText).toContain("BR010");
+      expect(drawnText).toContain("AC8225");
+      expect(drawnText).toContain("AC8226");
+      expect(drawnText).toContain("BR009");
+      expect(drawnText).toContain("去程 · 航段 1");
+      expect(drawnText).toContain("去程 · 航段 2");
+      expect(drawnText).toContain("回程 · 航段 1");
+      expect(drawnText).toContain("回程 · 航段 2");
+
+      drawnText.length = 0;
+      const requestedLogoUrls: string[] = [];
+      const origImage = globalThis.Image;
+      class MockTrackImage {
+        crossOrigin = "";
+        naturalWidth = 200;
+        naturalHeight = 200;
+        complete = false;
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          requestedLogoUrls.push(url);
+          queueMicrotask(() => this.onload?.());
+        }
+      }
+      vi.stubGlobal("Image", MockTrackImage);
+
+      const fourPassAsyncEn = await renderPrintableCanvasAsync("boarding-pass", {
+        trip: fourLegTrip,
+        lang: "en",
+        theme: "light",
+      });
+      expect(fourPassAsyncEn.height).toBe(2502);
+      expect(drawnText).toContain("OUTBOUND · LEG 1");
+      expect(drawnText).toContain("OUTBOUND · LEG 2");
+      expect(drawnText).toContain("INBOUND · LEG 1");
+      expect(drawnText).toContain("INBOUND · LEG 2");
+      // AC was not previously cached, so async preloader must request it from expanded segments
+      expect(requestedLogoUrls.some((u) => u.includes("/AC.png"))).toBe(true);
+      expect(mockCtx.drawImage).toHaveBeenCalled();
+
+      vi.stubGlobal("Image", origImage);
+    });
   });
 });
