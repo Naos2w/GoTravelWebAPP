@@ -74,7 +74,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
                       key={h}
                       onClick={() => selectTime(h, minute)}
                       className={`w-11 h-11 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${
-                        h === hour ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
+                        h === hour ? 'bg-primary text-white shadow-sm scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {h}
@@ -91,7 +91,7 @@ export const CustomDateTimeInput: React.FC<Props> = ({ value, onChange, label })
                       key={m}
                       onClick={() => selectTime(hour, m)}
                       className={`w-11 h-11 rounded-xl text-sm font-mono font-black flex items-center justify-center transition-all ${
-                        m === minute ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
+                        m === minute ? 'bg-primary text-white shadow-sm scale-105' : 'hover:bg-slate-50 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {m}

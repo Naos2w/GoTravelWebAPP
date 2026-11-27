@@ -762,7 +762,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               onClick={() => { setSelectedDayIndex(idx); setInsertingAt(null); setHighlightedId(null); selectionSourceRef.current = null; }} 
               className={`flex-shrink-0 lg:w-full p-2.5 lg:p-3 rounded-2xl text-center transition-all duration-300 cursor-pointer active:scale-95 border ${
                 isSelected 
-                  ? 'bg-primary text-white shadow-md shadow-primary/25 border-primary font-black' 
+                  ? 'bg-primary text-white shadow-sm border-primary font-black' 
                   : 'ios27-card text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 shadow-sm'
               }`}
             >
@@ -886,7 +886,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             onClick={() => { selectionSourceRef.current = 'list'; setHighlightedId((prev) => (prev === item.id ? null : item.id)); }}
                             className={`snap-center shrink-0 w-[240px] h-[104px] p-2.5 rounded-2xl border transition-all duration-300 backdrop-blur-xl cursor-pointer select-none active:scale-[0.98] flex flex-col justify-between ${
                               isHighlighted
-                                ? 'bg-white/95 dark:bg-[#161822] border-primary ring-2 ring-primary/40 shadow-xl shadow-primary/20 scale-[1.02]'
+                                ? 'bg-white/95 dark:bg-[#161822] border-primary ring-2 ring-primary/30 shadow-md scale-[1.02]'
                                 : 'bg-white/85 dark:bg-white/[0.05] border-black/[0.08] dark:border-white/[0.1] shadow-md hover:bg-white dark:hover:bg-white/[0.08]'
                             }`}
                           >
@@ -1182,8 +1182,6 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       {isFormOpen && editingItem && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[200] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
           <div className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl p-6 sm:p-10 rounded-[36px] shadow-2xl w-full max-w-lg border border-black/[0.08] dark:border-white/[0.14] overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none" />
-            
             <div className="relative z-10">
               <div className="flex justify-between items-center mb-6 sm:mb-8">
                 <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">{isAddingNew ? t('newActivity') : t('editActivity')}</h3>
@@ -1278,7 +1276,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                   <button 
                     onClick={handleSaveItem}
                     disabled={isSaving}
-                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary text-white rounded-2xl sm:rounded-3xl font-black shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="order-1 sm:order-2 flex-1 py-4 sm:py-5 bg-primary hover:bg-primary/90 text-white rounded-2xl sm:rounded-3xl font-black shadow-sm hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
                     {isSaving && <Loader2 size={16} className="animate-spin" />}
                     {t('save')}

@@ -126,7 +126,7 @@ export class ErrorBoundary extends React.Component<
               type="button"
               data-testid="error-boundary-retry-btn"
               onClick={this.handleReset}
-              className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-2xl bg-primary hover:bg-primary/95 text-white font-bold text-sm shadow-lg shadow-primary/25 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-sm whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
             >
               <RefreshCw size={15} className="shrink-0" />
               <span>{resolvedRetry}</span>

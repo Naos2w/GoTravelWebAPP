@@ -71,13 +71,13 @@ const getGradient = (str: string) => {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   const colors = [
-    "from-[#0A84FF] via-[#0051D5] to-[#002B7F]",
-    "from-[#5E5CE6] via-[#3634A3] to-[#1D1B5E]",
-    "from-[#00C7BE] via-[#007AFF] to-[#003B80]",
-    "from-[#FF6B4A] via-[#D9381E] to-[#6E1409]",
-    "from-[#10B981] via-[#059669] to-[#064E3B]",
-    "from-[#8B5CF6] via-[#6D28D9] to-[#2E1065]",
-    "from-[#0284C7] via-[#1D4ED8] to-[#1E1B4B]",
+    "from-[#1E293B] via-[#172030] to-[#0F172A]",
+    "from-[#1B2A4A] via-[#13203A] to-[#0B1324]",
+    "from-[#27384C] via-[#1D2B3B] to-[#111A26]",
+    "from-[#2C2E33] via-[#1F2126] to-[#13151A]",
+    "from-[#1E332D] via-[#162722] to-[#0E1916]",
+    "from-[#352A24] via-[#261E1A] to-[#171210]",
+    "from-[#272940] via-[#1D1F33] to-[#121321]",
   ];
   return colors[Math.abs(hash) % colors.length];
 };

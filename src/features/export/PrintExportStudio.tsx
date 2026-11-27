@@ -687,7 +687,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                 data-testid="share-save-png-btn"
                 onClick={handleShareOrSavePng}
                 disabled={isExportingPng}
-                className="w-full h-12 px-5 rounded-2xl bg-primary text-white font-black text-sm shadow-lg shadow-primary/25 hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+                className="w-full h-12 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-sm shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
               >
                 {pngExportDone ? (
                   <Check size={18} className="shrink-0" />
@@ -711,9 +711,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
               className="space-y-4"
             >
               {/* Card 1: Printable Travel Booklet PDF */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-indigo-50/55 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 space-y-3">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
                 <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/25 shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-primary/10 text-primary border border-primary/15 flex items-center justify-center shrink-0">
                     <BookOpen size={22} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -729,7 +729,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   type="button"
                   data-testid="print-booklet-btn"
                   onClick={handlePrintBooklet}
-                  className="w-full h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-indigo-500/20 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Printer size={15} className="shrink-0" />
                   <span>{t("exportStudioBookletBtn")}</span>
@@ -737,9 +737,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
               </div>
 
               {/* Card 2: Daily Google Maps Multi-Stop Route */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/55 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-3.5">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3.5">
                 <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/25 shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-900/5 dark:bg-white/[0.08] text-slate-800 dark:text-slate-100 border border-black/[0.06] dark:border-white/[0.10] flex items-center justify-center shrink-0">
                     <Navigation size={22} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -767,8 +767,8 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                           onClick={() => setSelectedMapDayIdx(idx)}
                           className={`h-8 px-3 rounded-full text-xs font-bold tabular-nums whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer border ${
                             isPicked
-                              ? "bg-emerald-600 text-white border-transparent shadow-sm"
-                              : "bg-white/90 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 border-emerald-200/70 dark:border-white/[0.10] hover:border-emerald-400"
+                              ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-transparent shadow-sm"
+                              : "bg-white dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 border-black/[0.08] dark:border-white/[0.10] hover:border-primary/40"
                           }`}
                         >
                           Day {idx + 1} ({stopsCount}{" "}
@@ -789,7 +789,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="gmaps-day-route-link"
-                    className="w-full h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                    className="w-full h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Navigation size={15} className="shrink-0" />
                     <span>{t("exportStudioMapsRouteBtn")}</span>
@@ -799,9 +799,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   <div className="space-y-2.5">
                     <div
                       data-testid="gmaps-chunk-notice"
-                      className="px-3 py-2 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/25 text-amber-800 dark:text-amber-200 text-[11px] font-bold leading-relaxed flex items-start gap-2"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-white/[0.06] border border-black/[0.08] dark:border-white/[0.10] text-slate-700 dark:text-slate-200 text-[11px] font-bold leading-relaxed flex items-start gap-2"
                     >
-                      <Info size={14} className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-300" />
+                      <Info size={14} className="shrink-0 mt-0.5 text-primary" />
                       <span>
                         {t("exportStudioGmapsChunkNotice").replace(
                           "{count}",
@@ -817,7 +817,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           data-testid={`gmaps-day-route-segment-${seg.index}`}
-                          className="h-10 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer tabular-nums"
+                          className="h-10 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer tabular-nums"
                         >
                           <Navigation size={14} className="shrink-0" />
                           <span>
@@ -850,9 +850,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
               </div>
 
               {/* Card 3: Export Full Trip .kml (Google My Maps) */}
-              <div className="p-4 sm:p-5 rounded-2xl bg-sky-50/55 dark:bg-sky-950/20 border border-sky-200/60 dark:border-sky-900/40 space-y-3">
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
                 <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-2xl bg-sky-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/25 shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-900/5 dark:bg-white/[0.08] text-slate-800 dark:text-slate-100 border border-black/[0.06] dark:border-white/[0.10] flex items-center justify-center shrink-0">
                     <MapPin size={22} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -868,13 +868,13 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   type="button"
                   data-testid="download-kml-btn"
                   onClick={handleDownloadKml}
-                  className="w-full h-10 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black flex items-center justify-center gap-2 shadow-md shadow-sky-500/20 active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full h-10 px-4 rounded-xl bg-white dark:bg-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.12] border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  <Download size={15} className="shrink-0" />
+                  <Download size={15} className="shrink-0 text-primary" />
                   <span>{t("exportStudioKmlBtn")}</span>
                 </button>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed flex items-start gap-1.5">
-                  <Info size={13} className="text-sky-500 shrink-0 mt-0.5" />
+                  <Info size={13} className="text-primary shrink-0 mt-0.5" />
                   <span>{t("exportStudioKmlTip")}</span>
                 </p>
               </div>
@@ -895,9 +895,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   data-testid="export-apple-notes-btn"
                   onClick={handleExportNotes}
                   disabled={isExportingNotes}
-                  className="w-full text-left p-4 rounded-2xl bg-amber-50/55 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
+                  className="w-full text-left p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-black/[0.06] dark:border-white/[0.08] transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
                 >
-                  <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-primary/10 text-primary border border-primary/15 flex items-center justify-center shrink-0">
                     <FileText size={21} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -905,7 +905,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                       <span className="text-sm font-black text-slate-900 dark:text-white truncate">
                         {t("exportStudioAppleNotesTitle")}
                       </span>
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 whitespace-nowrap shrink-0">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap shrink-0">
                         {t("exportStudioRecommended")}
                       </span>
                     </div>
@@ -915,7 +915,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   </div>
                   <ChevronRight
                     size={18}
-                    className="text-amber-500 group-hover:translate-x-0.5 transition-transform shrink-0"
+                    className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0"
                   />
                 </button>
 
@@ -923,9 +923,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   type="button"
                   data-testid="export-ics-btn"
                   onClick={handleDownloadCalendar}
-                  className="w-full text-left p-4 rounded-2xl bg-red-50/55 dark:bg-red-950/20 hover:bg-red-50 dark:hover:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
+                  className="w-full text-left p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-black/[0.06] dark:border-white/[0.08] transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
                 >
-                  <div className="w-11 h-11 rounded-2xl bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/25 shrink-0">
+                  <div className="w-11 h-11 rounded-2xl bg-slate-900/5 dark:bg-white/[0.08] text-slate-800 dark:text-slate-100 border border-black/[0.06] dark:border-white/[0.10] flex items-center justify-center shrink-0">
                     <Calendar size={21} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -933,7 +933,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                       <span className="text-sm font-black text-slate-900 dark:text-white truncate">
                         {t("exportStudioIcsTitle")}
                       </span>
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-red-200/70 dark:bg-red-900/60 text-red-800 dark:text-red-200 whitespace-nowrap shrink-0">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] text-slate-600 dark:text-slate-300 whitespace-nowrap shrink-0">
                         .ics
                       </span>
                     </div>
@@ -943,7 +943,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   </div>
                   <ChevronRight
                     size={18}
-                    className="text-red-500 group-hover:translate-x-0.5 transition-transform shrink-0"
+                    className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0"
                   />
                 </button>
 
@@ -951,10 +951,10 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   type="button"
                   data-testid="copy-markdown-btn"
                   onClick={handleCopyMarkdown}
-                  className="w-full text-left p-4 rounded-2xl bg-blue-50/55 dark:bg-blue-950/20 hover:bg-blue-50 dark:hover:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
+                  className="w-full text-left p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-black/[0.06] dark:border-white/[0.08] transition-all group active:scale-[0.98] flex items-center gap-3.5 cursor-pointer"
                 >
-                  <div className="w-11 h-11 rounded-2xl bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/25 shrink-0">
-                    {copied ? <Check size={21} /> : <Copy size={21} />}
+                  <div className="w-11 h-11 rounded-2xl bg-slate-900/5 dark:bg-white/[0.08] text-slate-800 dark:text-slate-100 border border-black/[0.06] dark:border-white/[0.10] flex items-center justify-center shrink-0">
+                    {copied ? <Check size={21} className="text-primary" /> : <Copy size={21} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-black text-slate-900 dark:text-white block truncate">
@@ -968,15 +968,15 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                   </div>
                   <ChevronRight
                     size={18}
-                    className="text-blue-500 group-hover:translate-x-0.5 transition-transform shrink-0"
+                    className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200 group-hover:translate-x-0.5 transition-all shrink-0"
                   />
                 </button>
               </div>
 
               {/* Section: 1-Tap Flight to Google Calendar */}
-              <div className="p-4 rounded-2xl bg-slate-50/85 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     <CalendarPlus size={16} />
                   </div>
                   <div className="min-w-0">
@@ -1029,7 +1029,7 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                           data-testid={`gcal-flight-link-${entry.key}`}
                           aria-label={t("exportStudioAddFlightToGcal")}
                           title={t("exportStudioAddFlightToGcal")}
-                          className="h-9 px-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                          className="h-9 px-3 rounded-full bg-primary hover:bg-primary/90 text-white text-xs font-black flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
                         >
                           <CalendarPlus size={13} className="shrink-0" />
                           <span>{t("exportStudioAddToGcalShort")}</span>
@@ -1045,10 +1045,10 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
               </div>
 
               {/* Section: Standalone Checklist Sync */}
-              <div className="p-4 rounded-2xl bg-slate-50/85 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.08] space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-xl bg-slate-900/5 dark:bg-white/[0.08] text-slate-800 dark:text-slate-100 flex items-center justify-center shrink-0">
                       <CheckSquare size={16} />
                     </div>
                     <div className="min-w-0">
@@ -1072,9 +1072,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                     data-testid="share-checklist-notes-btn"
                     onClick={handleShareChecklist}
                     disabled={isSharingChecklist}
-                    className="h-10 px-3.5 rounded-xl bg-white dark:bg-white/[0.07] hover:bg-violet-50 dark:hover:bg-violet-950/30 border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                    className="h-10 px-3.5 rounded-xl bg-white dark:bg-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.12] border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
                   >
-                    <Share2 size={14} className="text-violet-500 shrink-0" />
+                    <Share2 size={14} className="text-primary shrink-0" />
                     <span className="truncate">
                       {t("exportStudioChecklistKeepBtn")}
                     </span>
@@ -1084,9 +1084,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                     type="button"
                     data-testid="download-checklist-vtodo-btn"
                     onClick={handleDownloadChecklistVtodo}
-                    className="h-10 px-3.5 rounded-xl bg-white dark:bg-white/[0.07] hover:bg-violet-50 dark:hover:bg-violet-950/30 border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                    className="h-10 px-3.5 rounded-xl bg-white dark:bg-white/[0.08] hover:bg-slate-100/80 dark:hover:bg-white/[0.12] border border-black/[0.08] dark:border-white/[0.12] text-slate-800 dark:text-white text-xs font-black flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
                   >
-                    <Download size={14} className="text-violet-500 shrink-0" />
+                    <Download size={14} className="text-primary shrink-0" />
                     <span className="truncate">
                       {t("exportStudioChecklistVtodoBtn")}
                     </span>

@@ -350,24 +350,6 @@ function drawDashedLine(
   ctx.restore();
 }
 
-function drawRadialGlow(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  radius: number,
-  innerColor: string,
-  outerColor: string
-): void {
-  if (typeof ctx.createRadialGradient !== "function") return;
-  ctx.save();
-  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-  grad.addColorStop(0, innerColor);
-  grad.addColorStop(1, outerColor);
-  ctx.fillStyle = grad;
-  ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-  ctx.restore();
-}
-
 function drawPill(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -552,18 +534,18 @@ function drawReceiptCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  // Subtle architectural backdrop
+  // Subtle Apple monochrome backdrop
   const bgGrad = ctx.createLinearGradient(0, 0, logicalW, logicalH);
   if (theme === "dark") {
-    bgGrad.addColorStop(0, "#0A0E17");
-    bgGrad.addColorStop(1, "#121826");
+    bgGrad.addColorStop(0, "#0A0C10");
+    bgGrad.addColorStop(1, "#13161E");
   } else {
-    bgGrad.addColorStop(0, "#E6EBF2");
-    bgGrad.addColorStop(1, "#DDE3EC");
+    bgGrad.addColorStop(0, "#F2F2F7");
+    bgGrad.addColorStop(1, "#E5E5EA");
   }
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, logicalW, logicalH);
-  drawDotGrid(ctx, logicalW, logicalH, theme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.055)", 18);
+  drawDotGrid(ctx, logicalW, logicalH, theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.045)", 18);
 
   const paperX = 22;
   const paperY = 22;
@@ -1011,47 +993,44 @@ function drawNotchedFlightPass(
   } = opts;
   const isDark = theme === "dark";
   const isOutbound = direction === "outbound";
+  const appleBlue = isDark ? "#0A84FF" : "#007AFF";
   const notchR = compact ? 10 : 12;
   const stubH = compact ? 84 : 136;
   const notchY = y + h - stubH;
 
   // Card surface with drop shadow
   ctx.save();
-  ctx.shadowColor = isDark ? "rgba(0,0,0,0.6)" : "rgba(15,23,42,0.11)";
-  ctx.shadowBlur = isDark ? 24 : 20;
+  ctx.shadowColor = isDark ? "rgba(0,0,0,0.55)" : "rgba(15,23,42,0.09)";
+  ctx.shadowBlur = isDark ? 22 : 18;
   ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 10;
+  ctx.shadowOffsetY = 8;
   drawNotchedPassCard(ctx, x, y, w, h, 24, notchY, notchR);
-  ctx.fillStyle = isDark ? "#12141C" : "#FFFFFF";
+  ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
   ctx.fill();
   ctx.restore();
 
-  // Clip inside notched card to paint subtle top highlight & tinted bottom stub
+  // Clip inside notched card to paint subtle top hairline & tinted bottom stub
   ctx.save();
   drawNotchedPassCard(ctx, x, y, w, h, 24, notchY, notchR);
   if (typeof ctx.clip === "function") {
     ctx.clip();
   }
   // Tinted stub area below perforation line
-  ctx.fillStyle = isDark ? "rgba(255,255,255,0.028)" : "rgba(15,23,42,0.025)";
+  ctx.fillStyle = isDark ? "rgba(255,255,255,0.025)" : "rgba(15,23,42,0.025)";
   ctx.fillRect(x, notchY, w, stubH);
 
-  // Subtle top accent shimmer strip
-  const topAccent = ctx.createLinearGradient(x, y, x + w, y);
-  if (isOutbound) {
-    topAccent.addColorStop(0, isDark ? "rgba(56,189,248,0.65)" : "rgba(2,132,199,0.85)");
-    topAccent.addColorStop(1, isDark ? "rgba(99,102,241,0.45)" : "rgba(56,189,248,0.55)");
-  } else {
-    topAccent.addColorStop(0, isDark ? "rgba(52,211,153,0.65)" : "rgba(5,150,105,0.85)");
-    topAccent.addColorStop(1, isDark ? "rgba(56,189,248,0.45)" : "rgba(16,185,129,0.55)");
-  }
-  ctx.fillStyle = topAccent;
-  ctx.fillRect(x, y, w, 3.5);
+  // Clean single-tone top accent hairline (Apple Blue for outbound, subtle monochrome hairline for inbound)
+  ctx.fillStyle = isOutbound
+    ? appleBlue
+    : isDark
+      ? "rgba(255,255,255,0.18)"
+      : "rgba(15,23,42,0.14)";
+  ctx.fillRect(x, y, w, 2.5);
   ctx.restore();
 
   // Crisp outer border along notched silhouette
   drawNotchedPassCard(ctx, x, y, w, h, 24, notchY, notchR);
-  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -1062,7 +1041,7 @@ function drawNotchedFlightPass(
     notchY,
     x + w - notchR - 6,
     notchY,
-    isDark ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.16)",
+    isDark ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.14)",
     [5, 4],
     1.25
   );
@@ -1089,7 +1068,7 @@ function drawNotchedFlightPass(
       drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
       ctx.fillStyle = "#FFFFFF";
       ctx.fill();
-      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.10)";
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.18)" : "rgba(15,23,42,0.10)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
@@ -1115,7 +1094,7 @@ function drawNotchedFlightPass(
     } catch {
       // Clear white squircle before falling back so dark mode has no white tint artifact
       drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
-      ctx.fillStyle = isDark ? "#12141C" : "#FFFFFF";
+      ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
       ctx.fill();
       drewAirlineLogo = false;
     }
@@ -1123,9 +1102,9 @@ function drawNotchedFlightPass(
 
   if (!drewAirlineLogo) {
     drawRoundedRect(ctx, innerLeft, topY, sqSize, sqSize, 10);
-    ctx.fillStyle = isDark ? "rgba(56,189,248,0.12)" : "#F1F5F9";
+    ctx.fillStyle = isDark ? "rgba(255,255,255,0.06)" : "#F2F2F7";
     ctx.fill();
-    ctx.strokeStyle = isDark ? "rgba(56,189,248,0.28)" : "rgba(15,23,42,0.08)";
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -1134,9 +1113,9 @@ function drawNotchedFlightPass(
       innerLeft + sqSize / 2,
       topY + sqSize * 0.36,
       compact ? 11 : 13,
-      isOutbound ? (isDark ? "#38BDF8" : "#0284C7") : isDark ? "#34D399" : "#059669"
+      appleBlue
     );
-    ctx.fillStyle = isDark ? "#E2E8F0" : "#0F172A";
+    ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
     ctx.font = `800 ${compact ? 9 : 10}px ${MONO_STACK}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
@@ -1148,25 +1127,21 @@ function drawNotchedFlightPass(
   const dirText = isOutbound
     ? lang === "zh" ? "去程 OUTBOUND" : "OUTBOUND"
     : lang === "zh" ? "回程 INBOUND" : "INBOUND";
-  ctx.fillStyle = isOutbound ? (isDark ? "#38BDF8" : "#0284C7") : isDark ? "#34D399" : "#059669";
+  ctx.fillStyle = isOutbound ? appleBlue : isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `800 9px ${MONO_STACK}`;
   ctx.textAlign = "left";
   ctx.fillText(dirText, nameX, topY + 11);
 
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 ${compact ? 14 : 17}px ${FONT_STACK}`;
   ctx.fillText(truncateText(ctx, airlineName, w * 0.42), nameX, topY + (compact ? 29 : 34));
 
   // Right side pills: Flight number pill + Cabin & Baggage pills
   const flightNo = (seg.flightNumber || airlineCode).toUpperCase();
   const flightPill = drawPill(ctx, innerRight, topY, flightNo, {
-    bg: isOutbound
-      ? isDark ? "rgba(56,189,248,0.16)" : "rgba(2,132,199,0.10)"
-      : isDark ? "rgba(52,211,153,0.16)" : "rgba(5,150,105,0.10)",
-    border: isOutbound
-      ? isDark ? "rgba(56,189,248,0.35)" : "rgba(2,132,199,0.22)"
-      : isDark ? "rgba(52,211,153,0.35)" : "rgba(5,150,105,0.22)",
-    color: isOutbound ? (isDark ? "#7DD3FC" : "#0369A1") : isDark ? "#6EE7B7" : "#047857",
+    bg: isDark ? "rgba(10,132,255,0.16)" : "rgba(0,122,255,0.10)",
+    border: isDark ? "rgba(10,132,255,0.32)" : "rgba(0,122,255,0.22)",
+    color: appleBlue,
     font: `800 11px ${MONO_STACK}`,
     padX: 9,
     height: 21,
@@ -1176,9 +1151,9 @@ function drawNotchedFlightPass(
   // Cabin pill next to flight pill
   const cabinLabel = cabinClass || "Economy";
   drawPill(ctx, flightPill.x - 6, topY, cabinLabel, {
-    bg: isDark ? "rgba(255,255,255,0.07)" : "#F1F5F9",
-    border: isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.07)",
-    color: isDark ? "#CBD5E1" : "#475569",
+    bg: isDark ? "rgba(255,255,255,0.06)" : "#F2F2F7",
+    border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+    color: isDark ? "#AEAEB2" : "#6E6E73",
     font: `700 10px ${FONT_STACK}`,
     padX: 8,
     height: 21,
@@ -1196,10 +1171,10 @@ function drawNotchedFlightPass(
   const bagPillY = topY + 25;
   if (checkedLabel) {
     const p = drawBaggagePill(ctx, bagCursorX, bagPillY, "checked", checkedLabel, {
-      bg: isDark ? "rgba(255,255,255,0.06)" : "#F8FAFC",
-      border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.07)",
-      color: isDark ? "#94A3B8" : "#475569",
-      iconColor: isDark ? "#CBD5E1" : "#334155",
+      bg: isDark ? "rgba(255,255,255,0.05)" : "#F2F2F7",
+      border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+      color: isDark ? "#8E8E93" : "#6E6E73",
+      iconColor: isDark ? "#AEAEB2" : "#3A3A3C",
       font: `700 9.5px ${MONO_STACK}`,
       padX: 7,
       height: 18,
@@ -1209,10 +1184,10 @@ function drawNotchedFlightPass(
   }
   if (carryLabel) {
     drawBaggagePill(ctx, bagCursorX, bagPillY, "carryOn", carryLabel, {
-      bg: isDark ? "rgba(255,255,255,0.06)" : "#F8FAFC",
-      border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.07)",
-      color: isDark ? "#94A3B8" : "#475569",
-      iconColor: isDark ? "#CBD5E1" : "#334155",
+      bg: isDark ? "rgba(255,255,255,0.05)" : "#F2F2F7",
+      border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+      color: isDark ? "#8E8E93" : "#6E6E73",
+      iconColor: isDark ? "#AEAEB2" : "#3A3A3C",
       font: `700 9.5px ${MONO_STACK}`,
       padX: 7,
       height: 18,
@@ -1222,14 +1197,14 @@ function drawNotchedFlightPass(
 
   // Subtle hairline divider under top bar
   const dividerY = topY + (compact ? 49 : 58);
-  ctx.fillStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)";
+  ctx.fillStyle = isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.07)";
   ctx.fillRect(innerLeft, dividerY, innerRight - innerLeft, 1);
 
-  // --- CENTER HERO: Giant DEP — dashed path + blue circle vector airplane — ARR ---
+  // --- CENTER HERO: Giant DEP — dashed path + Apple Blue circle vector airplane — ARR ---
   const heroCenterY = dividerY + (notchY - dividerY) * 0.44;
   const codeFontSize = compact ? 38 : 48;
   const timeFontSize = compact ? 16 : 20;
-  const accentBlue = isDark ? "#38BDF8" : "#0284C7";
+  const accentBlue = appleBlue;
 
   const depCode = (seg.departureAirport || "---").toUpperCase();
   const arrCode = (seg.arrivalAirport || "---").toUpperCase();
@@ -1241,7 +1216,7 @@ function drawNotchedFlightPass(
   // DEP column (left)
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 ${codeFontSize}px ${MONO_STACK}`;
   ctx.fillText(depCode, innerLeft, heroCenterY + 2);
 
@@ -1249,13 +1224,13 @@ function drawNotchedFlightPass(
   ctx.font = `800 ${timeFontSize}px ${MONO_STACK}`;
   ctx.fillText(depTime, innerLeft, heroCenterY + (compact ? 25 : 30));
 
-  ctx.fillStyle = isDark ? "#64748B" : "#64748B";
+  ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `700 10.5px ${MONO_STACK}`;
   ctx.fillText(depDate, innerLeft, heroCenterY + (compact ? 41 : 48));
 
   // ARR column (right)
   ctx.textAlign = "right";
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 ${codeFontSize}px ${MONO_STACK}`;
   ctx.fillText(arrCode, innerRight, heroCenterY + 2);
 
@@ -1263,7 +1238,7 @@ function drawNotchedFlightPass(
   ctx.font = `800 ${timeFontSize}px ${MONO_STACK}`;
   ctx.fillText(arrTime, innerRight, heroCenterY + (compact ? 25 : 30));
 
-  ctx.fillStyle = isDark ? "#64748B" : "#64748B";
+  ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `700 10.5px ${MONO_STACK}`;
   ctx.fillText(arrDate, innerRight, heroCenterY + (compact ? 41 : 48));
 
@@ -1279,7 +1254,7 @@ function drawNotchedFlightPass(
     trackY,
     trackRight,
     trackY,
-    isDark ? "rgba(255,255,255,0.22)" : "rgba(15,23,42,0.18)",
+    isDark ? "rgba(255,255,255,0.20)" : "rgba(15,23,42,0.16)",
     [5, 4],
     1.5
   );
@@ -1296,7 +1271,7 @@ function drawNotchedFlightPass(
     ctx.fill();
   }
 
-  // Center blue circle badge with vector airplane
+  // Center Apple Blue circle badge with vector airplane
   const circleR = compact ? 15 : 18;
   ctx.beginPath();
   if (typeof ctx.arc === "function") {
@@ -1304,9 +1279,9 @@ function drawNotchedFlightPass(
   } else {
     drawRoundedRect(ctx, trackMidX - circleR, trackY - circleR, circleR * 2, circleR * 2, circleR);
   }
-  ctx.fillStyle = isDark ? "#0EA5E9" : "#0284C7";
+  ctx.fillStyle = accentBlue;
   ctx.fill();
-  ctx.strokeStyle = isDark ? "#12141C" : "#FFFFFF";
+  ctx.strokeStyle = isDark ? "#13161E" : "#FFFFFF";
   ctx.lineWidth = 3;
   ctx.stroke();
   drawAirplaneVector(ctx, trackMidX + 0.5, trackY, compact ? 14 : 17, "#FFFFFF");
@@ -1314,15 +1289,15 @@ function drawNotchedFlightPass(
 
   // Flight number / seat under center track
   ctx.textAlign = "center";
-  ctx.fillStyle = isDark ? "#94A3B8" : "#64748B";
+  ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `700 10.5px ${MONO_STACK}`;
   ctx.fillText(seat ? `${flightNo} · SEAT ${seat}` : flightNo, trackMidX, trackY + (compact ? 29 : 34));
 
   // --- BOTTOM STUB: Traveler, Terminal, Gate + Crisp Vector Barcode ---
   const stubLabelY = notchY + (compact ? 24 : 34);
   const stubValY = stubLabelY + (compact ? 18 : 22);
-  const labelColor = isDark ? "#64748B" : "#94A3B8";
-  const valColor = isDark ? "#F8FAFC" : "#0F172A";
+  const labelColor = isDark ? "#8E8E93" : "#6E6E73";
+  const valColor = isDark ? "#F5F5F7" : "#1D1D1F";
 
   const drawMetaCell = (cx: number, label: string, value: string, maxW: number) => {
     ctx.textAlign = "left";
@@ -1344,7 +1319,7 @@ function drawNotchedFlightPass(
     const barH = 38;
     const barX = innerRight - barW;
     const barY = notchY + 16;
-    drawBarcode(ctx, barX, barY, barW, barH, `${flightNo}-${depCode}-${arrCode}-${traveler}`, isDark ? "#E2E8F0" : "#0F172A");
+    drawBarcode(ctx, barX, barY, barW, barH, `${flightNo}-${depCode}-${arrCode}-${traveler}`, isDark ? "#F5F5F7" : "#1D1D1F");
 
     ctx.textAlign = "center";
     ctx.fillStyle = labelColor;
@@ -1358,7 +1333,7 @@ function drawNotchedFlightPass(
 
     const barY = notchY + 74;
     const barW = innerRight - innerLeft;
-    drawBarcode(ctx, innerLeft, barY, barW, 40, `${flightNo}-${depCode}-${arrCode}-${traveler}`, isDark ? "#E2E8F0" : "#0F172A");
+    drawBarcode(ctx, innerLeft, barY, barW, 40, `${flightNo}-${depCode}-${arrCode}-${traveler}`, isDark ? "#F5F5F7" : "#1D1D1F");
 
     ctx.textAlign = "center";
     ctx.fillStyle = labelColor;
@@ -1379,42 +1354,35 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
   if (!ctx) return;
 
   const isDark = theme === "dark";
+  const appleBlue = isDark ? "#0A84FF" : "#007AFF";
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  // OLED dark backdrop (#060709) or Apple light canvas (#F2F2F7) + subtle radial sky glow + dot grid
-  ctx.fillStyle = isDark ? "#060709" : "#F2F2F7";
+  // Pure refined Apple monochrome backdrop + subtle dot grid
+  ctx.fillStyle = isDark ? "#0A0C10" : "#F2F2F7";
   ctx.fillRect(0, 0, logicalW, logicalH);
-
-  if (isDark) {
-    drawRadialGlow(ctx, 110, 90, 290, "rgba(56, 189, 248, 0.16)", "rgba(56, 189, 248, 0)");
-    drawRadialGlow(ctx, 450, 580, 280, "rgba(99, 102, 241, 0.14)", "rgba(99, 102, 241, 0)");
-  } else {
-    drawRadialGlow(ctx, 110, 90, 290, "rgba(14, 165, 233, 0.10)", "rgba(14, 165, 233, 0)");
-    drawRadialGlow(ctx, 450, 580, 280, "rgba(99, 102, 241, 0.08)", "rgba(99, 102, 241, 0)");
-  }
-  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.045)", 20);
+  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)", 20);
 
   // Header
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+  ctx.fillStyle = appleBlue;
   ctx.font = `800 10.5px ${MONO_STACK}`;
   ctx.fillText("GO TRAVEL · BOARDING PASS", 26, 36);
 
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 20px ${FONT_STACK}`;
   ctx.fillText(truncateText(ctx, trip.name || trip.destination || "Boarding Pass", logicalW - 52), 26, 62);
 
   const flight = trip.flights?.[flightIndex] || trip.flights?.[0];
   if (!flight) {
     drawNotchedPassCard(ctx, 26, 110, logicalW - 52, 240, 24, 270, 12);
-    ctx.fillStyle = isDark ? "#12141C" : "#FFFFFF";
+    ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
     ctx.fill();
-    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
     ctx.stroke();
 
-    ctx.fillStyle = isDark ? "#94A3B8" : "#475569";
+    ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
     ctx.font = `700 14px ${FONT_STACK}`;
     ctx.textAlign = "center";
     ctx.fillText(lang === "zh" ? "尚未新增航班資訊" : "No flight segments available", logicalW / 2, 200);
@@ -1489,7 +1457,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
   }
 
   // Footer
-  ctx.fillStyle = isDark ? "rgba(148,163,184,0.65)" : "rgba(71,85,105,0.65)";
+  ctx.fillStyle = isDark ? "rgba(142,142,147,0.75)" : "rgba(110,110,115,0.75)";
   ctx.font = `600 9.5px ${MONO_STACK}`;
   ctx.textAlign = "center";
   ctx.fillText("APPLE WALLET STYLE · GO TRAVEL", logicalW / 2, logicalH - 16);
@@ -1498,7 +1466,7 @@ function drawBoardingPassCard(canvas: HTMLCanvasElement, options: CanvasRenderOp
 }
 
 /* -------------------------------------------------------------------------- */
-/* 3. Lock Screen Card — 1080×2340 (9:19.5) Aurora Frosted Timeline           */
+/* 3. Lock Screen Card — 1080×2340 (9:19.5) iOS 27 Minimal Timeline           */
 /* -------------------------------------------------------------------------- */
 
 function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions): void {
@@ -1513,32 +1481,14 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
   if (!ctx) return;
 
   const isDark = theme === "dark";
+  const appleBlue = isDark ? "#0A84FF" : "#007AFF";
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  // Rich aurora backdrop
-  const grad = ctx.createLinearGradient(0, 0, logicalW, logicalH);
-  if (isDark) {
-    grad.addColorStop(0, "#050814");
-    grad.addColorStop(0.45, "#0B162C");
-    grad.addColorStop(1, "#070B14");
-  } else {
-    grad.addColorStop(0, "#E4F0FF");
-    grad.addColorStop(0.5, "#F6FAFF");
-    grad.addColorStop(1, "#EAF1FB");
-  }
-  ctx.fillStyle = grad;
+  // Pure refined Apple monochrome backdrop + subtle dot grid
+  ctx.fillStyle = isDark ? "#0A0C10" : "#F2F2F7";
   ctx.fillRect(0, 0, logicalW, logicalH);
-
-  if (isDark) {
-    drawRadialGlow(ctx, 90, 260, 280, "rgba(56, 189, 248, 0.22)", "rgba(56, 189, 248, 0)");
-    drawRadialGlow(ctx, 470, 560, 280, "rgba(129, 140, 248, 0.18)", "rgba(129, 140, 248, 0)");
-    drawRadialGlow(ctx, 180, 960, 260, "rgba(16, 185, 129, 0.14)", "rgba(16, 185, 129, 0)");
-  } else {
-    drawRadialGlow(ctx, 110, 240, 260, "rgba(56, 189, 248, 0.18)", "rgba(56, 189, 248, 0)");
-    drawRadialGlow(ctx, 460, 620, 260, "rgba(129, 140, 248, 0.14)", "rgba(129, 140, 248, 0)");
-  }
-  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.045)" : "rgba(15,23,42,0.04)", 22);
+  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)", 22);
 
   // Top 28% clean safe-zone for lock screen clock
   const safeZoneBottom = Math.round(logicalH * 0.28);
@@ -1553,9 +1503,9 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
 
   // Header pill + trip title
   drawPill(ctx, 28, y, dayLabel, {
-    bg: isDark ? "rgba(56,189,248,0.16)" : "rgba(2,132,199,0.12)",
-    border: isDark ? "rgba(56,189,248,0.35)" : "rgba(2,132,199,0.22)",
-    color: isDark ? "#7DD3FC" : "#0369A1",
+    bg: isDark ? "rgba(10,132,255,0.16)" : "rgba(0,122,255,0.10)",
+    border: isDark ? "rgba(10,132,255,0.32)" : "rgba(0,122,255,0.22)",
+    color: appleBlue,
     font: `800 11px ${MONO_STACK}`,
     padX: 10,
     height: 22,
@@ -1563,7 +1513,7 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
 
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 22px ${FONT_STACK}`;
   ctx.fillText(truncateText(ctx, trip.name || trip.destination || "Go Travel", logicalW - 56), 28, y + 48);
 
@@ -1573,13 +1523,16 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
 
   if (items.length === 0) {
     drawRoundedRect(ctx, 28, y, logicalW - 56, 86, 20);
-    ctx.fillStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.88)";
+    ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
     ctx.fill();
-    ctx.fillStyle = isDark ? "#94A3B8" : "#475569";
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
     ctx.font = `600 14px ${FONT_STACK}`;
     ctx.fillText(lang === "zh" ? "本日尚無排定行程" : "No stops scheduled for this day", 48, y + 48);
   } else {
-    // Draw glowing vertical timeline spine behind items
+    // Clean vertical timeline spine behind items
     const maxBottomY = logicalH - 72;
     const layoutEntries: Array<{ item: ItineraryItem; top: number; height: number; isTransport: boolean }> = [];
     let cursorY = y;
@@ -1596,12 +1549,9 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
       const spineTop = layoutEntries[0].top + 24;
       const last = layoutEntries[layoutEntries.length - 1];
       const spineBottom = last.top + last.height / 2;
-      const spineGrad = ctx.createLinearGradient(spineX, spineTop, spineX, spineBottom);
-      spineGrad.addColorStop(0, isDark ? "rgba(56,189,248,0.85)" : "rgba(2,132,199,0.75)");
-      spineGrad.addColorStop(1, isDark ? "rgba(129,140,248,0.35)" : "rgba(99,102,241,0.30)");
       ctx.save();
-      ctx.strokeStyle = spineGrad;
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = isDark ? "rgba(10,132,255,0.45)" : "rgba(0,122,255,0.35)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(spineX, spineTop);
       ctx.lineTo(spineX, spineBottom);
@@ -1615,9 +1565,9 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
         // Compact inline transport micro-badge on the spine
         const label = truncateText(ctx, formatCompactTransportBadge(item, lang), logicalW - 120);
         drawPill(ctx, spineX + 18, top + 2, label, {
-          bg: isDark ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.06)",
+          bg: isDark ? "#13161E" : "#FFFFFF",
           border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
-          color: isDark ? "#CBD5E1" : "#475569",
+          color: isDark ? "#AEAEB2" : "#6E6E73",
           font: `700 11px ${FONT_STACK}`,
           padX: 10,
           height: 22,
@@ -1625,51 +1575,51 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
         continue;
       }
 
-      // Glowing timeline node
+      // Crisp static Apple Blue timeline node
       const nodeY = top + height / 2;
       ctx.save();
-      ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+      ctx.fillStyle = appleBlue;
       if (typeof ctx.arc === "function") {
         ctx.beginPath();
-        ctx.arc(spineX, nodeY, 5.5, 0, Math.PI * 2);
+        ctx.arc(spineX, nodeY, 5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = isDark ? "rgba(56,189,248,0.35)" : "rgba(2,132,199,0.25)";
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = isDark ? "#0A0C10" : "#F2F2F7";
+        ctx.lineWidth = 2.5;
         ctx.stroke();
       }
       ctx.restore();
 
-      // Frosted glass stop card
+      // Elevated monochrome stop card
       const cardX = spineX + 18;
       const cardW = logicalW - cardX - 24;
       drawRoundedRect(ctx, cardX, top, cardW, height, 16);
-      ctx.fillStyle = isDark ? "rgba(255,255,255,0.085)" : "rgba(255,255,255,0.88)";
+      ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
       ctx.fill();
-      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.07)";
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Crisp sky-blue monospace time
+      // Crisp Apple Blue monospace time
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+      ctx.fillStyle = appleBlue;
       ctx.font = `800 14.5px ${MONO_STACK}`;
       ctx.fillText(item.time || "--:--", cardX + 16, top + 30);
 
       // Bold stop title
-      ctx.fillStyle = isDark ? "#F8FAFC" : "#0F172A";
+      ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
       ctx.font = `800 15.5px ${FONT_STACK}`;
       ctx.fillText(truncateText(ctx, item.placeName || "", cardW - 96), cardX + 80, top + 30);
 
       // Sub-info / note
       const subParts = [item.type === "Food" ? "🍽️ Food" : "📍 Place", item.note?.trim()].filter(Boolean);
-      ctx.fillStyle = isDark ? "#94A3B8" : "#64748B";
+      ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
       ctx.font = `500 11.5px ${FONT_STACK}`;
       ctx.fillText(truncateText(ctx, subParts.join(" · "), cardW - 96), cardX + 80, top + 53);
     }
   }
 
-  ctx.fillStyle = isDark ? "rgba(255,255,255,0.42)" : "rgba(15,23,42,0.45)";
+  ctx.fillStyle = isDark ? "rgba(142,142,147,0.7)" : "rgba(110,110,115,0.7)";
   ctx.font = `700 10.5px ${MONO_STACK}`;
   ctx.textAlign = "center";
   ctx.fillText("GO TRAVEL · LOCK SCREEN TIMETABLE", logicalW / 2, logicalH - 32);
@@ -1678,7 +1628,7 @@ function drawLockscreenCard(canvas: HTMLCanvasElement, options: CanvasRenderOpti
 }
 
 /* -------------------------------------------------------------------------- */
-/* 4. Story Card — 1080×1920 (9:16) Aurora Frosted Social Card                */
+/* 4. Story Card — 1080×1920 (9:16) iOS 27 Minimal Social Card                */
 /* -------------------------------------------------------------------------- */
 
 function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions): void {
@@ -1693,43 +1643,26 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
   if (!ctx) return;
 
   const isDark = theme === "dark";
+  const appleBlue = isDark ? "#0A84FF" : "#007AFF";
   ctx.save();
   ctx.scale(dpr, dpr);
 
-  // Rich aurora gradient + subtle dot grid
-  const grad = ctx.createLinearGradient(0, 0, logicalW, logicalH);
-  if (isDark) {
-    grad.addColorStop(0, "#060B18");
-    grad.addColorStop(0.5, "#10213E");
-    grad.addColorStop(1, "#090F1E");
-  } else {
-    grad.addColorStop(0, "#EAF3FF");
-    grad.addColorStop(0.5, "#F9FBFF");
-    grad.addColorStop(1, "#E5EFFD");
-  }
-  ctx.fillStyle = grad;
+  // Pure refined Apple monochrome backdrop + subtle dot grid
+  ctx.fillStyle = isDark ? "#0A0C10" : "#F2F2F7";
   ctx.fillRect(0, 0, logicalW, logicalH);
+  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)", 20);
 
-  if (isDark) {
-    drawRadialGlow(ctx, 440, 120, 250, "rgba(56, 189, 248, 0.22)", "rgba(56, 189, 248, 0)");
-    drawRadialGlow(ctx, 90, 680, 260, "rgba(129, 140, 248, 0.18)", "rgba(129, 140, 248, 0)");
-  } else {
-    drawRadialGlow(ctx, 440, 120, 250, "rgba(14, 165, 233, 0.16)", "rgba(14, 165, 233, 0)");
-    drawRadialGlow(ctx, 90, 680, 260, "rgba(99, 102, 241, 0.12)", "rgba(99, 102, 241, 0)");
-  }
-  drawDotGrid(ctx, logicalW, logicalH, isDark ? "rgba(255,255,255,0.045)" : "rgba(15,23,42,0.04)", 20);
-
-  // Frosted glass header card
+  // Elevated header card
   drawRoundedRect(ctx, 26, 38, logicalW - 52, 152, 24);
-  ctx.fillStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.90)";
+  ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
   ctx.fill();
-  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.08)";
+  ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
   ctx.lineWidth = 1;
   ctx.stroke();
 
   drawPill(ctx, 46, 56, "GO TRAVEL · STORY", {
-    bg: isDark ? "rgba(56,189,248,0.18)" : "rgba(2,132,199,0.11)",
-    color: isDark ? "#7DD3FC" : "#0369A1",
+    bg: isDark ? "rgba(10,132,255,0.16)" : "rgba(0,122,255,0.10)",
+    color: appleBlue,
     font: `800 10px ${MONO_STACK}`,
     padX: 9,
     height: 20,
@@ -1737,11 +1670,11 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
 
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = isDark ? "#FFFFFF" : "#0F172A";
+  ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
   ctx.font = `800 25px ${FONT_STACK}`;
   ctx.fillText(truncateText(ctx, trip.name || trip.destination || "My Journey", logicalW - 96), 46, 108);
 
-  ctx.fillStyle = isDark ? "#CBD5E1" : "#475569";
+  ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
   ctx.font = `600 12.5px ${FONT_STACK}`;
   ctx.fillText(
     truncateText(
@@ -1764,8 +1697,8 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
     152,
     lang === "zh" ? `${totalDays} 天 · ${totalStops} 個行程亮點` : `${totalDays} DAYS · ${totalStops} STOPS`,
     {
-      bg: isDark ? "rgba(255,255,255,0.07)" : "#F1F5F9",
-      color: isDark ? "#94A3B8" : "#475569",
+      bg: isDark ? "rgba(255,255,255,0.06)" : "#F2F2F7",
+      color: isDark ? "#AEAEB2" : "#6E6E73",
       font: `700 11px ${MONO_STACK}`,
       padX: 10,
       height: 22,
@@ -1779,16 +1712,16 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
       : (trip.itinerary || []).slice(0, 3).map((day, idx) => ({ day, idx }));
 
   if (days.length === 0) {
-    ctx.fillStyle = isDark ? "#94A3B8" : "#475569";
+    ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
     ctx.font = `600 14px ${FONT_STACK}`;
     ctx.fillText(lang === "zh" ? "開始規劃你的下一趟旅行" : "Start planning your next adventure", 36, y + 30);
   } else if (days.length === 1) {
-    // Rich single-day timeline with glowing spine & compact inline transport micro-badges
+    // Clean single-day timeline with Apple Blue spine & compact inline transport micro-badges
     const { day, idx } = days[0];
     drawPill(ctx, 26, y, `DAY ${idx + 1}${day.date ? ` · ${day.date}` : ""}`, {
-      bg: isDark ? "rgba(56,189,248,0.16)" : "rgba(2,132,199,0.12)",
-      border: isDark ? "rgba(56,189,248,0.32)" : "rgba(2,132,199,0.22)",
-      color: isDark ? "#7DD3FC" : "#0369A1",
+      bg: isDark ? "rgba(10,132,255,0.16)" : "rgba(0,122,255,0.10)",
+      border: isDark ? "rgba(10,132,255,0.32)" : "rgba(0,122,255,0.22)",
+      color: appleBlue,
       font: `800 11px ${MONO_STACK}`,
       padX: 10,
       height: 22,
@@ -1810,7 +1743,7 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
       const last = entries[entries.length - 1];
       const spineBottom = last.top + last.height / 2;
       ctx.save();
-      ctx.strokeStyle = isDark ? "rgba(56,189,248,0.55)" : "rgba(2,132,199,0.45)";
+      ctx.strokeStyle = isDark ? "rgba(10,132,255,0.45)" : "rgba(0,122,255,0.35)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(spineX, spineTop);
@@ -1822,8 +1755,9 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
     for (const { item, top, height, isTransport } of entries) {
       if (isTransport) {
         drawPill(ctx, spineX + 16, top + 1, truncateText(ctx, formatCompactTransportBadge(item, lang), logicalW - 110), {
-          bg: isDark ? "rgba(148,163,184,0.14)" : "rgba(15,23,42,0.06)",
-          color: isDark ? "#CBD5E1" : "#475569",
+          bg: isDark ? "#13161E" : "#FFFFFF",
+          border: isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)",
+          color: isDark ? "#AEAEB2" : "#6E6E73",
           font: `700 10.5px ${FONT_STACK}`,
           padX: 9,
           height: 20,
@@ -1832,7 +1766,7 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
       }
 
       ctx.save();
-      ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+      ctx.fillStyle = appleBlue;
       if (typeof ctx.arc === "function") {
         ctx.beginPath();
         ctx.arc(spineX, top + height / 2, 4.5, 0, Math.PI * 2);
@@ -1843,24 +1777,24 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
       const cardX = spineX + 16;
       const cardW = logicalW - cardX - 26;
       drawRoundedRect(ctx, cardX, top, cardW, height, 15);
-      ctx.fillStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.88)";
+      ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
       ctx.fill();
-      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.13)" : "rgba(15,23,42,0.07)";
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+      ctx.fillStyle = appleBlue;
       ctx.font = `800 13.5px ${MONO_STACK}`;
       ctx.fillText(item.time || "--:--", cardX + 14, top + 27);
 
-      ctx.fillStyle = isDark ? "#F8FAFC" : "#0F172A";
+      ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
       ctx.font = `800 14.5px ${FONT_STACK}`;
       ctx.fillText(truncateText(ctx, item.placeName || "", cardW - 88), cardX + 74, top + 27);
 
       if (item.note?.trim()) {
-        ctx.fillStyle = isDark ? "#94A3B8" : "#64748B";
+        ctx.fillStyle = isDark ? "#8E8E93" : "#6E6E73";
         ctx.font = `500 11px ${FONT_STACK}`;
         ctx.fillText(truncateText(ctx, item.note.trim(), cardW - 88), cardX + 74, top + 47);
       }
@@ -1873,25 +1807,25 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
       if (y + boxH > logicalH - 68) return;
 
       drawRoundedRect(ctx, 26, y, logicalW - 52, boxH, 20);
-      ctx.fillStyle = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.88)";
+      ctx.fillStyle = isDark ? "#13161E" : "#FFFFFF";
       ctx.fill();
-      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.13)" : "rgba(15,23,42,0.07)";
+      ctx.strokeStyle = isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.08)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+      ctx.fillStyle = appleBlue;
       ctx.font = `800 12.5px ${MONO_STACK}`;
       ctx.fillText(`DAY ${idx + 1} · ${day.date || ""}`, 46, y + 30);
 
       highlights.forEach((item, i) => {
         const rowY = y + 58 + i * 29;
-        ctx.fillStyle = isDark ? "#38BDF8" : "#0284C7";
+        ctx.fillStyle = appleBlue;
         ctx.font = `700 12px ${MONO_STACK}`;
         ctx.fillText(item.time || "--:--", 46, rowY);
 
-        ctx.fillStyle = isDark ? "#F8FAFC" : "#0F172A";
+        ctx.fillStyle = isDark ? "#F5F5F7" : "#1D1D1F";
         ctx.font = `700 13.5px ${FONT_STACK}`;
         ctx.fillText(truncateText(ctx, item.placeName || "", logicalW - 156), 100, rowY);
       });
@@ -1901,7 +1835,7 @@ function drawStoryCard(canvas: HTMLCanvasElement, options: CanvasRenderOptions):
   }
 
   // Footer watermark
-  ctx.fillStyle = isDark ? "rgba(255,255,255,0.55)" : "rgba(15,23,42,0.52)";
+  ctx.fillStyle = isDark ? "rgba(142,142,147,0.75)" : "rgba(110,110,115,0.75)";
   ctx.font = `800 12px ${MONO_STACK}`;
   ctx.textAlign = "center";
   ctx.fillText("Go Travel", logicalW / 2, logicalH - 30);

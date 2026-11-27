@@ -77,7 +77,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   onInvite(email);
                   setEmail("");
                 }}
-                className="bg-primary disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-xs shadow-lg shadow-primary/20"
+                className="bg-primary hover:bg-primary/90 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-black text-xs shadow-sm"
               >
                 {t("invite")}
               </button>
@@ -89,7 +89,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </label>
             <div className="bg-slate-50 dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl p-2 space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
               <div className="flex items-center gap-3 p-3 bg-white dark:bg-white/[0.06] rounded-xl shadow-sm border border-slate-100 dark:border-white/[0.08]">
-                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-black text-[9px] shadow-lg shadow-primary/20">
+                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-black text-[9px] shadow-sm">
                   {isOwner ? "YOU" : "OWN"}
                 </div>
                 <div className="flex-1 min-w-0">
