@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as storageService from "../../services/storageService";
 import {
   isValidUUID,
   formatDateStr,
@@ -10,13 +11,33 @@ import {
   upsertItineraryItems,
   deleteItineraryItem,
   upsertExpense,
+  deleteExpense,
+  saveExpenseOnly,
   upsertFlight,
   deleteFlight,
   upsertChecklistItems,
+  addChecklistItem,
+  updateChecklistItem,
+  deleteChecklistItem,
+  ensureChecklistItems,
   updateTripMeta,
+  createNewTrip,
+  getTripById,
+  deleteTrip,
+  joinTrip,
+  leaveTrip,
+  removeCollaboratorByEmail,
+  findUserIdByEmail,
   supabase,
   DbTripRow,
 } from "../../services/storageService";
+import * as supabaseClientRepo from "../../services/repos/supabaseClient";
+import * as mappersRepo from "../../services/repos/mappers";
+import * as itineraryRepo from "../../services/repos/itineraryRepo";
+import * as expenseRepo from "../../services/repos/expenseRepo";
+import * as checklistRepo from "../../services/repos/checklistRepo";
+import * as flightRepo from "../../services/repos/flightRepo";
+import * as tripRepo from "../../services/repos/tripRepo";
 import { Currency, Expense, FlightInfo, ItineraryItem } from "../../types";
 
 describe("storageService", () => {
@@ -473,6 +494,193 @@ describe("storageService", () => {
       expect(result.itinerary[0].items).toHaveLength(2);
       expect(result.itinerary[0].items[0].placeName).toBe("Tokyo Skytree");
       expect(result.itinerary[0].items[1].placeName).toBe("Senso-ji");
+    });
+  });
+
+  describe("domain repository barrel parity & CRUD coverage", () => {
+    it("re-exports identical references from services/repos/* via storageService", () => {
+      expect(storageService.supabase).toBe(supabaseClientRepo.supabase);
+      expect(storageService.SUPABASE_URL).toBe(supabaseClientRepo.SUPABASE_URL);
+      expect(storageService.isSupabaseConfigured).toBe(supabaseClientRepo.isSupabaseConfigured);
+      expect(storageService.isValidUUID).toBe(supabaseClientRepo.isValidUUID);
+
+      expect(storageService.mapDbItineraryRow).toBe(mappersRepo.mapDbItineraryRow);
+      expect(storageService.mapDbExpenseRow).toBe(mappersRepo.mapDbExpenseRow);
+      expect(storageService.mapDbFlightRow).toBe(mappersRepo.mapDbFlightRow);
+      expect(storageService.mapDbChecklistRow).toBe(mappersRepo.mapDbChecklistRow);
+      expect(storageService.buildFlightRowPayload).toBe(mappersRepo.buildFlightRowPayload);
+      expect(storageService.encodeExpenseSplitMeta).toBe(mappersRepo.encodeExpenseSplitMeta);
+      expect(storageService.decodeExpenseSplitMeta).toBe(mappersRepo.decodeExpenseSplitMeta);
+
+      expect(storageService.upsertItineraryItems).toBe(itineraryRepo.upsertItineraryItems);
+      expect(storageService.deleteItineraryItem).toBe(itineraryRepo.deleteItineraryItem);
+
+      expect(storageService.upsertExpense).toBe(expenseRepo.upsertExpense);
+      expect(storageService.deleteExpense).toBe(expenseRepo.deleteExpense);
+      expect(storageService.saveExpenseOnly).toBe(expenseRepo.saveExpenseOnly);
+
+      expect(storageService.upsertChecklistItems).toBe(checklistRepo.upsertChecklistItems);
+      expect(storageService.addChecklistItem).toBe(checklistRepo.addChecklistItem);
+      expect(storageService.updateChecklistItem).toBe(checklistRepo.updateChecklistItem);
+      expect(storageService.deleteChecklistItem).toBe(checklistRepo.deleteChecklistItem);
+      expect(storageService.ensureChecklistItems).toBe(checklistRepo.ensureChecklistItems);
+
+      expect(storageService.upsertFlight).toBe(flightRepo.upsertFlight);
+      expect(storageService.deleteFlight).toBe(flightRepo.deleteFlight);
+
+      expect(storageService.getTrips).toBe(tripRepo.getTrips);
+      expect(storageService.getTripById).toBe(tripRepo.getTripById);
+      expect(storageService.createNewTrip).toBe(tripRepo.createNewTrip);
+      expect(storageService.createFullTrip).toBe(tripRepo.createFullTrip);
+      expect(storageService.saveTrip).toBe(tripRepo.saveTrip);
+      expect(storageService.updateTripMeta).toBe(tripRepo.updateTripMeta);
+      expect(storageService.deleteTrip).toBe(tripRepo.deleteTrip);
+      expect(storageService.joinTrip).toBe(tripRepo.joinTrip);
+      expect(storageService.leaveTrip).toBe(tripRepo.leaveTrip);
+      expect(storageService.removeCollaboratorByEmail).toBe(tripRepo.removeCollaboratorByEmail);
+      expect(storageService.findUserIdByEmail).toBe(tripRepo.findUserIdByEmail);
+    });
+
+    it("checklistRepo supports add, update, delete, and default item initialization", async () => {
+      const insertMock = vi.fn().mockResolvedValue({ error: null });
+      const eqTripMock = vi.fn().mockResolvedValue({ error: null });
+      const eqIdMock = vi.fn().mockReturnValue({ eq: eqTripMock });
+      const updateMock = vi.fn().mockReturnValue({ eq: eqIdMock });
+      const deleteMock = vi.fn().mockReturnValue({ eq: eqIdMock });
+      const eqUserCountMock = vi.fn().mockResolvedValue({ count: 0, error: null });
+      const eqTripCountMock = vi.fn().mockReturnValue({ eq: eqUserCountMock });
+      const selectMock = vi.fn().mockReturnValue({ eq: eqTripCountMock });
+
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        insert: insertMock,
+        update: updateMock,
+        delete: deleteMock,
+        select: selectMock,
+      } as any);
+
+      await addChecklistItem(
+        { id: "ci-1", user_id: "user-a", text: "Adapter", isCompleted: false, category: "Gear" },
+        "trip-1"
+      );
+      expect(fromSpy).toHaveBeenCalledWith("checklist_items");
+      expect(insertMock).toHaveBeenCalledWith({
+        id: "ci-1",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        text: "Adapter",
+        category: "Gear",
+        is_completed: false,
+      });
+
+      await updateChecklistItem("ci-1", "trip-1", { isCompleted: true, text: "Travel Adapter" });
+      expect(updateMock).toHaveBeenCalledWith({
+        is_completed: true,
+        text: "Travel Adapter",
+      });
+      expect(eqIdMock).toHaveBeenCalledWith("id", "ci-1");
+      expect(eqTripMock).toHaveBeenCalledWith("trip_id", "trip-1");
+
+      await deleteChecklistItem("ci-1", "trip-1");
+      expect(deleteMock).toHaveBeenCalled();
+
+      await ensureChecklistItems("trip-1", "user-a");
+      expect(selectMock).toHaveBeenCalledWith("*", { count: "exact", head: true });
+      expect(insertMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("expenseRepo saveExpenseOnly generates UUID for non-UUID ids and deleteExpense scopes by trip_id", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const eqTripMock = vi.fn().mockResolvedValue({ error: null });
+      const eqIdMock = vi.fn().mockReturnValue({ eq: eqTripMock });
+      const deleteMock = vi.fn().mockReturnValue({ eq: eqIdMock });
+      vi.spyOn(supabase, "from").mockReturnValue({
+        upsert: upsertMock,
+        delete: deleteMock,
+      } as any);
+
+      await saveExpenseOnly("trip-1", {
+        id: "temp-id",
+        user_id: "user-a",
+        user_name: "Alice",
+        amount: 420,
+        currency: Currency.TWD,
+        category: "Transport",
+        date: "2026-10-01",
+        note: "Metro",
+        exchangeRate: 1,
+      });
+
+      const savedPayload = upsertMock.mock.calls[0][0];
+      expect(isValidUUID(savedPayload.id)).toBe(true);
+      expect(savedPayload.trip_id).toBe("trip-1");
+
+      await deleteExpense("exp-1", "trip-1");
+      expect(eqIdMock).toHaveBeenCalledWith("id", "exp-1");
+      expect(eqTripMock).toHaveBeenCalledWith("trip_id", "trip-1");
+    });
+
+    it("tripRepo handles createNewTrip, getTripById validation, deleteTrip, joinTrip, leaveTrip, and collaborator lookup/removal", async () => {
+      const blankTrip = createNewTrip({
+        destination: "Osaka",
+        startDate: "2026-11-01",
+        endDate: "2026-11-05",
+      });
+      expect(isValidUUID(blankTrip.id)).toBe(true);
+      expect(blankTrip.name).toBe("Osaka");
+      expect(blankTrip.itinerary).toEqual([]);
+
+      // Invalid UUID returns null without hitting Supabase
+      const fromSpy = vi.spyOn(supabase, "from");
+      expect(await getTripById("not-a-uuid")).toBeNull();
+      expect(fromSpy).not.toHaveBeenCalled();
+
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const eqSecondMock = vi.fn().mockResolvedValue({ error: null });
+      const eqFirstMock = vi.fn().mockReturnValue({ eq: eqSecondMock });
+      const deleteMock = vi.fn().mockReturnValue({ eq: eqFirstMock });
+      const maybeSingleMock = vi.fn().mockResolvedValue({ data: { user_id: "u-2" } });
+      const limitMock = vi.fn().mockReturnValue({ maybeSingle: maybeSingleMock });
+      const ilikeMock = vi.fn().mockReturnValue({ limit: limitMock });
+      const eqTripCollabMock = vi.fn().mockResolvedValue({
+        data: [{ user_id: "u-2", email: "bob@example.com" }],
+      });
+      const eqCountUserMock = vi.fn().mockResolvedValue({ count: 3, error: null });
+      const eqCountTripMock = vi.fn().mockReturnValue({ eq: eqCountUserMock });
+      const selectMock = vi.fn().mockImplementation((cols: string) => {
+        if (cols === "*") return { eq: eqCountTripMock };
+        if (cols === "user_id") return { ilike: ilikeMock };
+        return { eq: eqTripCollabMock };
+      });
+
+      fromSpy.mockReturnValue({
+        upsert: upsertMock,
+        delete: deleteMock,
+        select: selectMock,
+      } as any);
+
+      await deleteTrip("trip-1", "user-a");
+      expect(eqFirstMock).toHaveBeenCalledWith("id", "trip-1");
+      expect(eqSecondMock).toHaveBeenCalledWith("user_id", "user-a");
+
+      await joinTrip("trip-1", "user-a", "ALICE@EXAMPLE.COM", "editor");
+      expect(upsertMock).toHaveBeenCalledWith(
+        {
+          trip_id: "trip-1",
+          user_id: "user-a",
+          role: "editor",
+          email: "alice@example.com",
+        },
+        { onConflict: "trip_id,user_id" }
+      );
+
+      expect(await findUserIdByEmail("bob@example.com")).toBe("u-2");
+
+      const removedId = await removeCollaboratorByEmail("trip-1", "BOB@example.com");
+      expect(removedId).toBe("u-2");
+      expect(deleteMock).toHaveBeenCalled();
+
+      await leaveTrip("trip-1", "u-3");
+      expect(fromSpy).toHaveBeenCalledWith("trip_collaborators");
     });
   });
 });

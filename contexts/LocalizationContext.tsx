@@ -308,6 +308,11 @@ export const translations = {
     addMemberBtn: "新增",
     netBalance: "淨餘額",
     rateLockedHint: "依當下匯率自動折算並鎖定",
+    errorBoundaryTitle: "此區塊暫時無法顯示",
+    errorBoundaryAppTitle: "應用程式發生預期外的錯誤",
+    errorBoundaryDesc: "別擔心，您的旅程資料仍安全儲存在雲端。請點擊下方按鈕重新載入。",
+    errorBoundaryRetry: "重試",
+    errorBoundaryDetails: "錯誤詳情",
   },
   en: {
     appName: "Go Travel",
@@ -614,6 +619,11 @@ export const translations = {
     addMemberBtn: "Add",
     netBalance: "Net",
     rateLockedHint: "Converted & locked at current rate",
+    errorBoundaryTitle: "This section hit a snag",
+    errorBoundaryAppTitle: "Something went wrong",
+    errorBoundaryDesc: "Don't worry — your trip data is safe in the cloud. Tap below to try again.",
+    errorBoundaryRetry: "Try Again",
+    errorBoundaryDetails: "Error details",
   },
 };
 
