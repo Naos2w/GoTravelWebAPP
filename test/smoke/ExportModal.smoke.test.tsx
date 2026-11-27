@@ -390,4 +390,48 @@ describe("ExportModal / PrintExportStudio Smoke Test", () => {
     fireEvent.click(screen.getByTestId("download-checklist-vtodo-btn"));
     expect(vtodoSpy).toHaveBeenCalledWith(mockTrip, "zh");
   });
+
+  it("opens InfoTip popover inside clickable sync rows without triggering export and hides inline helper subtext", () => {
+    render(
+      <LocalizationProvider>
+        <ExportModal trip={mockTrip} isOpen={true} onClose={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    // Tab 1: inline helper paragraph is replaced by InfoTip
+    expect(
+      screen.queryByText("熱感應結算明細與 AA 分帳清單")
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("infotip-image-card-trigger"));
+    expect(screen.getByTestId("infotip-image-card-popover")).toHaveTextContent(
+      "熱感應結算明細與 AA 分帳清單"
+    );
+
+    // Tab 2: inline micro-copy and bottom KML tip are inside InfoTip
+    fireEvent.click(screen.getByTestId("studio-tab-maps"));
+    expect(
+      screen.queryByText(
+        "小提示：開啟 Google My Maps → 建立新地圖 → 匯入此 .kml 檔，即可在手機離線標記所有景點。"
+      )
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("infotip-kml-trigger"));
+    expect(screen.getByTestId("infotip-kml-popover")).toHaveTextContent(
+      "Google My Maps"
+    );
+
+    // Tab 3: clicking InfoTip inside Apple Notes row does not trigger share/copy
+    const shareMock = vi.fn();
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: shareMock,
+    });
+    fireEvent.click(screen.getByTestId("studio-tab-sync"));
+    expect(screen.queryByText("iPhone 用戶小訣竅：")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("infotip-apple-notes-trigger"));
+    expect(screen.getByTestId("infotip-apple-notes-popover")).toHaveTextContent(
+      "喚起原生分享面板"
+    );
+    expect(shareMock).not.toHaveBeenCalled();
+  });
 });
