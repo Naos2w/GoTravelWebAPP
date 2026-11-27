@@ -187,6 +187,20 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
   const [currentIssuing, setCurrentIssuing] = useState<number>(reduced ? totalPasses : 1);
   const [allPrinted, setAllPrinted] = useState<boolean>(reduced);
 
+  const desktopScrollRef = useRef<HTMLDivElement | null>(null);
+  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
+  const desktopPassRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const mobilePassRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const prevIssuingRef = useRef<number>(reduced ? totalPasses : 1);
+  const userInteractedRef = useRef<boolean>(false);
+
+  desktopPassRefs.current.length = passes.length;
+  mobilePassRefs.current.length = passes.length;
+
+  const markUserInteracted = useCallback(() => {
+    userInteractedRef.current = true;
+  }, []);
+
   const finish = useCallback(() => {
     if (doneRef.current) return;
     doneRef.current = true;
@@ -195,11 +209,14 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
 
   useEffect(() => {
     const timers: number[] = [];
+    userInteractedRef.current = false;
 
     if (reduced) {
+      prevIssuingRef.current = totalPasses;
       setCurrentIssuing(totalPasses);
       setAllPrinted(true);
     } else {
+      prevIssuingRef.current = 1;
       setCurrentIssuing(1);
       setAllPrinted(false);
 
@@ -231,6 +248,31 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
       window.removeEventListener('keydown', onKey);
     };
   }, [effectiveDurationMs, finish, reduced, totalPasses]);
+
+  useEffect(() => {
+    const prev = prevIssuingRef.current;
+    prevIssuingRef.current = currentIssuing;
+
+    if (currentIssuing <= prev || currentIssuing <= 1 || userInteractedRef.current) {
+      return;
+    }
+
+    const targetIdx = Math.min(currentIssuing - 1, totalPasses - 1);
+    const behavior: ScrollBehavior = reduced ? 'auto' : 'smooth';
+
+    const scrollTarget = (passEl: HTMLDivElement | null, containerEl: HTMLDivElement | null) => {
+      if (passEl && typeof passEl.scrollIntoView === 'function') {
+        passEl.scrollIntoView({ behavior, block: 'end', inline: 'nearest' });
+        return;
+      }
+      if (containerEl && typeof containerEl.scrollTo === 'function') {
+        containerEl.scrollTo({ top: containerEl.scrollHeight, behavior });
+      }
+    };
+
+    scrollTarget(desktopPassRefs.current[targetIdx], desktopScrollRef.current);
+    scrollTarget(mobilePassRefs.current[targetIdx], mobileScrollRef.current);
+  }, [currentIssuing, reduced, totalPasses]);
 
   const isMulti = totalPasses >= 2;
   const isDense = totalPasses >= 3;
@@ -287,14 +329,23 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
           ? 'w-44 shrink-0 p-6'
           : 'p-5';
 
+    const passRefs = horizontal ? desktopPassRefs : mobilePassRefs;
+
     return (
       <div
         key={`${orientation}-${item.key}`}
-        data-testid={`boarding-pass-${horizontal ? 'desktop' : 'mobile'}`}
-        data-direction={item.direction}
-        style={reduced ? undefined : { animationDelay: `${delayMs}ms` }}
-        className={`relative shrink-0 overflow-hidden bg-white dark:bg-[#171922] border border-black/[0.08] dark:border-white/[0.14] ${isMulti ? 'rounded-2xl shadow-xl' : 'rounded-[28px] shadow-2xl'} ${animClass} ${horizontal ? 'flex flex-row w-[560px] max-w-full' : 'flex flex-col w-full max-w-[320px]'}`}
+        ref={(el) => {
+          passRefs.current[idx] = el;
+        }}
+        data-pass-index={idx}
+        className={`shrink-0 scroll-mb-3 ${horizontal ? 'w-[560px] max-w-full' : 'w-full max-w-[320px]'}`}
       >
+        <div
+          data-testid={`boarding-pass-${horizontal ? 'desktop' : 'mobile'}`}
+          data-direction={item.direction}
+          style={reduced ? undefined : { animationDelay: `${delayMs}ms` }}
+          className={`relative overflow-hidden bg-white dark:bg-[#171922] border border-black/[0.08] dark:border-white/[0.14] ${isMulti ? 'rounded-2xl shadow-xl' : 'rounded-[28px] shadow-2xl'} ${animClass} ${horizontal ? 'flex flex-row w-full' : 'flex flex-col w-full'}`}
+        >
         <div className={`flex-1 min-w-0 ${bodyPadding}`}>
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0 flex items-center gap-2 flex-wrap">
@@ -358,6 +409,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
             />
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -416,7 +468,14 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
         </div>
 
         {/* Desktop: horizontal passes slide out sequentially from a side printer slot */}
-        <div className="hidden sm:flex items-start justify-center w-full min-h-0 max-h-[58vh] overflow-y-auto px-2 py-2">
+        <div
+          ref={desktopScrollRef}
+          data-testid="boarding-pass-scroll-desktop"
+          onWheel={markUserInteracted}
+          onTouchStart={markUserInteracted}
+          onPointerDown={markUserInteracted}
+          className="hidden sm:flex items-start justify-center w-full min-h-0 max-h-[58vh] overflow-y-auto px-2 py-2"
+        >
           <div className="flex items-stretch justify-center w-full max-w-[600px]">
             {metalSlot(true)}
             <div className="flex-1 min-w-0 overflow-x-hidden py-1 pl-1 pr-3 flex flex-col gap-3">
@@ -428,7 +487,14 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
         {/* Mobile: vertical passes slide down sequentially from a top dispenser slot */}
         <div className="flex sm:hidden flex-col items-center w-full min-h-0 max-h-[56vh]">
           {metalSlot(false)}
-          <div className="w-full overflow-y-auto overflow-x-hidden px-3 pt-1 pb-3 flex flex-col items-center gap-2.5">
+          <div
+            ref={mobileScrollRef}
+            data-testid="boarding-pass-scroll-mobile"
+            onWheel={markUserInteracted}
+            onTouchStart={markUserInteracted}
+            onPointerDown={markUserInteracted}
+            className="w-full overflow-y-auto overflow-x-hidden px-3 pt-1 pb-3 flex flex-col items-center gap-2.5"
+          >
             {passes.map((item, idx) => renderPassFace(item, idx, 'y'))}
           </div>
         </div>
