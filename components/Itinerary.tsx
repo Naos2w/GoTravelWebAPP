@@ -107,6 +107,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   const editRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const selectionSourceRef = useRef<'map' | 'list' | null>(null);
+  const tripRef = useRef<Trip>(trip);
+  tripRef.current = trip;
 
   // Auto-scroll mobile bottom cards when highlighted item changes
   useEffect(() => {
@@ -213,7 +215,13 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     if (scrollAnchorRef.current) {
       const element = document.getElementById(`item-${scrollAnchorRef.current}`);
       if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof element.scrollIntoView === 'function') {
+          try {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch {
+            // Ignore scrollIntoView errors on restricted mobile WebViews / jsdom
+          }
+        }
         setHighlightedId(scrollAnchorRef.current);
         scrollAnchorRef.current = null;
       }
@@ -472,6 +480,7 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     const movedItem = displayItems.find((i) => i.id === movedId);
     if (!movedItem || movedItem.transportType === 'Flight') return;
 
+    const targetDate = currentDay.date;
     const updatedItems = await reorderAnchorsWithSmartTime(
       displayItems,
       movedId,
@@ -483,11 +492,27 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
           : Promise.resolve(30)
     );
 
-    const newDays = [...days];
-    const updatedMoved = updatedItems.find((i) => i.id === movedId) || movedItem;
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+    const latestTrip = tripRef.current;
+    const latestDays = [...(latestTrip.itinerary || [])];
+    const dayIdx = latestDays.findIndex((d) => d.date === targetDate);
+    if (dayIdx === -1) return;
+
+    // Preserve any concurrent Realtime items added to this day while awaiting route times
+    const reorderedIds = new Set(updatedItems.map((i) => i.id));
+    const concurrentAdditions = latestDays[dayIdx].items.filter(
+      (i) => !reorderedIds.has(i.id)
+    );
+    const mergedItems =
+      concurrentAdditions.length > 0
+        ? [...updatedItems, ...concurrentAdditions].sort((a, b) =>
+            (a.time || "").localeCompare(b.time || "")
+          )
+        : updatedItems;
+
+    const updatedMoved = mergedItems.find((i) => i.id === movedId) || movedItem;
+    latestDays[dayIdx] = { ...latestDays[dayIdx], items: mergedItems };
     scrollAnchorRef.current = movedId;
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", updatedMoved);
+    onUpdate({ ...latestTrip, itinerary: latestDays }, "UPDATE_ITINERARY_ITEM", updatedMoved);
   };
 
   const handleDrop = async (e: React.DragEvent, targetId: string) => {
@@ -530,7 +555,8 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     }
     
     setIsSaving(true);
-    let finalItem = { ...editingItem };
+    const targetDate = editingItem.date || currentDay.date;
+    let finalItem = { ...editingItem, date: targetDate };
     
     // Automatically parse Google Maps URL or raw coordinates if pasted into placeName
     const resolvedUrl = resolveLocationInput(finalItem.placeName);
@@ -581,7 +607,16 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
         // Precise coords (e.g. from Google Places) are always preserved as-is
     }
     
-    let newItems = [...displayItems];
+    // Read the freshest trip after async geocoding so concurrent Realtime updates are preserved
+    const latestTrip = tripRef.current;
+    const latestDays = [...(latestTrip.itinerary || [])];
+    const dayIdx = latestDays.findIndex((d) => d.date === targetDate);
+    if (dayIdx === -1) {
+      setIsSaving(false);
+      return;
+    }
+
+    let newItems = [...(latestDays[dayIdx].items || [])];
     const index = newItems.findIndex(i => i.id === finalItem.id);
     
     if (index > -1) {
@@ -604,12 +639,11 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     // Sort and cleanup
     const updatedItems = maintainListIntegrity(newItems);
     
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: updatedItems };
+    latestDays[dayIdx] = { ...latestDays[dayIdx], items: updatedItems };
     
     scrollAnchorRef.current = finalItem.id;
     
-    onUpdate({ ...trip, itinerary: newDays }, "UPDATE_ITINERARY_ITEM", finalItem);
+    onUpdate({ ...latestTrip, itinerary: latestDays }, "UPDATE_ITINERARY_ITEM", finalItem);
     setIsFormOpen(false);
     setEditingItem(null);
     setIsSaving(false);
@@ -649,8 +683,9 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   };
 
   const handleChangeTransportType = async (transportId: string, type: TransportType) => {
-    if (isGuest) return;
+    if (isGuest || !currentDay) return;
 
+    const targetDate = currentDay.date;
     // Recalculate duration note with new transport mode profile if neighbors have coordinates
     const idx = displayItems.findIndex(it => it.id === transportId);
     let updatedNote: string | undefined = undefined;
@@ -664,13 +699,17 @@ export const Itinerary: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
       }
     }
 
-    const newItems = displayItems.map(it => 
+    const latestTrip = tripRef.current;
+    const latestDays = [...(latestTrip.itinerary || [])];
+    const dayIdx = latestDays.findIndex((d) => d.date === targetDate);
+    if (dayIdx === -1) return;
+
+    const newItems = latestDays[dayIdx].items.map(it => 
       it.id === transportId ? { ...it, transportType: type, ...(updatedNote !== undefined ? { note: updatedNote } : {}) } : it
     );
-    const newDays = [...days];
-    newDays[selectedDayIndex] = { ...currentDay, items: newItems };
+    latestDays[dayIdx] = { ...latestDays[dayIdx], items: newItems };
     onUpdate(
-      { ...trip, itinerary: newDays },
+      { ...latestTrip, itinerary: latestDays },
       "UPDATE_ITINERARY_ITEM",
       { id: transportId, transportType: type, ...(updatedNote !== undefined ? { note: updatedNote } : {}) }
     );

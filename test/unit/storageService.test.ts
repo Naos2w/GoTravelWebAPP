@@ -1,8 +1,29 @@
-import { describe, it, expect } from "vitest";
-import { isValidUUID, formatDateStr, transformTripRow, DbTripRow } from "../../services/storageService";
-import { Currency } from "../../types";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  isValidUUID,
+  formatDateStr,
+  transformTripRow,
+  mapDbItineraryRow,
+  mapDbExpenseRow,
+  mapDbFlightRow,
+  mapDbChecklistRow,
+  upsertItineraryItems,
+  deleteItineraryItem,
+  upsertExpense,
+  upsertFlight,
+  deleteFlight,
+  upsertChecklistItems,
+  updateTripMeta,
+  supabase,
+  DbTripRow,
+} from "../../services/storageService";
+import { Currency, Expense, FlightInfo, ItineraryItem } from "../../types";
 
 describe("storageService", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("isValidUUID", () => {
     it("returns true for valid standard UUIDs (v4 or standard 8-4-4-4-12 hex)", () => {
       expect(isValidUUID("5bf223d6-4053-4a75-a38f-1c51596b1c5c")).toBe(true);
@@ -25,6 +46,335 @@ describe("storageService", () => {
     });
   });
 
+  describe("exported row mappers", () => {
+    it("maps itinerary_items DB row preserving lat, lng, date, time, and transportType", () => {
+      const mapped = mapDbItineraryRow({
+        id: "it-1",
+        trip_id: "trip-1",
+        user_id: "user-1",
+        time: "11:30",
+        place_name: "Tokyo Station",
+        lat: 35.6812,
+        lng: 139.7671,
+        note: "Transfer",
+        type: "Transport",
+        transport_type: "Public",
+        date: "2026-10-01",
+      });
+
+      expect(mapped).toEqual({
+        id: "it-1",
+        trip_id: "trip-1",
+        user_id: "user-1",
+        time: "11:30",
+        placeName: "Tokyo Station",
+        lat: 35.6812,
+        lng: 139.7671,
+        note: "Transfer",
+        type: "Transport",
+        transportType: "Public",
+        date: "2026-10-01",
+      });
+    });
+
+    it("maps expenses DB row decoding split metadata and numeric string fields", () => {
+      const mapped = mapDbExpenseRow({
+        id: "exp-9",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        user_name: "Alice",
+        amount: "2400.5",
+        currency: Currency.JPY,
+        category: "Food",
+        date: "2026-10-01",
+        note: 'Sushi Dinner [split:{"p":"user-b","pn":"Bob","s":["user-a","user-b"]}]',
+        exchange_rate: "0.215",
+        created_at: "2026-10-01T12:00:00Z",
+      });
+
+      expect(mapped).toEqual({
+        id: "exp-9",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        user_name: "Alice",
+        amount: 2400.5,
+        currency: Currency.JPY,
+        category: "Food",
+        date: "2026-10-01",
+        note: "Sushi Dinner",
+        paidBy: "user-b",
+        paidByName: "Bob",
+        splitWith: ["user-a", "user-b"],
+        exchangeRate: 0.215,
+        createdAt: "2026-10-01T12:00:00Z",
+      });
+    });
+
+    it("maps flights DB row extracting baggage.exchangeRate and compound segments", () => {
+      const mapped = mapDbFlightRow({
+        id: "fl-1",
+        user_id: "user-a",
+        traveler_name: "Alice",
+        outbound: {
+          airline: "EVA + ANA",
+          flightNumber: "BR198 + NH100",
+          departureTime: "2026-10-01T08:50",
+          arrivalTime: "2026-10-01T18:00",
+          departureAirport: "TPE",
+          arrivalAirport: "CTS",
+          segments: [{ flightNumber: "BR198" }, { flightNumber: "NH100" }],
+        },
+        inbound: undefined,
+        price: 120000,
+        currency: Currency.JPY,
+        cabin_class: "Business",
+        baggage: {
+          carryOn: { count: 1, weight: "7kg" },
+          checked: { count: 2, weight: "32kg" },
+          exchangeRate: 0.21,
+        },
+        budget: 80000,
+      });
+
+      expect(mapped.cabinClass).toBe("Business");
+      expect(mapped.exchangeRate).toBe(0.21);
+      expect(mapped.budget).toBe(80000);
+      expect(mapped.outbound.segments).toHaveLength(2);
+    });
+
+    it("maps checklist_items DB row cleanly", () => {
+      const mapped = mapDbChecklistRow({
+        id: "ci-1",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        text: "eSIM",
+        is_completed: true,
+        category: "Gear",
+      });
+
+      expect(mapped).toEqual({
+        id: "ci-1",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        text: "eSIM",
+        isCompleted: true,
+        category: "Gear",
+      });
+    });
+  });
+
+  describe("granular single-row CRUD helpers", () => {
+    it("upsertItineraryItems sends exact row columns and skips empty arrays", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        upsert: upsertMock,
+      } as any);
+
+      await upsertItineraryItems("trip-1", "user-a", []);
+      expect(fromSpy).not.toHaveBeenCalled();
+
+      const items: Array<ItineraryItem & { date: string }> = [
+        {
+          id: "it-1",
+          time: "10:00",
+          placeName: "Senso-ji",
+          lat: 35.7148,
+          lng: 139.7967,
+          note: "Temple",
+          type: "Place",
+          transportType: undefined,
+          date: "2026-10-01",
+        },
+      ];
+      await upsertItineraryItems("trip-1", "user-a", items);
+
+      expect(fromSpy).toHaveBeenCalledWith("itinerary_items");
+      expect(upsertMock).toHaveBeenCalledWith([
+        {
+          id: "it-1",
+          trip_id: "trip-1",
+          user_id: "user-a",
+          date: "2026-10-01",
+          time: "10:00",
+          type: "Place",
+          place_name: "Senso-ji",
+          lat: 35.7148,
+          lng: 139.7967,
+          note: "Temple",
+          transport_type: undefined,
+        },
+      ]);
+    });
+
+    it("upsertExpense preserves encoded split metadata and exchangeRate snapshot", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        upsert: upsertMock,
+      } as any);
+
+      const expense: Expense = {
+        id: "exp-1",
+        user_id: "user-a",
+        user_name: "Alice",
+        amount: 3000,
+        currency: Currency.JPY,
+        category: "Food",
+        date: "2026-10-01",
+        note: "Izakaya",
+        exchangeRate: 0.212,
+        paidBy: "user-b",
+        paidByName: "Bob",
+        splitWith: ["user-a", "user-b"],
+      };
+
+      await upsertExpense("trip-1", "user-a", expense);
+
+      expect(fromSpy).toHaveBeenCalledWith("expenses");
+      expect(upsertMock).toHaveBeenCalledWith({
+        id: "exp-1",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        user_name: "Alice",
+        amount: 3000,
+        currency: Currency.JPY,
+        category: "Food",
+        date: "2026-10-01",
+        note: 'Izakaya [split:{"p":"user-b","pn":"Bob","s":["user-a","user-b"]}]',
+        exchange_rate: 0.212,
+      });
+    });
+
+    it("upsertFlight preserves compound segments, baggage exchangeRate, and budget", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        upsert: upsertMock,
+      } as any);
+
+      const flight: FlightInfo = {
+        id: "fl-1",
+        user_id: "user-a",
+        traveler_name: "Alice",
+        price: 85000,
+        currency: Currency.JPY,
+        exchangeRate: 0.215,
+        cabinClass: "Economy",
+        budget: 60000,
+        baggage: {
+          carryOn: { count: 1, weight: "7kg" },
+          checked: { count: 1, weight: "23kg" },
+        },
+        outbound: {
+          airline: "EVA Air",
+          flightNumber: "BR198",
+          departureTime: "2026-10-01T08:50",
+          arrivalTime: "2026-10-01T13:15",
+          departureAirport: "TPE",
+          arrivalAirport: "NRT",
+          segments: [
+            {
+              airline: "EVA Air",
+              flightNumber: "BR198",
+              departureTime: "2026-10-01T08:50",
+              arrivalTime: "2026-10-01T13:15",
+              departureAirport: "TPE",
+              arrivalAirport: "NRT",
+            },
+          ],
+        },
+      };
+
+      await upsertFlight("trip-1", "user-a", flight);
+
+      expect(fromSpy).toHaveBeenCalledWith("flights");
+      expect(upsertMock).toHaveBeenCalledWith({
+        id: "fl-1",
+        trip_id: "trip-1",
+        user_id: "user-a",
+        traveler_name: "Alice",
+        outbound: flight.outbound,
+        inbound: undefined,
+        price: 85000,
+        currency: Currency.JPY,
+        cabin_class: "Economy",
+        baggage: {
+          carryOn: { count: 1, weight: "7kg" },
+          checked: { count: 1, weight: "23kg" },
+          exchangeRate: 0.215,
+        },
+        budget: 60000,
+      });
+    });
+
+    it("deleteFlight and deleteItineraryItem filter by both id and trip_id", async () => {
+      const eqTripMock = vi.fn().mockResolvedValue({ error: null });
+      const eqIdMock = vi.fn().mockReturnValue({ eq: eqTripMock });
+      const deleteMock = vi.fn().mockReturnValue({ eq: eqIdMock });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        delete: deleteMock,
+      } as any);
+
+      await deleteFlight("fl-1", "trip-1");
+      expect(fromSpy).toHaveBeenCalledWith("flights");
+      expect(eqIdMock).toHaveBeenCalledWith("id", "fl-1");
+      expect(eqTripMock).toHaveBeenCalledWith("trip_id", "trip-1");
+
+      await deleteItineraryItem("it-1", "trip-1");
+      expect(fromSpy).toHaveBeenCalledWith("itinerary_items");
+    });
+
+    it("upsertChecklistItems upserts targeted checklist rows", async () => {
+      const upsertMock = vi.fn().mockResolvedValue({ error: null });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        upsert: upsertMock,
+      } as any);
+
+      await upsertChecklistItems("trip-1", "user-a", [
+        {
+          id: "ci-1",
+          text: "Passport",
+          isCompleted: true,
+          category: "Documents",
+        },
+      ]);
+
+      expect(fromSpy).toHaveBeenCalledWith("checklist_items");
+      expect(upsertMock).toHaveBeenCalledWith([
+        {
+          id: "ci-1",
+          trip_id: "trip-1",
+          user_id: "user-a",
+          text: "Passport",
+          category: "Documents",
+          is_completed: true,
+        },
+      ]);
+    });
+
+    it("updateTripMeta sends only patched fields and lowercases allowed_emails", async () => {
+      const eqMock = vi.fn().mockResolvedValue({ error: null });
+      const updateMock = vi.fn().mockReturnValue({ eq: eqMock });
+      const fromSpy = vi.spyOn(supabase, "from").mockReturnValue({
+        update: updateMock,
+      } as any);
+
+      // No-op when patch is empty
+      await updateTripMeta("trip-1", {});
+      expect(fromSpy).not.toHaveBeenCalled();
+
+      await updateTripMeta("trip-1", {
+        name: "Kyoto Spring",
+        allowed_emails: ["USER@EXAMPLE.COM"],
+      });
+
+      expect(fromSpy).toHaveBeenCalledWith("trips");
+      expect(updateMock).toHaveBeenCalledWith({
+        name: "Kyoto Spring",
+        allowed_emails: ["user@example.com"],
+      });
+      expect(eqMock).toHaveBeenCalledWith("id", "trip-1");
+    });
+  });
+
   describe("transformTripRow", () => {
     it("transforms raw database row into full frontend Trip model", () => {
       const mockRow: DbTripRow = {
@@ -36,7 +386,7 @@ describe("storageService", () => {
         end_date: "2026-10-03",
         allowed_emails: ["USER1@EXAMPLE.COM", "User2@Domain.org"],
         trip_collaborators: [
-          { user_id: "collab-1", email: "collab@test.com", role: "editor" }
+          { user_id: "collab-1", email: "collab@test.com", role: "editor" },
         ],
         flights: [
           {
@@ -47,8 +397,11 @@ describe("storageService", () => {
             price: 15000,
             currency: Currency.TWD,
             cabin_class: "Economy",
-            baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 2, weight: "23kg" } }
-          }
+            baggage: {
+              carryOn: { count: 1, weight: "7kg" },
+              checked: { count: 2, weight: "23kg" },
+            },
+          },
         ],
         checklist_items: [
           {
@@ -56,8 +409,8 @@ describe("storageService", () => {
             user_id: "user-123",
             text: "Passport",
             is_completed: true,
-            category: "Documents"
-          }
+            category: "Documents",
+          },
         ],
         expenses: [
           {
@@ -69,8 +422,8 @@ describe("storageService", () => {
             category: "Food",
             date: "2026-10-01",
             note: "Ramen",
-            exchange_rate: 0.22
-          }
+            exchange_rate: 0.22,
+          },
         ],
         itinerary_items: [
           {
@@ -82,7 +435,7 @@ describe("storageService", () => {
             lat: 35.7148,
             lng: 139.7967,
             type: "Place",
-            date: "2026-10-01"
+            date: "2026-10-01",
           },
           {
             id: "item-1",
@@ -93,9 +446,9 @@ describe("storageService", () => {
             lat: 35.7101,
             lng: 139.8107,
             type: "Place",
-            date: "2026-10-01"
-          }
-        ]
+            date: "2026-10-01",
+          },
+        ],
       };
 
       const result = transformTripRow(mockRow);

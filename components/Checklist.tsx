@@ -165,6 +165,8 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
   // Track pending toggle operations per item to prevent race conditions and stale server echoes
   const pendingTogglesRef = useRef<Map<string, { value: boolean; timestamp: number }>>(new Map());
   const debounceTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const tripRef = useRef<Trip>(trip);
+  tripRef.current = trip;
 
   // Merge external trip.checklist with optimistic state while respecting pending user interactions
   useEffect(() => {
@@ -225,8 +227,12 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
 
     const timer = window.setTimeout(() => {
       debounceTimeoutsRef.current.delete(itemId);
+      const latestTrip = tripRef.current;
+      const nextChecklist = (latestTrip.checklist || []).map((item) =>
+        item.id === itemId ? { ...item, isCompleted: nextCompleted } : item
+      );
       onUpdate(
-        { ...trip, checklist: updatedList },
+        { ...latestTrip, checklist: nextChecklist },
         "UPDATE_CHECKLIST_ITEM",
         { id: itemId, isCompleted: nextCompleted }
       );
@@ -279,18 +285,19 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
     addItemWithText(newItemText, category);
   };
 
-  const deleteItem = async (itemId: string) => {
-    const backup = [...optimisticChecklist];
+  const deleteItem = (itemId: string) => {
     const updatedList = optimisticChecklist.filter(i => i.id !== itemId);
     setOptimisticChecklist(updatedList);
 
-    try {
-      await deleteChecklistItem(itemId, trip.id);
-    } catch (e) {
-      console.error("Failed to delete item", e);
-      setOptimisticChecklist(backup);
-      onUpdate(trip, "SHOW_ERROR_TOAST", t("errorTitle") || "Failed to delete checklist item");
-    }
+    const latestTrip = tripRef.current;
+    onUpdate(
+      {
+        ...latestTrip,
+        checklist: (latestTrip.checklist || []).filter(i => i.id !== itemId),
+      },
+      "DELETE_CHECKLIST_ITEM",
+      itemId
+    );
   };
 
   const toggleExpand = (cat: string) => {

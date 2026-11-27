@@ -8,25 +8,49 @@ import React, {
   Suspense,
 } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
-import { Trip, FlightInfo, Currency, Theme, Language, User, ChecklistItem } from "./types";
+import {
+  Trip,
+  FlightInfo,
+  Currency,
+  Theme,
+  Language,
+  User,
+  ChecklistItem,
+} from "./types";
 import {
   getTrips,
   getTripById,
-  saveTrip,
   deleteTrip,
   joinTrip,
   leaveTrip,
-  saveExpenseOnly,
   removeCollaboratorByEmail,
-  findUserIdByEmail,
   ensureChecklistItems,
   createFullTrip,
   deleteExpense,
   deleteItineraryItem,
+  deleteFlight,
+  deleteChecklistItem,
   updateChecklistItem,
   addChecklistItem,
+  upsertItineraryItems,
+  upsertExpense,
+  upsertFlight,
+  upsertChecklistItems,
+  updateTripMeta,
+  findUserIdByEmail,
+  mapDbChecklistRow,
+  mapDbItineraryRow,
+  mapDbExpenseRow,
+  mapDbFlightRow,
   supabase,
 } from "./services/storageService";
+import {
+  diffTripChanges,
+  applyTripDelta,
+  revertTripDelta,
+  createEmptyTripDelta,
+  TripDelta,
+} from "./services/tripDiffService";
 import {
   parseSupabaseUser,
   signInWithGoogle,
@@ -112,6 +136,8 @@ import {
   FileText,
   MoreHorizontal,
   User as UserIcon,
+  WifiOff,
+  RefreshCw,
 } from "lucide-react";
 import {
   PieChart,
@@ -160,13 +186,19 @@ const getGradient = (str: string) => {
 
 
 type PostCreateGuideStep = "idle" | "issuing" | "itinerary-hint" | "edit-price";
+type SyncStatus = "synced" | "syncing" | "offline" | "error";
+
+const isNavigatorOffline = () =>
+  typeof navigator !== "undefined" && navigator.onLine === false;
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>("landing");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
+    isNavigatorOffline() ? "offline" : "synced"
+  );
   const [currentTripId, setCurrentTripId] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [activeTab, setActiveTab] = useState<
@@ -257,10 +289,13 @@ const App: React.FC = () => {
   const joinLockRef = useRef<string | null>(null);
   const creatingTripRef = useRef(false);
   const activeChannelRef = useRef<RealtimeChannel | null>(null);
+  const inFlightWritesRef = useRef<number>(0);
   const userRef = useRef<User | null>(user);
   userRef.current = user;
   const currentTripIdRef = useRef<string | null>(currentTripId);
   currentTripIdRef.current = currentTripId;
+  const tripsRef = useRef<Trip[]>(trips);
+  tripsRef.current = trips;
 
   // Preserve user object reference across background token refreshes to avoid breaking subscriptions
   const setSafeUser = (newUser: User | null) => {
@@ -279,6 +314,8 @@ const App: React.FC = () => {
   };
 
   const currentTrip = trips.find((t) => t.id === currentTripId);
+  const currentTripRef = useRef<Trip | undefined>(currentTrip);
+  currentTripRef.current = currentTrip;
 
   // Auto-join logic: When a user enters a trip detail, ensure they are joined properly.
   // This triggers checklist generation on first visit.
@@ -328,72 +365,160 @@ const App: React.FC = () => {
   }, [currentTripId, user, currentTrip]);
 
   // Real-time synchronization for active trip with Permission Check
-  // Monotonic sequence ref to prevent out-of-order asynchronous responses from reverting newer local updates
+  // Monotonic sequence refs to prevent out-of-order asynchronous responses from reverting newer local updates
   const latestRefreshSeqRef = useRef<number>(0);
+  const latestLoadTripsSeqRef = useRef<number>(0);
+  const activeTripVersionRef = useRef<number>(0);
 
-  const refreshActiveTrip = async () => {
-    if (!currentTripId || !user) return;
+  const commitTripsUpdate = (updater: (prev: Trip[]) => Trip[]) => {
+    setTrips((prev) => {
+      const next = updater(prev);
+      if (next !== prev) {
+        tripsRef.current = next;
+        const activeId = currentTripIdRef.current;
+        currentTripRef.current = activeId
+          ? next.find((t) => t.id === activeId)
+          : undefined;
+      }
+      return next;
+    });
+  };
+
+  const refreshActiveTrip = async (): Promise<boolean> => {
+    const activeTripId = currentTripIdRef.current;
+    const activeUser = userRef.current;
+    if (!activeTripId || !activeUser) return true;
     const seq = ++latestRefreshSeqRef.current;
 
     try {
-        const updatedTrip = await getTripById(currentTripId);
+      const updatedTrip = await getTripById(activeTripId);
 
-        // If a newer refresh started while this one was in-flight, discard stale result!
-        if (seq !== latestRefreshSeqRef.current) {
-          return;
-        }
+      // If a newer refresh started while this one was in-flight, discard stale result!
+      if (seq !== latestRefreshSeqRef.current) {
+        return true;
+      }
 
-        // 1. Check if trip still exists
-        if (!updatedTrip) {
-          setNotification({
-            message: translations[language].tripNotFound || "Trip not found",
-            type: "error",
-          });
-          setCurrentTripId(null);
-          setView("list");
-          // Remove from list if it exists
-          setTrips((prev) => prev.filter((t) => t.id !== currentTripId));
-          return;
-        }
-
-        // 2. Security Check: Is user still allowed?
-        const isOwner = updatedTrip.user_id === user.id;
-        const isAllowed =
-          updatedTrip.allowed_emails &&
-          updatedTrip.allowed_emails.some(
-            (e: string) => e.toLowerCase() === user.email.toLowerCase()
-          );
-
-        if (!isOwner && !isAllowed) {
-          setNotification({
-            message: translations[language].revoked || "Access Revoked",
-            type: "error",
-          });
-          setCurrentTripId(null);
-          setView("list");
-          // CRITICAL FIX: Immediately remove the trip from local state so it disappears from the list
-          setTrips((prev) => prev.filter((t) => t.id !== currentTripId));
-          // Requirement 6: Force redirect to list view and clear current trip
-          setCurrentTripId(null);
-          setView("list");
-          return;
-        }
-
-        // 3. Update Data
-        setTrips((prev) => {
-          const idx = prev.findIndex((t) => t.id === updatedTrip.id);
-          if (idx > -1) {
-             // Requirement 2 & 3: Ensure we have the latest collaborator data and member counts
-            const newArr = [...prev];
-            newArr[idx] = updatedTrip;
-            return newArr;
-          }
-          return [updatedTrip, ...prev];
+      // 1. Check if trip still exists
+      if (!updatedTrip) {
+        setNotification({
+          message: translations[language].tripNotFound || "Trip not found",
+          type: "error",
         });
+        setCurrentTripId(null);
+        setView("list");
+        // Remove from list if it exists
+        setTrips((prev) => prev.filter((t) => t.id !== activeTripId));
+        return true;
+      }
+
+      // 2. Security Check: Is user still allowed?
+      const isOwner = updatedTrip.user_id === activeUser.id;
+      const isAllowed =
+        updatedTrip.allowed_emails &&
+        updatedTrip.allowed_emails.some(
+          (e: string) => e.toLowerCase() === activeUser.email.toLowerCase()
+        );
+
+      if (!isOwner && !isAllowed) {
+        setNotification({
+          message: translations[language].revoked || "Access Revoked",
+          type: "error",
+        });
+        // CRITICAL FIX: Immediately remove the trip from local state so it disappears from the list
+        setTrips((prev) => prev.filter((t) => t.id !== activeTripId));
+        // Requirement 6: Force redirect to list view and clear current trip
+        setCurrentTripId(null);
+        setView("list");
+        return true;
+      }
+
+      // 3. Update Data
+      activeTripVersionRef.current += 1;
+      commitTripsUpdate((prev) => {
+        const idx = prev.findIndex((t) => t.id === updatedTrip.id);
+        if (idx > -1) {
+          // Requirement 2 & 3: Ensure we have the latest collaborator data and member counts
+          const newArr = [...prev];
+          newArr[idx] = updatedTrip;
+          return newArr;
+        }
+        return [updatedTrip, ...prev];
+      });
+      return true;
     } catch (e) {
       console.error("Refresh failed:", e);
+      setSyncStatus(isNavigatorOffline() ? "offline" : "error");
+      return false;
     }
   };
+
+  const handleManualResync = async () => {
+    if (isNavigatorOffline()) {
+      setSyncStatus("offline");
+      return;
+    }
+    if (!userRef.current) {
+      setSyncStatus("synced");
+      return;
+    }
+
+    setSyncStatus("syncing");
+    try {
+      const results = await Promise.all([
+        currentTripIdRef.current ? refreshActiveTrip() : Promise.resolve(true),
+        loadTrips(),
+      ]);
+      const allOk = results.every(Boolean);
+      if (isNavigatorOffline()) {
+        setSyncStatus("offline");
+      } else if (!allOk) {
+        setSyncStatus("error");
+      } else if (inFlightWritesRef.current === 0) {
+        setSyncStatus("synced");
+      }
+    } catch (err) {
+      console.error("[Sync] Resync failed:", err);
+      setSyncStatus(isNavigatorOffline() ? "offline" : "error");
+    }
+  };
+
+  const resyncAllRef = useRef<() => Promise<void>>(handleManualResync);
+  resyncAllRef.current = handleManualResync;
+
+  // Browser online/offline & tab visibility reconnect resync
+  useEffect(() => {
+    const handleOffline = () => {
+      setSyncStatus("offline");
+    };
+    const handleOnline = () => {
+      if (userRef.current) {
+        resyncAllRef.current();
+      } else {
+        setSyncStatus("synced");
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        if (isNavigatorOffline()) {
+          setSyncStatus("offline");
+          return;
+        }
+        if (userRef.current) {
+          resyncAllRef.current();
+        }
+      }
+    };
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentTripId || !user) return;
@@ -401,9 +526,68 @@ const App: React.FC = () => {
     refreshActiveTrip();
   }, [currentTripId, user]);
 
-    // Subscriptions
-    useEffect(() => {
+  // Subscriptions
+  useEffect(() => {
     if (!currentTripId || !user) return;
+
+    let isDisposed = false;
+    let channelHadDrop = false;
+
+    const patchTripItineraryUpsert = (mapped: ReturnType<typeof mapDbItineraryRow>) => {
+      activeTripVersionRef.current += 1;
+      commitTripsUpdate((prevTrips) =>
+        prevTrips.map((t) => {
+          if (t.id !== currentTripId) return t;
+          const nextItinerary = (t.itinerary || []).map((day) => {
+            const withoutItem = day.items.filter((item) => item.id !== mapped.id);
+            if (day.date === mapped.date) {
+              const merged = [...withoutItem, mapped].sort((a, b) =>
+                (a.time || "").localeCompare(b.time || "")
+              );
+              return { ...day, items: merged };
+            }
+            return withoutItem.length === day.items.length
+              ? day
+              : { ...day, items: withoutItem };
+          });
+          return { ...t, itinerary: nextItinerary };
+        })
+      );
+    };
+
+    const patchTripExpenseUpsert = (mapped: ReturnType<typeof mapDbExpenseRow>) => {
+      activeTripVersionRef.current += 1;
+      commitTripsUpdate((prevTrips) =>
+        prevTrips.map((t) => {
+          if (t.id !== currentTripId) return t;
+          const existing = t.expenses || [];
+          const hasExisting = existing.some((e) => e.id === mapped.id);
+          return {
+            ...t,
+            expenses: hasExisting
+              ? existing.map((e) => (e.id === mapped.id ? mapped : e))
+              : [mapped, ...existing],
+          };
+        })
+      );
+    };
+
+    const patchTripFlightUpsert = (mapped: ReturnType<typeof mapDbFlightRow>) => {
+      activeTripVersionRef.current += 1;
+      commitTripsUpdate((prevTrips) =>
+        prevTrips.map((t) => {
+          if (t.id !== currentTripId) return t;
+          const existing = t.flights || [];
+          const hasExisting = existing.some((f) => f.id === mapped.id);
+          return {
+            ...t,
+            flights: hasExisting
+              ? existing.map((f) => (f.id === mapped.id ? mapped : f))
+              : [...existing, mapped],
+          };
+        })
+      );
+    };
 
     // Subscribe to changes affecting the current trip
     const channel = supabase
@@ -416,10 +600,10 @@ const App: React.FC = () => {
           table: "trips",
           filter: `id=eq.${currentTripId}`,
         },
-        async (payload) => {
-           // Requirement 6: Check for permission revocation immediately on trip update
-           // If the allowed_emails list changed in a way that excludes us, refreshActiveTrip will catch it.
-           refreshActiveTrip();
+        async () => {
+          // Requirement 6: Check for permission revocation immediately on trip update
+          // If the allowed_emails list changed in a way that excludes us, refreshActiveTrip will catch it.
+          refreshActiveTrip();
         }
       )
       // Checklist Items: Granular state sync to eliminate 6-table full refetch race conditions
@@ -434,18 +618,13 @@ const App: React.FC = () => {
         (payload) => {
           const newRow = payload.new as any;
           if (newRow && newRow.id) {
-            setTrips((prevTrips) =>
+            const mapped = mapDbChecklistRow(newRow);
+            activeTripVersionRef.current += 1;
+            commitTripsUpdate((prevTrips) =>
               prevTrips.map((t) => {
                 if (t.id !== currentTripId) return t;
-                if ((t.checklist || []).some((item) => item.id === newRow.id)) return t;
-                const newItem: ChecklistItem = {
-                  id: newRow.id,
-                  user_id: newRow.user_id,
-                  text: newRow.text,
-                  category: newRow.category,
-                  isCompleted: newRow.is_completed,
-                };
-                return { ...t, checklist: [...(t.checklist || []), newItem] };
+                if ((t.checklist || []).some((item) => item.id === mapped.id)) return t;
+                return { ...t, checklist: [...(t.checklist || []), mapped] };
               })
             );
           } else {
@@ -464,16 +643,18 @@ const App: React.FC = () => {
         (payload) => {
           const updatedRow = payload.new as any;
           if (updatedRow && updatedRow.id) {
-            setTrips((prevTrips) =>
+            const mapped = mapDbChecklistRow(updatedRow);
+            activeTripVersionRef.current += 1;
+            commitTripsUpdate((prevTrips) =>
               prevTrips.map((t) => {
                 if (t.id !== currentTripId) return t;
                 const newChecklist = (t.checklist || []).map((item) =>
-                  item.id === updatedRow.id
+                  item.id === mapped.id
                     ? {
                         ...item,
-                        isCompleted: updatedRow.is_completed,
-                        text: updatedRow.text ?? item.text,
-                        category: updatedRow.category ?? item.category,
+                        isCompleted: mapped.isCompleted,
+                        text: mapped.text ?? item.text,
+                        category: mapped.category ?? item.category,
                       }
                     : item
                 );
@@ -494,32 +675,46 @@ const App: React.FC = () => {
         },
         (payload) => {
           const deletedId = (payload.old as any)?.id;
-          if (deletedId) {
-            setTrips((prevTrips) =>
-              prevTrips.map((t) => {
-                if (t.id !== currentTripId) return t;
-                return {
-                  ...t,
-                  checklist: (t.checklist || []).filter((item) => item.id !== deletedId),
-                };
-              })
+          if (!deletedId) {
+            refreshActiveTrip();
+            return;
+          }
+          commitTripsUpdate((prevTrips) => {
+            const target = prevTrips.find((t) => t.id === currentTripId);
+            if (!target) return prevTrips;
+            if (!(target.checklist || []).some((item) => item.id === deletedId)) {
+              return prevTrips;
+            }
+            activeTripVersionRef.current += 1;
+            return prevTrips.map((t) =>
+              t.id !== currentTripId
+                ? t
+                : {
+                    ...t,
+                    checklist: (t.checklist || []).filter((item) => item.id !== deletedId),
+                  }
             );
+          });
+        }
+      )
+      // Itinerary Items: Granular incremental sync for INSERT / UPDATE / DELETE
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "itinerary_items",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id && newRow.date) {
+            patchTripItineraryUpsert(mapDbItineraryRow(newRow));
           } else {
             refreshActiveTrip();
           }
         }
       )
-      // Itinerary Items: Split for DELETE support
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "itinerary_items",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        () => refreshActiveTrip()
-      )
       .on(
         "postgres_changes",
         {
@@ -527,56 +722,120 @@ const App: React.FC = () => {
           schema: "public",
           table: "itinerary_items",
           filter: `trip_id=eq.${currentTripId}`,
-        },
-        () => refreshActiveTrip()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "itinerary_items",
-          // Unfiltered DELETE
-        },
-        () => refreshActiveTrip()
-      )
-      // Expenses: Split to handle DELETE separately due to filter limitations (Replica Identity)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "expenses",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        () => refreshActiveTrip()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "expenses",
-          filter: `trip_id=eq.${currentTripId}`,
-        },
-        () => refreshActiveTrip()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "expenses",
-          // No filter here because DELETE payload might not have trip_id
         },
         (payload) => {
-             // Optimization: We could check if payload.old.id is in our known list,
-             // but current closure limitations make direct state access stale.
-             // A fetch check is safer.
-             refreshActiveTrip();
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.id && updatedRow.date) {
+            patchTripItineraryUpsert(mapDbItineraryRow(updatedRow));
+          } else {
+            refreshActiveTrip();
+          }
         }
       )
-      // Flights: Split for DELETE support
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "itinerary_items",
+          // Unfiltered DELETE: ignore IDs not present in the active trip
+        },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (!deletedId) {
+            refreshActiveTrip();
+            return;
+          }
+          commitTripsUpdate((prevTrips) => {
+            const target = prevTrips.find((t) => t.id === currentTripId);
+            if (!target) return prevTrips;
+            const existsLocally = (target.itinerary || []).some((day) =>
+              day.items.some((item) => item.id === deletedId)
+            );
+            if (!existsLocally) return prevTrips;
+            activeTripVersionRef.current += 1;
+            return prevTrips.map((t) =>
+              t.id !== currentTripId
+                ? t
+                : {
+                    ...t,
+                    itinerary: (t.itinerary || []).map((day) => ({
+                      ...day,
+                      items: day.items.filter((item) => item.id !== deletedId),
+                    })),
+                  }
+            );
+          });
+        }
+      )
+      // Expenses: Granular incremental sync for INSERT / UPDATE / DELETE
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "expenses",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id) {
+            patchTripExpenseUpsert(mapDbExpenseRow(newRow));
+          } else {
+            refreshActiveTrip();
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "expenses",
+          filter: `trip_id=eq.${currentTripId}`,
+        },
+        (payload) => {
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.id) {
+            patchTripExpenseUpsert(mapDbExpenseRow(updatedRow));
+          } else {
+            refreshActiveTrip();
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "expenses",
+          // Unfiltered DELETE: ignore IDs not present in the active trip
+        },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (!deletedId) {
+            refreshActiveTrip();
+            return;
+          }
+          commitTripsUpdate((prevTrips) => {
+            const target = prevTrips.find((t) => t.id === currentTripId);
+            if (!target) return prevTrips;
+            if (!(target.expenses || []).some((e) => e.id === deletedId)) {
+              return prevTrips;
+            }
+            activeTripVersionRef.current += 1;
+            return prevTrips.map((t) =>
+              t.id !== currentTripId
+                ? t
+                : {
+                    ...t,
+                    expenses: (t.expenses || []).filter((e) => e.id !== deletedId),
+                  }
+            );
+          });
+        }
+      )
+      // Flights: Granular incremental sync for INSERT / UPDATE / DELETE
       .on(
         "postgres_changes",
         {
@@ -585,7 +844,14 @@ const App: React.FC = () => {
           table: "flights",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const newRow = payload.new as any;
+          if (newRow && newRow.id) {
+            patchTripFlightUpsert(mapDbFlightRow(newRow));
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -595,7 +861,14 @@ const App: React.FC = () => {
           table: "flights",
           filter: `trip_id=eq.${currentTripId}`,
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const updatedRow = payload.new as any;
+          if (updatedRow && updatedRow.id) {
+            patchTripFlightUpsert(mapDbFlightRow(updatedRow));
+          } else {
+            refreshActiveTrip();
+          }
+        }
       )
       .on(
         "postgres_changes",
@@ -604,7 +877,29 @@ const App: React.FC = () => {
           schema: "public",
           table: "flights",
         },
-        () => refreshActiveTrip()
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (!deletedId) {
+            refreshActiveTrip();
+            return;
+          }
+          commitTripsUpdate((prevTrips) => {
+            const target = prevTrips.find((t) => t.id === currentTripId);
+            if (!target) return prevTrips;
+            if (!(target.flights || []).some((f) => f.id === deletedId)) {
+              return prevTrips;
+            }
+            activeTripVersionRef.current += 1;
+            return prevTrips.map((t) =>
+              t.id !== currentTripId
+                ? t
+                : {
+                    ...t,
+                    flights: (t.flights || []).filter((f) => f.id !== deletedId),
+                  }
+            );
+          });
+        }
       )
       .on(
         "postgres_changes",
@@ -616,42 +911,81 @@ const App: React.FC = () => {
         },
         () => refreshActiveTrip()
       )
-      .on('broadcast', { event: 'EXPENSE_DELETED' }, (payload) => {
-         console.log("Broadcast received: EXPENSE_DELETED", payload);
-         refreshActiveTrip();
+      .on("broadcast", { event: "EXPENSE_DELETED" }, (payload) => {
+        console.log("Broadcast received: EXPENSE_DELETED", payload);
+        const deletedId = payload.payload?.id;
+        if (deletedId) {
+          commitTripsUpdate((prevTrips) => {
+            const target = prevTrips.find((t) => t.id === currentTripId);
+            if (!target) return prevTrips;
+            if (!(target.expenses || []).some((e) => e.id === deletedId)) {
+              return prevTrips;
+            }
+            activeTripVersionRef.current += 1;
+            return prevTrips.map((t) =>
+              t.id !== currentTripId
+                ? t
+                : {
+                    ...t,
+                    expenses: (t.expenses || []).filter((e) => e.id !== deletedId),
+                  }
+            );
+          });
+        } else {
+          refreshActiveTrip();
+        }
       })
-      .on('broadcast', { event: 'ACCESS_REVOKED' }, (payload) => {
-         console.log("Broadcast received: ACCESS_REVOKED", payload);
-         // If I am the one revoked, kick me out
-         if (payload.payload?.email?.toLowerCase() === user?.email?.toLowerCase()) {
-            setNotification({
-              message: translations[language].revoked || "Access Revoked",
-              type: "error",
-            });
-            setTrips((prev) => prev.filter((t) => t.id !== currentTripId));
-            setCurrentTripId(null);
-            setView("list");
-         } else {
-            // Otherwise just refresh to update the collaborator list UI
-            refreshActiveTrip();
-         }
+      .on("broadcast", { event: "ACCESS_REVOKED" }, (payload) => {
+        console.log("Broadcast received: ACCESS_REVOKED", payload);
+        // If I am the one revoked, kick me out
+        if (payload.payload?.email?.toLowerCase() === user?.email?.toLowerCase()) {
+          setNotification({
+            message: translations[language].revoked || "Access Revoked",
+            type: "error",
+          });
+          setTrips((prev) => prev.filter((t) => t.id !== currentTripId));
+          setCurrentTripId(null);
+          setView("list");
+        } else {
+          // Otherwise just refresh to update the collaborator list UI
+          refreshActiveTrip();
+        }
       })
-      .on('broadcast', { event: 'TRIP_DELETED' }, () => {
-         console.log("Broadcast received: TRIP_DELETED");
-         setNotification({
-           message: translations[language].tripNotFound || "Trip deleted",
-           type: "info",
-         });
-         setCurrentTripId(null);
-         setView("list");
+      .on("broadcast", { event: "TRIP_DELETED" }, () => {
+        console.log("Broadcast received: TRIP_DELETED");
+        setNotification({
+          message: translations[language].tripNotFound || "Trip deleted",
+          type: "info",
+        });
+        setCurrentTripId(null);
+        setView("list");
       })
       .subscribe((status) => {
         console.log(`[Active Trip Realtime] Subscription status for ${currentTripId}:`, status);
+        if (isDisposed) return;
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          channelHadDrop = true;
+          setSyncStatus(isNavigatorOffline() ? "offline" : "error");
+        } else if (status === "CLOSED") {
+          channelHadDrop = true;
+        } else if (status === "SUBSCRIBED") {
+          if (channelHadDrop) {
+            channelHadDrop = false;
+            if (!isNavigatorOffline()) {
+              resyncAllRef.current();
+            }
+          } else if (!isNavigatorOffline() && inFlightWritesRef.current === 0) {
+            setSyncStatus((prev) =>
+              prev === "error" || prev === "offline" ? "synced" : prev
+            );
+          }
+        }
       });
 
     activeChannelRef.current = channel;
 
     return () => {
+      isDisposed = true;
       supabase.removeChannel(channel);
       activeChannelRef.current = null;
     };
@@ -954,15 +1288,35 @@ const App: React.FC = () => {
     if (user) loadTrips();
   }, [user]);
 
-  const loadTrips = async () => {
-    if (!user) return;
+  const loadTrips = async (): Promise<boolean> => {
+    const activeUser = userRef.current;
+    if (!activeUser) return true;
+    const loadSeq = ++latestLoadTripsSeqRef.current;
+    const activeTripIdAtStart = currentTripIdRef.current;
+    const activeTripVersionAtStart = activeTripVersionRef.current;
     try {
-      const userTrips = await getTrips(user.id, user.email);
-      if (creatingTripRef.current) return;
+      const userTrips = await getTrips(activeUser.id, activeUser.email);
+      if (loadSeq !== latestLoadTripsSeqRef.current) return true;
+      if (creatingTripRef.current) return true;
       const uniqueTrips = Array.from(new globalThis.Map(userTrips.map((t) => [t.id, t])).values());
-      setTrips(uniqueTrips);
+      commitTripsUpdate((prev) => {
+        const activeId = currentTripIdRef.current;
+        const shouldPreserveActive =
+          Boolean(activeId) &&
+          (inFlightWritesRef.current > 0 ||
+            activeId !== activeTripIdAtStart ||
+            activeTripVersionRef.current !== activeTripVersionAtStart);
+        const prevActiveTrip = shouldPreserveActive
+          ? prev.find((t) => t.id === activeId)
+          : undefined;
+        return uniqueTrips.map((t) =>
+          prevActiveTrip && t.id === prevActiveTrip.id ? prevActiveTrip : t
+        );
+      });
       setError(null);
+      return true;
     } catch (err: any) {
+      if (loadSeq !== latestLoadTripsSeqRef.current) return true;
       console.warn("[Storage] loadTrips caught error:", err);
       // Only display prominent error banner if no trips have been loaded yet
       setTrips((prev) => {
@@ -971,6 +1325,8 @@ const App: React.FC = () => {
         }
         return prev;
       });
+      setSyncStatus(isNavigatorOffline() ? "offline" : "error");
+      return false;
     }
   };
 
@@ -1075,122 +1431,259 @@ const App: React.FC = () => {
   const updateCurrentTrip = (updatedTrip: Trip, action?: string, payload?: any) => {
     if (!user) return;
 
-    // Snapshot current trips state before we apply the update
-    const previousTrips = [...trips];
-
     // Handle dummy action for triggering global notifications
     if (action === "SHOW_ERROR_TOAST") {
-       setNotification({
-         message: typeof payload === "string" ? payload : (translations[language].errorTitle || "Error occurred"),
-         type: "error",
-       });
-       return;
+      setNotification({
+        message:
+          typeof payload === "string"
+            ? payload
+            : translations[language].errorTitle || "Error occurred",
+        type: "error",
+      });
+      return;
     }
-    
-    // Clear any pending save immediately to prevent race conditions
-    if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
 
-    setTrips((prev) =>
-      prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
+    // Snapshot previous version of this trip before applying optimistic update
+    const previousTrip = tripsRef.current.find((t) => t.id === updatedTrip.id);
+    if (!previousTrip) return;
+
+    // Clear any legacy pending timeout if present
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    // Build a slice-scoped delta so stale async snapshots in child components
+    // can NEVER overwrite or delete concurrent Realtime rows in other slices.
+    let effectiveDelta: TripDelta;
+
+    if (action === "DELETE_EXPENSE" && payload) {
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        deletedExpenseIds: [payload],
+        hasChanges: true,
+      };
+    } else if (action === "DELETE_ITINERARY_ITEM" && payload) {
+      const ids: string[] = Array.isArray(payload) ? payload : [payload];
+      const itineraryOnlyDiff = diffTripChanges(previousTrip, {
+        ...previousTrip,
+        itinerary: updatedTrip.itinerary,
+      });
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        addedOrUpdatedItinerary: itineraryOnlyDiff.addedOrUpdatedItinerary,
+        deletedItineraryIds: ids,
+        hasChanges:
+          ids.length > 0 || itineraryOnlyDiff.addedOrUpdatedItinerary.length > 0,
+      };
+    } else if (action === "UPDATE_CHECKLIST_ITEM" && payload) {
+      const existingItem = (previousTrip.checklist || []).find(
+        (c) => c.id === payload.id
+      );
+      const updatedChecklistItem: ChecklistItem | undefined = existingItem
+        ? { ...existingItem, isCompleted: payload.isCompleted }
+        : (updatedTrip.checklist || []).find((c) => c.id === payload.id);
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        addedOrUpdatedChecklist: updatedChecklistItem
+          ? [updatedChecklistItem]
+          : [],
+        hasChanges: Boolean(updatedChecklistItem),
+      };
+    } else if (action === "ADD_CHECKLIST_ITEM" && payload) {
+      const items: ChecklistItem[] = Array.isArray(payload) ? payload : [payload];
+      if (items.length === 0) return;
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        addedOrUpdatedChecklist: items,
+        hasChanges: true,
+      };
+    } else if (action === "DELETE_CHECKLIST_ITEM" && payload) {
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        deletedChecklistIds: [payload],
+        hasChanges: true,
+      };
+    } else if (
+      action === "ADD_ITINERARY_ITEM" ||
+      action === "UPDATE_ITINERARY_ITEM" ||
+      action === "SAVE_ITINERARY_ITEM"
+    ) {
+      // Add/update itinerary actions ONLY diff itinerary upserts — never delete concurrent rows!
+      const itineraryOnlyDiff = diffTripChanges(previousTrip, {
+        ...previousTrip,
+        itinerary: updatedTrip.itinerary,
+      });
+      effectiveDelta = {
+        ...createEmptyTripDelta(),
+        addedOrUpdatedItinerary: itineraryOnlyDiff.addedOrUpdatedItinerary,
+        hasChanges: itineraryOnlyDiff.addedOrUpdatedItinerary.length > 0,
+      };
+    } else {
+      effectiveDelta = diffTripChanges(previousTrip, updatedTrip);
+    }
+
+    if (!effectiveDelta.hasChanges) return;
+
+    // Functional optimistic patch: apply ONLY effectiveDelta onto the latest trip state
+    activeTripVersionRef.current += 1;
+    commitTripsUpdate((prev) =>
+      prev.map((t) =>
+        t.id === updatedTrip.id ? applyTripDelta(t, effectiveDelta) : t
+      )
     );
 
-    // Immediate action handlers
+    const runGranularWrite = (
+      writeFn: () => Promise<void>,
+      fallbackErrorMessage: string
+    ) => {
+      inFlightWritesRef.current += 1;
+      if (!isNavigatorOffline()) {
+        setSyncStatus("syncing");
+      }
+      writeFn()
+        .then(() => {
+          inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+          if (inFlightWritesRef.current === 0) {
+            setSyncStatus(isNavigatorOffline() ? "offline" : "synced");
+          }
+        })
+        .catch((err) => {
+          inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+          console.error("[App] Granular write failed:", err);
+          // Surgical rollback: revert ONLY rows/fields in effectiveDelta so concurrent Realtime rows survive
+          activeTripVersionRef.current += 1;
+          commitTripsUpdate((prev) =>
+            prev.map((t) =>
+              t.id === updatedTrip.id
+                ? revertTripDelta(t, previousTrip, effectiveDelta)
+                : t
+            )
+          );
+          setSyncStatus(isNavigatorOffline() ? "offline" : "error");
+          setNotification({
+            message: translations[language].errorTitle || fallbackErrorMessage,
+            type: "error",
+          });
+        });
+    };
+
+    // Immediate targeted action handlers
     if (action === "DELETE_EXPENSE" && payload) {
-       console.log("[App] Handling DELETE_EXPENSE for:", payload);
-       deleteExpense(payload, updatedTrip.id)
-          .then(() => {
-              activeChannelRef.current?.send({ type: 'broadcast', event: 'EXPENSE_DELETED', payload: { id: payload } });
-          })
-          .catch(err => {
-              console.error("[App] Delete expense failed:", err);
-              setTrips(previousTrips);
-              setNotification({
-                message: translations[language].errorTitle || "Sync error: Failed to delete expense",
-                type: "error",
-              });
-          });
-       return; 
+      console.log("[App] Handling DELETE_EXPENSE for:", payload);
+      runGranularWrite(async () => {
+        await deleteExpense(payload, updatedTrip.id);
+        activeChannelRef.current?.send({
+          type: "broadcast",
+          event: "EXPENSE_DELETED",
+          payload: { id: payload },
+        });
+      }, "Sync error: Failed to delete expense");
+      return;
     }
 
-    // Handle Itinerary item deletion centrally to support revert
     if (action === "DELETE_ITINERARY_ITEM" && payload) {
-       console.log("[App] Handling DELETE_ITINERARY_ITEM for:", payload);
-       const ids = Array.isArray(payload) ? payload : [payload];
-       Promise.all(ids.map(id => deleteItineraryItem(id, updatedTrip.id)))
-          .catch(err => {
-              console.error("[App] Delete itinerary items failed:", err);
-              setTrips(previousTrips);
-              setNotification({
-                message: translations[language].errorTitle || "Sync error: Failed to delete itinerary items",
-                type: "error",
-              });
-          });
-       return;
+      console.log("[App] Handling DELETE_ITINERARY_ITEM for:", payload);
+      runGranularWrite(async () => {
+        const tasks: Promise<void>[] = effectiveDelta.deletedItineraryIds.map(
+          (id) => deleteItineraryItem(id, updatedTrip.id)
+        );
+        if (effectiveDelta.addedOrUpdatedItinerary.length > 0) {
+          tasks.push(
+            upsertItineraryItems(
+              updatedTrip.id,
+              user.id,
+              effectiveDelta.addedOrUpdatedItinerary
+            )
+          );
+        }
+        await Promise.all(tasks);
+      }, "Sync error: Failed to delete itinerary items");
+      return;
     }
 
-    // Handle checklist updates & additions directly with targeted row mutations
     if (action === "UPDATE_CHECKLIST_ITEM" && payload) {
-       updateChecklistItem(payload.id, updatedTrip.id, { isCompleted: payload.isCompleted })
-          .catch(err => {
-              console.error("[App] Update checklist item failed:", err);
-              setTrips(previousTrips);
-              setNotification({
-                message: translations[language].errorTitle || "Sync error: Failed to update checklist item",
-                type: "error",
-              });
-          });
-       return;
+      runGranularWrite(
+        () =>
+          updateChecklistItem(payload.id, updatedTrip.id, {
+            isCompleted: payload.isCompleted,
+          }),
+        "Sync error: Failed to update checklist item"
+      );
+      return;
     }
 
     if (action === "ADD_CHECKLIST_ITEM" && payload) {
-       const items = Array.isArray(payload) ? payload : [payload];
-       if (items.length === 0) return;
-       Promise.all(items.map((item) => addChecklistItem(item, updatedTrip.id)))
-          .catch(err => {
-              console.error("[App] Add checklist item failed:", err);
-              setTrips(previousTrips);
-              setNotification({
-                message: translations[language].errorTitle || "Sync error: Failed to add checklist item",
-                type: "error",
-              });
-          });
-       return;
+      const items = effectiveDelta.addedOrUpdatedChecklist;
+      runGranularWrite(async () => {
+        await Promise.all(items.map((item) => addChecklistItem(item, updatedTrip.id)));
+      }, "Sync error: Failed to add checklist item");
+      return;
     }
 
-    // Immediate Save for explicit user actions (Add/Edit) to avoid "Waiting" feel
-    const immediateActions = [
-      "ADD_ITINERARY_ITEM", "UPDATE_ITINERARY_ITEM", "SAVE_ITINERARY_ITEM"
-    ];
-    const delay = action && immediateActions.includes(action) ? 0 : 2000;
+    if (action === "DELETE_CHECKLIST_ITEM" && payload) {
+      runGranularWrite(
+        () => deleteChecklistItem(payload, updatedTrip.id),
+        "Sync error: Failed to delete checklist item"
+      );
+      return;
+    }
 
-    const performSave = async () => {
-      setIsSyncing(true);
-      try {
-        await saveTrip(updatedTrip, user.id);
-      } catch (err) {
-        console.error("Save failed:", err);
-        setTrips(previousTrips);
-        setNotification({
-          message: translations[language].errorTitle || "Sync error: Failed to save changes",
-          type: "error",
-        });
-      } finally {
-        setIsSyncing(false);
-        saveTimeoutRef.current = null;
+    // General granular row-level diff sync (no full 5-table saveTrip or stale DB deletions)
+    runGranularWrite(async () => {
+      const tasks: Promise<void>[] = [];
+
+      if (effectiveDelta.addedOrUpdatedItinerary.length > 0) {
+        tasks.push(
+          upsertItineraryItems(
+            updatedTrip.id,
+            user.id,
+            effectiveDelta.addedOrUpdatedItinerary
+          )
+        );
       }
-    };
+      for (const id of effectiveDelta.deletedItineraryIds) {
+        tasks.push(deleteItineraryItem(id, updatedTrip.id));
+      }
 
-    if (delay === 0) {
-      performSave();
-    } else {
-      saveTimeoutRef.current = window.setTimeout(performSave, 600);
-    }
+      for (const expense of effectiveDelta.addedOrUpdatedExpenses) {
+        tasks.push(upsertExpense(updatedTrip.id, user.id, expense));
+      }
+      for (const id of effectiveDelta.deletedExpenseIds) {
+        tasks.push(deleteExpense(id, updatedTrip.id));
+      }
+
+      for (const flight of effectiveDelta.addedOrUpdatedFlights) {
+        tasks.push(upsertFlight(updatedTrip.id, user.id, flight));
+      }
+      for (const id of effectiveDelta.deletedFlightIds) {
+        tasks.push(deleteFlight(id, updatedTrip.id));
+      }
+
+      if (effectiveDelta.addedOrUpdatedChecklist.length > 0) {
+        tasks.push(
+          upsertChecklistItems(
+            updatedTrip.id,
+            user.id,
+            effectiveDelta.addedOrUpdatedChecklist
+          )
+        );
+      }
+      for (const id of effectiveDelta.deletedChecklistIds) {
+        tasks.push(deleteChecklistItem(id, updatedTrip.id));
+      }
+
+      if (effectiveDelta.tripMetaChanged) {
+        tasks.push(updateTripMeta(updatedTrip.id, effectiveDelta.tripMetaPatch));
+      }
+
+      await Promise.all(tasks);
+    }, "Sync error: Failed to save changes");
   };
 
-
-  
   const handleInvite = async (email: string) => {
     if (!currentTrip || !user) return;
+    const targetTripId = currentTrip.id;
     const emailLower = email.toLowerCase();
     const currentAllowed = currentTrip.allowed_emails || [];
 
@@ -1198,127 +1691,157 @@ const App: React.FC = () => {
 
     const newAllowed = [...currentAllowed, emailLower];
 
-    // 1. Optimistic Update to UI
-    const updatedTrip = { ...currentTrip, allowed_emails: newAllowed };
-    setTrips((prev) =>
-      prev.map((t) => (t.id === updatedTrip.id ? updatedTrip : t))
+    // 1. Surgical optimistic update (only patches allowed_emails, preserving concurrent Realtime edits)
+    activeTripVersionRef.current += 1;
+    commitTripsUpdate((prev) =>
+      prev.map((t) => {
+        if (t.id !== targetTripId) return t;
+        const existing = (t.allowed_emails || []).map((e) => e.toLowerCase());
+        if (existing.includes(emailLower)) return t;
+        return { ...t, allowed_emails: [...existing, emailLower] };
+      })
     );
 
-    // 2. Direct Save & Requirement 1: Pre-generate checklist if user exists
+    // 2. Direct Granular Meta Save & Requirement 1: Pre-generate checklist if user exists
+    inFlightWritesRef.current += 1;
     try {
-      setIsSyncing(true);
+      if (!isNavigatorOffline()) setSyncStatus("syncing");
       if (saveTimeoutRef.current) window.clearTimeout(saveTimeoutRef.current);
 
       // Attempt to find the user ID for this email to pre-create their checklist
       const inviteeUserId = await findUserIdByEmail(emailLower);
       console.log("[Invite Debug] Found User ID:", inviteeUserId, "for email:", emailLower);
       if (inviteeUserId) {
-         console.log("[Invite Debug] Creating checklist items for:", inviteeUserId);
-         await ensureChecklistItems(updatedTrip.id, inviteeUserId);
+        console.log("[Invite Debug] Creating checklist items for:", inviteeUserId);
+        await ensureChecklistItems(targetTripId, inviteeUserId);
       } else {
-         console.warn("[Invite Debug] User ID not found for email:", emailLower);
+        console.warn("[Invite Debug] User ID not found for email:", emailLower);
       }
 
-      await saveTrip(updatedTrip, user.id);
+      await updateTripMeta(targetTripId, { allowed_emails: newAllowed });
+      inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+      if (inFlightWritesRef.current === 0) {
+        setSyncStatus(isNavigatorOffline() ? "offline" : "synced");
+      }
     } catch (e) {
+      inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
       console.error("Invite failed", e);
-      // TODO: [Error Handling] Catch invitation/database failure and trigger Toast notification
+      setSyncStatus(isNavigatorOffline() ? "offline" : "error");
       setNotification({
         message: translations[language].errorTitle || "Invite failed",
         type: "error",
       });
-      // Revert on failure
-      setTrips((prev) =>
-        prev.map((t) => (t.id === currentTrip.id ? currentTrip : t))
+      // Surgical revert: remove only the failed email from latest state
+      activeTripVersionRef.current += 1;
+      commitTripsUpdate((prev) =>
+        prev.map((t) =>
+          t.id !== targetTripId
+            ? t
+            : {
+                ...t,
+                allowed_emails: (t.allowed_emails || []).filter(
+                  (addr) => addr.toLowerCase() !== emailLower
+                ),
+              }
+        )
       );
-    } finally {
-      setIsSyncing(false);
     }
   };
 
   const handleRemoveInvite = async (email: string) => {
     if (!currentTrip || !currentTrip.allowed_emails) return;
+    const targetTripId = currentTrip.id;
     const emailLower = email.toLowerCase();
-    setIsSyncing(true);
+    inFlightWritesRef.current += 1;
+    if (!isNavigatorOffline()) setSyncStatus("syncing");
 
     // 1. Attempt to resolve User ID via trip_collaborators (local cache)
-    // This handles users who have already accepted and joined.
-    // If they haven't joined, 'removeCollaboratorByEmail' will just return null (safe).
     let removedUserId: string | null | undefined =
       currentTrip.collaborators?.find(
         (c) => c.email && c.email.toLowerCase() === emailLower
       )?.user_id;
 
     if (removedUserId) {
-      // User has joined, so we must explicitly remove them from the trip (database)
-      await leaveTrip(currentTrip.id, removedUserId);
+      await leaveTrip(targetTripId, removedUserId);
     } else {
-      // Double check backend if local cache is stale or user just hasn't joined yet
-      removedUserId = await removeCollaboratorByEmail(
-        currentTrip.id,
-        emailLower
-      );
+      removedUserId = await removeCollaboratorByEmail(targetTripId, emailLower);
     }
 
-    // 2. Regardless of whether they were Active or Pending, remove from permission list.
-    const newAllowedEmails = currentTrip.allowed_emails.filter(
+    // 2. Compute updated permission list against latest trip state
+    const latestAllowed =
+      tripsRef.current.find((t) => t.id === targetTripId)?.allowed_emails ||
+      currentTrip.allowed_emails;
+    const newAllowedEmails = latestAllowed.filter(
       (e) => e.toLowerCase() !== emailLower
     );
 
+    let hadError = false;
     try {
-      // Update database
-      await supabase
-        .from("trips")
-        .update({ allowed_emails: newAllowedEmails })
-        .eq("id", currentTrip.id);
+      await updateTripMeta(targetTripId, { allowed_emails: newAllowedEmails });
 
-      // 3. Broadcast removal to trigger instant kickout for the target user (Requirement 6)
-      // Broadcast to active trip channel (standard)
       activeChannelRef.current?.send({
-        type: 'broadcast',
-        event: 'ACCESS_REVOKED',
-        payload: { email: emailLower }
+        type: "broadcast",
+        event: "ACCESS_REVOKED",
+        payload: { email: emailLower },
       });
 
-      // ALSO broadcast to the target user's PRIVATE global channel (for background/list sync)
       if (removedUserId) {
-        supabase.channel(`global-trips-${removedUserId}`).send({
-          type: 'broadcast',
-          event: 'ACCESS_REVOKED_GLOBAL',
-          payload: { tripId: currentTrip.id }
-        }, (status: any) => {
-           console.log("Global revocation broadcast status:", status);
-        });
+        supabase.channel(`global-trips-${removedUserId}`).send(
+          {
+            type: "broadcast",
+            event: "ACCESS_REVOKED_GLOBAL",
+            payload: { tripId: targetTripId },
+          },
+          (status: any) => {
+            console.log("Global revocation broadcast status:", status);
+          }
+        );
       }
     } catch (e) {
+      hadError = true;
       console.error("Failed to update allowed list", e);
     }
 
-    // 3. Update Local State (UI) immediately to reflect removal
-    const newTrip = { ...currentTrip };
-    newTrip.allowed_emails = newAllowedEmails;
+    // 3. Surgical patch onto latest state so concurrent Realtime rows by other collaborators survive
+    activeTripVersionRef.current += 1;
+    commitTripsUpdate((prev) =>
+      prev.map((t) => {
+        if (t.id !== targetTripId) return t;
+        const patched: Trip = {
+          ...t,
+          allowed_emails: (t.allowed_emails || []).filter(
+            (e) => e.toLowerCase() !== emailLower
+          ),
+        };
+        if (removedUserId) {
+          patched.collaborators =
+            (t.collaborators || []).filter((c) => c.user_id !== removedUserId);
+          patched.checklist = (t.checklist || []).filter(
+            (i) => i.user_id !== removedUserId
+          );
+          patched.expenses = (t.expenses || []).filter(
+            (i) => i.user_id !== removedUserId
+          );
+          patched.flights = (t.flights || []).filter(
+            (i) => i.user_id !== removedUserId
+          );
+          patched.itinerary = (t.itinerary || []).map((day) => ({
+            ...day,
+            items: day.items.filter((item) => item.user_id !== removedUserId),
+          }));
+        }
+        return patched;
+      })
+    );
 
-    // Filter out the removed user's data from local state so UI updates instantly
-    if (removedUserId) {
-      newTrip.collaborators =
-        newTrip.collaborators?.filter((c) => c.user_id !== removedUserId) || [];
-      newTrip.checklist = newTrip.checklist.filter(
-        (i) => i.user_id !== removedUserId
-      );
-      newTrip.expenses = newTrip.expenses.filter(
-        (i) => i.user_id !== removedUserId
-      );
-      newTrip.flights = newTrip.flights.filter(
-        (i) => i.user_id !== removedUserId
-      );
-      newTrip.itinerary = newTrip.itinerary.map((day) => ({
-        ...day,
-        items: day.items.filter((item) => item.user_id !== removedUserId),
-      }));
+    inFlightWritesRef.current = Math.max(0, inFlightWritesRef.current - 1);
+    if (isNavigatorOffline()) {
+      setSyncStatus("offline");
+    } else if (hadError) {
+      setSyncStatus("error");
+    } else if (inFlightWritesRef.current === 0) {
+      setSyncStatus("synced");
     }
-
-    setTrips((prev) => prev.map((t) => (t.id === newTrip.id ? newTrip : t)));
-    setIsSyncing(false);
   };
 
   const handleCreateTripSubmit = async (tripData: Trip) => {
@@ -2413,8 +2936,8 @@ const App: React.FC = () => {
                     <div className="text-sm font-bold truncate text-slate-900 dark:text-slate-100">
                       {currentTrip.name}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold text-slate-400">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[10px] font-semibold text-slate-400 truncate min-w-0">
                         {currentTrip.destination}
                       </span>
                       <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
@@ -2422,10 +2945,51 @@ const App: React.FC = () => {
                         <Users size={9} /> {collaboratorCount}
                       </span>
                       <span className="hidden sm:inline-block w-0.5 h-0.5 bg-slate-300 dark:bg-slate-700 rounded-full" />
-                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>{isSyncing ? t("syncing") : (language === "zh" ? "即時同步" : "Synced")}</span>
-                      </span>
+                      {syncStatus === "error" ? (
+                        <button
+                          type="button"
+                          data-testid="sync-retry-btn"
+                          data-sync-status="error"
+                          onClick={handleManualResync}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 dark:bg-rose-500/20 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/25 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                          title={t("syncRetry")}
+                        >
+                          <RefreshCw size={10} className="shrink-0" />
+                          <span>
+                            {t("syncError")} · {t("syncRetry")}
+                          </span>
+                        </button>
+                      ) : syncStatus === "offline" ? (
+                        <span
+                          role="status"
+                          data-testid="sync-status-pill"
+                          data-sync-status="offline"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 dark:bg-amber-400/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 whitespace-nowrap shrink-0"
+                        >
+                          <WifiOff size={10} className="shrink-0" />
+                          <span>{t("syncOffline")}</span>
+                        </span>
+                      ) : (
+                        <span
+                          role="status"
+                          data-testid="sync-status-pill"
+                          data-sync-status={syncStatus}
+                          className={`hidden sm:inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap shrink-0 ${
+                            syncStatus === "syncing"
+                              ? "text-primary"
+                              : "text-emerald-600 dark:text-emerald-400"
+                          }`}
+                        >
+                          {syncStatus === "syncing" ? (
+                            <Loader2 size={10} className="animate-spin shrink-0" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                          )}
+                          <span>
+                            {syncStatus === "syncing" ? t("syncing") : t("syncSynced")}
+                          </span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3106,13 +3670,39 @@ const App: React.FC = () => {
         {view === "list" && (
           <div className="p-4 sm:p-10 pb-28 max-w-7xl mx-auto min-h-screen relative">
             <header className="flex justify-between items-center mb-12">
-              <div className="flex items-center gap-2.5">
-                <div className="text-lg font-bold text-primary tracking-tight">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="text-lg font-bold text-primary tracking-tight whitespace-nowrap shrink-0">
                   {t("appName")}
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.08]">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-white/[0.08] whitespace-nowrap shrink-0">
                   v{APP_VERSION}
                 </span>
+                {syncStatus === "offline" && (
+                  <span
+                    role="status"
+                    data-testid="sync-status-pill"
+                    data-sync-status="offline"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 dark:bg-amber-400/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 whitespace-nowrap shrink-0"
+                  >
+                    <WifiOff size={10} className="shrink-0" />
+                    <span>{t("syncOffline")}</span>
+                  </span>
+                )}
+                {syncStatus === "error" && (
+                  <button
+                    type="button"
+                    data-testid="sync-retry-btn"
+                    data-sync-status="error"
+                    onClick={handleManualResync}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 dark:bg-rose-500/20 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/25 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                    title={t("syncRetry")}
+                  >
+                    <RefreshCw size={10} className="shrink-0" />
+                    <span>
+                      {t("syncError")} · {t("syncRetry")}
+                    </span>
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <UserHeaderProfile />
