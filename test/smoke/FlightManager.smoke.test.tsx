@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { FlightManager } from "../../components/FlightManager";
 import { BoardingPass } from "../../components/BoardingPass";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
@@ -77,6 +77,19 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     expect(screen.getByText("Alex Chen")).toBeInTheDocument();
   });
 
+  it("renders airline logo on a light surface in light and dark mode", () => {
+    render(
+      <LocalizationProvider>
+        <BoardingPass segment={mockSegment} passengerName="Alex Chen" cabinClass="Economy" />
+      </LocalizationProvider>
+    );
+
+    const container = screen.getByTestId("airline-logo-container");
+    expect(container.querySelector("img")).not.toBeNull();
+    expect(container.className).toContain("bg-white");
+    expect(container.className).toContain("dark:bg-white/95");
+  });
+
   it("renders FlightManager without crashing", () => {
     render(
       <LocalizationProvider>
@@ -89,5 +102,142 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     );
 
     expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
+  });
+
+  it("opens the boarding pass print animation from the Print Pass button and closes it cleanly", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={mockTrip} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    expect(screen.queryByTestId("boarding-pass-issue-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("replay-boarding-pass-btn"));
+    expect(screen.getByTestId("boarding-pass-issue-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("boarding-pass-continue").textContent).toMatch(/關閉預覽|Close Preview/);
+
+    fireEvent.click(screen.getByTestId("boarding-pass-continue"));
+    expect(screen.queryByTestId("boarding-pass-issue-modal")).toBeNull();
+    expect(screen.getAllByText("BR198").length).toBeGreaterThan(0);
+  });
+
+  it("keeps the traveler header actions on a single non-wrapping row", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={mockTrip} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const printBtn = screen.getByTestId("replay-boarding-pass-btn");
+    expect(printBtn.className).toContain("h-9");
+    expect(printBtn.className).toContain("w-9");
+    expect(printBtn.className).toContain("whitespace-nowrap");
+    expect(printBtn.getAttribute("aria-label")).toBeTruthy();
+    expect(printBtn.getAttribute("title")).toBe(printBtn.getAttribute("aria-label"));
+
+    const editBtn = screen.getAllByRole("button").find((b) => b.getAttribute("aria-label") === "編輯" || b.getAttribute("aria-label") === "Edit");
+    expect(editBtn).toBeTruthy();
+    expect(editBtn!.className).toContain("h-9");
+    expect(editBtn!.className).toContain("whitespace-nowrap");
+  });
+
+  it("auto-opens edit mode, focuses ticket price, updates baggage on cabin change, and calls onGuidedPriceSaved", () => {
+    const onUpdate = vi.fn();
+    const onGuidedPriceSaved = vi.fn();
+    const zeroPriceTrip: Trip = {
+      ...mockTrip,
+      flights: [
+        {
+          ...mockTrip.flights![0],
+          price: 0,
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+          outbound: {
+            ...mockSegment,
+            baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+          },
+        },
+      ],
+    };
+
+    render(
+      <LocalizationProvider>
+        <FlightManager
+          trip={zeroPriceTrip}
+          currentUser={mockUser}
+          onUpdate={onUpdate}
+          autoEditFlightId="flight-1"
+          onGuidedPriceSaved={onGuidedPriceSaved}
+        />
+      </LocalizationProvider>
+    );
+
+    expect(screen.getByTestId("guide-price-hint")).toBeInTheDocument();
+    const priceInput = screen.getByTestId("flight-price-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(priceInput);
+
+    // Switching Economy -> Business updates untouched BR baggage preset to 2x7kg / 2x32kg
+    const selects = screen.getAllByRole("combobox") as HTMLSelectElement[];
+    const cabinSelect = selects.find((s) => s.value === "Economy")!;
+    fireEvent.change(cabinSelect, { target: { value: "Business" } });
+
+    fireEvent.change(priceInput, { target: { value: "24500" } });
+    fireEvent.click(screen.getByRole("button", { name: /確認|Confirm|Save/i }));
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const savedTrip = onUpdate.mock.calls[0][0] as Trip;
+    expect(savedTrip.flights![0].price).toBe(24500);
+    expect(savedTrip.flights![0].outbound.baggage).toEqual({
+      carryOn: { count: 2, weight: "7kg" },
+      checked: { count: 2, weight: "32kg" },
+    });
+    expect(onGuidedPriceSaved).toHaveBeenCalledTimes(1);
+  });
+
+  const unpricedTrip = (price: number): Trip => ({
+    ...mockTrip,
+    flights: [{ ...mockTrip.flights![0], price }],
+  });
+
+  it("shows the missing-price banner for an unpriced own flight; CTA opens edit mode and focuses price", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(0)} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const banner = screen.getByTestId("flight-missing-price-banner");
+    expect(banner.textContent).toMatch(/尚未填寫機票價格|Flight price not set yet/);
+    fireEvent.click(screen.getByTestId("flight-missing-price-cta"));
+
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+    const priceInput = screen.getByTestId("flight-price-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(priceInput);
+  });
+
+  it("hides the missing-price banner when price > 0, for guests, and for other users' flights", () => {
+    const { rerender } = render(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(18000)} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+
+    rerender(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(0)} currentUser={mockUser} isGuest onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+
+    rerender(
+      <LocalizationProvider>
+        <FlightManager
+          trip={unpricedTrip(0)}
+          currentUser={{ ...mockUser, id: "someone-else" }}
+          onUpdate={vi.fn()}
+        />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ItineraryItem } from '../types';
@@ -6,6 +6,7 @@ import L from 'leaflet';
 import { useTranslation } from '../contexts/LocalizationContext';
 import { resolveLocationInput } from '../services/mapUrlService';
 import { searchFreePlaces } from '../services/searchPlaceService';
+import { enrichAirportCoords } from '../services/airportCoordsService';
 
 // Remove default marker icon logic since we'll use custom DivIcons
 import { MapPin, Car, Search, Loader2, Footprints, TrainFront, Bike, Plane, Route } from 'lucide-react';
@@ -17,6 +18,7 @@ interface Props {
   activeItemId?: string | null;
   onMarkerClick?: (id: string) => void;
   hasBottomCards?: boolean;
+  visibilityTrigger?: string | number | boolean;
 }
 
 const MARKER_ICON_CACHE = new Map<string, L.DivIcon>();
@@ -33,15 +35,21 @@ const MODE_ICON_HTML: Record<string, string> = {
 const getDurationDivIcon = (
   iconColorClass: string,
   modeIcon: string,
-  displayStr: string
+  displayStr: string,
+  iconRotationDeg?: number
 ): L.DivIcon => {
-  const key = `${iconColorClass}:${displayStr}`;
+  const rotationKey = iconRotationDeg !== undefined ? iconRotationDeg.toFixed(1) : 'none';
+  const key = `${iconColorClass}:${displayStr}:${rotationKey}`;
   const cached = DURATION_ICON_CACHE.get(key);
   if (cached) return cached;
 
+  const rotationStyle = iconRotationDeg !== undefined
+    ? ` style="transform: rotate(${iconRotationDeg.toFixed(1)}deg)"`
+    : '';
+
   const icon = L.divIcon({
     html: `<div class="bg-slate-900/90 dark:bg-[#121318]/95 border border-white/15 text-white backdrop-blur-md px-2.5 py-1 rounded-full shadow-lg text-[9px] sm:text-[10px] font-bold font-mono tabular-nums whitespace-nowrap flex items-center justify-center gap-1.5 transform hover:scale-110 transition-transform cursor-default z-[999] group/time">
-                          <div class="${iconColorClass} transition-colors">
+                          <div class="${iconColorClass} transition-colors inline-flex items-center justify-center"${rotationStyle}>
                             ${modeIcon}
                           </div>
                           ${displayStr}
@@ -54,50 +62,122 @@ const getDurationDivIcon = (
   return icon;
 };
 
-const createCustomIcon = (index: number, type: string, isActive = false) => {
+export const createCustomIcon = (index: number, type: string, isActive = false) => {
   const cacheKey = `${index}:${type}:${isActive ? '1' : '0'}`;
   const cached = MARKER_ICON_CACHE.get(cacheKey);
   if (cached) return cached;
 
   const isFood = type === 'Food';
   const isFlight = type === 'Flight';
-  
-  // Choose color based on type
+
   const bgClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
-  const pulseClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
-  const shadowClass = isFlight ? 'shadow-blue-500/50' : isFood ? 'shadow-orange-500/50' : 'shadow-primary/50';
-  const sizeClass = isActive
-    ? 'w-8 h-8 ring-4 ring-white/30 dark:ring-primary/40 scale-110 -translate-y-1'
-    : 'w-7 h-7';
+  const shadowClass = isFlight ? 'shadow-blue-500/40' : isFood ? 'shadow-orange-500/40' : 'shadow-primary/40';
+  const haloStyle = isFlight
+    ? 'background:rgba(59,130,246,0.16);border:1.5px solid rgba(59,130,246,0.45);box-shadow:0 0 14px rgba(59,130,246,0.35);'
+    : isFood
+      ? 'background:rgba(249,115,22,0.16);border:1.5px solid rgba(249,115,22,0.45);box-shadow:0 0 14px rgba(249,115,22,0.35);'
+      : 'background:rgba(0,122,255,0.16);border:1.5px solid rgba(0,122,255,0.45);box-shadow:0 0 14px rgba(0,122,255,0.35);';
+
+  const outerSize = isActive ? 44 : 28;
+  const circleSize = isActive ? 32 : 28;
+  const anchor = outerSize / 2;
 
   const html = `
-    <div class="relative group cursor-pointer">
-      ${isActive ? `<div class="absolute -inset-2 ${pulseClass} rounded-full opacity-35 animate-pulse-soft"></div>` : ''}
-      <div class="relative ${sizeClass} ${bgClass} rounded-full border-[2.5px] border-white dark:border-slate-900 shadow-lg ${shadowClass} flex items-center justify-center transform transition-transform group-hover:scale-110 group-hover:-translate-y-1">
-        <span class="text-white ${isActive ? 'text-xs' : 'text-[11px]'} font-black font-mono tabular-nums">${index + 1}</span>
+    <div class="group cursor-pointer transition-transform hover:scale-105" style="position:relative;width:${outerSize}px;height:${outerSize}px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
+      ${isActive ? `<div style="position:absolute;inset:0;border-radius:9999px;pointer-events:none;${haloStyle}"></div>` : ''}
+      <div class="${bgClass} border-2 border-white dark:border-slate-900 shadow-lg ${shadowClass}" style="position:relative;width:${circleSize}px;height:${circleSize}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
+        <span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#ffffff;font-size:${isActive ? '12px' : '11px'};font-weight:800;line-height:1;padding:0;margin:0;text-align:center;font-variant-numeric:tabular-nums;">${index + 1}</span>
       </div>
-      <div class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[7px] ${
-        isFlight ? 'border-t-blue-500' : isFood ? 'border-t-orange-500' : 'border-t-primary'
-      }"></div>
     </div>
   `;
 
   const icon = L.divIcon({
     html,
     className: 'custom-leaflet-marker',
-    iconSize: isActive ? [32, 40] : [28, 36],
-    iconAnchor: isActive ? [16, 40] : [14, 36],
-    popupAnchor: isActive ? [0, -40] : [0, -36]
+    iconSize: [outerSize, outerSize],
+    iconAnchor: [anchor, anchor],
+    popupAnchor: [0, -anchor]
   });
   MARKER_ICON_CACHE.set(cacheKey, icon);
   return icon;
 };
 
-const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number], bounds?: L.LatLngBounds, activeItem?: ItineraryItem }) => {
+const getSafeMapSize = (map: L.Map): { x: number; y: number } | null => {
+  const anyMap = map as any;
+  if (typeof anyMap?.getSize !== 'function') return null;
+  try {
+    const size = anyMap.getSize();
+    if (!size) return null;
+    return { x: Number(size.x), y: Number(size.y) };
+  } catch {
+    return null;
+  }
+};
+
+const hasVisibleMapSize = (map: L.Map): boolean => {
+  const size = getSafeMapSize(map);
+  return !size || (Number.isFinite(size.x) && Number.isFinite(size.y) && size.x > 0 && size.y > 0);
+};
+
+const getSafeMapZoom = (map: L.Map, fallback = 13): number => {
+  try {
+    const z = typeof map.getZoom === 'function' ? Number(map.getZoom()) : fallback;
+    return Number.isFinite(z) ? z : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const getSafeMapCenter = (map: L.Map): { lat: number; lng: number } | null => {
+  const anyMap = map as any;
+  if (typeof anyMap?.getCenter !== 'function') return null;
+  try {
+    const center = anyMap.getCenter();
+    if (!center) return null;
+    const lat = Number(center.lat);
+    const lng = Number(center.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const safeSetMapView = (
+  map: L.Map,
+  coords: [number, number],
+  zoom: number,
+  options: L.ZoomPanOptions
+) => {
+  try {
+    map.setView(coords, zoom, options);
+  } catch {
+    try {
+      map.setView(coords, zoom, { animate: false });
+    } catch {
+      // Ignore if map container is detached or uninitialized
+    }
+  }
+};
+
+const ChangeView = ({
+  center,
+  bounds,
+  activeItem,
+  visibleRev = 0,
+}: {
+  center?: [number, number];
+  bounds?: L.LatLngBounds;
+  activeItem?: ItineraryItem;
+  visibleRev?: number;
+}) => {
   const map = useMap();
   const prevActiveIdRef = useRef<string | null | undefined>(undefined);
   const prevBoundsStrRef = useRef<string | null>(null);
-  
+  const prevVisibleRevRef = useRef<number>(visibleRev);
+
   // Create stable primitive dependencies to prevent infinite render loops
   // center is a new array every render, bounds is a new L.LatLngBounds every render
   const centerStr = center ? `${center[0]},${center[1]}` : null;
@@ -106,66 +186,192 @@ const ChangeView = ({ center, bounds, activeItem }: { center?: [number, number],
 
   useEffect(() => {
     const anyMap = map as any;
-    anyMap?.stop?.();
+    try {
+      anyMap?.stop?.();
+    } catch {
+      // Ignore if map animation state is uninitialized
+    }
+
+    const hasVisibleSize = hasVisibleMapSize(map);
+    const justBecameVisible = prevVisibleRevRef.current !== visibleRev;
+    const currentZoom = getSafeMapZoom(map, 13);
 
     if (activeItem && activeItem.lat != null && activeItem.lng != null) {
       // Must cast to Number because Google Places/Supabase string representations crash Leaflet's flyTo math
       const targetLat = Number(activeItem.lat);
       const targetLng = Number(activeItem.lng);
-      const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 13;
-      const currentCenter = typeof anyMap?.getCenter === 'function' ? anyMap.getCenter() : null;
-      const distDeg = currentCenter
-        ? Math.hypot(targetLat - Number(currentCenter.lat), targetLng - Number(currentCenter.lng))
-        : 1;
 
-      if (distDeg < 0.05) {
-        if (currentZoom >= 15) {
-          map.panTo([targetLat, targetLng], { animate: true, duration: 0.45, easeLinearity: 0.25 });
+      if (Number.isFinite(targetLat) && Number.isFinite(targetLng)) {
+        const currentCenter = getSafeMapCenter(map);
+        const distDeg = currentCenter
+          ? Math.hypot(targetLat - currentCenter.lat, targetLng - currentCenter.lng)
+          : 1;
+        const isLongJump = distDeg >= 2 || activeItem.transportType === 'Flight';
+        const targetZoom = isLongJump ? 14 : 15;
+
+        if (!hasVisibleSize) {
+          // Never call flyTo or animated transitions on a hidden 0x0 container (Leaflet divides by 0 -> NaN)
+          safeSetMapView(map, [targetLat, targetLng], targetZoom, { animate: false });
+        } else if (justBecameVisible) {
+          safeSetMapView(map, [targetLat, targetLng], targetZoom, { animate: false });
+        } else if (isLongJump) {
+          // Long-distance / flight jumps avoid Leaflet flyTo zoom-out blanking on mobile
+          safeSetMapView(map, [targetLat, targetLng], 14, { animate: true, duration: 0.45 } as any);
+        } else if (distDeg < 0.05) {
+          if (currentZoom >= 15) {
+            try {
+              map.panTo([targetLat, targetLng], { animate: true, duration: 0.45, easeLinearity: 0.25 });
+            } catch {
+              safeSetMapView(map, [targetLat, targetLng], currentZoom, { animate: false });
+            }
+          } else {
+            safeSetMapView(map, [targetLat, targetLng], 15, { animate: true, duration: 0.5 } as any);
+          }
         } else {
-          map.setView([targetLat, targetLng], 15, { animate: true, duration: 0.5 } as any);
+          try {
+            map.flyTo([targetLat, targetLng], 15, {
+              animate: true,
+              duration: 0.75,
+              easeLinearity: 0.25,
+            });
+          } catch {
+            safeSetMapView(map, [targetLat, targetLng], 15, { animate: false });
+          }
         }
-      } else {
-        map.flyTo([targetLat, targetLng], 15, {
-          animate: true,
-          duration: 0.75,
-          easeLinearity: 0.25,
-        });
       }
     } else if (bounds && bounds.isValid()) {
-      if (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null) {
-        map.fitBounds(bounds, { padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any);
+      if (hasVisibleSize && (prevBoundsStrRef.current !== boundsStr || prevActiveIdRef.current != null || justBecameVisible)) {
+        try {
+          map.fitBounds(
+            bounds,
+            justBecameVisible
+              ? { padding: [56, 56], maxZoom: 15, animate: false }
+              : ({ padding: [56, 56], maxZoom: 15, animate: true, duration: 0.6 } as any)
+          );
+        } catch {
+          // Ignore fitBounds failure if container has invalid geometry
+        }
       }
-    } else if (center) {
-      map.setView(center, map.getZoom(), { animate: true });
+    } else if (center && Number.isFinite(center[0]) && Number.isFinite(center[1])) {
+      safeSetMapView(map, center, currentZoom, { animate: hasVisibleSize && !justBecameVisible });
     }
 
     prevActiveIdRef.current = activeItemId ?? null;
-    prevBoundsStrRef.current = boundsStr;
-  }, [centerStr, boundsStr, activeItemId, map]);
-  
+    if (hasVisibleSize) {
+      prevBoundsStrRef.current = boundsStr;
+    }
+    prevVisibleRevRef.current = visibleRev;
+  }, [centerStr, boundsStr, activeItemId, visibleRev, map]);
+
   return null;
 }
 
-const MapResizer = () => {
+const MapResizer = ({
+  onBecomeVisible,
+  visibilityTrigger,
+}: {
+  onBecomeVisible?: () => void;
+  visibilityTrigger?: string | number | boolean;
+}) => {
   const map = useMap();
+  const wasHiddenRef = useRef<boolean>(false);
+  const isFirstTriggerRef = useRef<boolean>(true);
+
   useEffect(() => {
+    const container = typeof map.getContainer === 'function' ? map.getContainer() : null;
+    const initialSize = getSafeMapSize(map);
+    wasHiddenRef.current =
+      (initialSize ? initialSize.x <= 0 || initialSize.y <= 0 : false) ||
+      (container ? container.clientWidth === 0 || container.clientHeight === 0 : false);
+
+    const safeInvalidate = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // Ignore if map container is detached
+      }
+    };
+
     // Initial stabilization
-    const timer = setTimeout(() => {
-       map.invalidateSize();
-    }, 250);
-    
-    // Observer for Split-View changes
-    const resizeObserver = new ResizeObserver(() => {
-      map.invalidateSize();
-    });
-    
-    resizeObserver.observe(map.getContainer());
-    
+    const timer = setTimeout(safeInvalidate, 250);
+    let rafId: number | null = null;
+
+    // Observer for Split-View and mobile List -> Map transitions
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && container
+        ? new ResizeObserver((entries) => {
+            const entry = entries[0];
+            const width = entry ? entry.contentRect.width : container.clientWidth;
+            const height = entry ? entry.contentRect.height : container.clientHeight;
+            const isVisible = width > 0 && height > 0;
+
+            safeInvalidate();
+
+            if (wasHiddenRef.current && isVisible) {
+              wasHiddenRef.current = false;
+              if (typeof requestAnimationFrame === 'function') {
+                if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+                  cancelAnimationFrame(rafId);
+                }
+                rafId = requestAnimationFrame(() => {
+                  safeInvalidate();
+                  onBecomeVisible?.();
+                });
+              } else {
+                onBecomeVisible?.();
+              }
+            } else {
+              wasHiddenRef.current = !isVisible;
+            }
+          })
+        : null;
+
+    if (resizeObserver && container) {
+      resizeObserver.observe(container);
+    }
+
     return () => {
       clearTimeout(timer);
-      resizeObserver.disconnect();
+      if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafId);
+      }
+      resizeObserver?.disconnect();
     };
-  }, [map]);
+  }, [map, onBecomeVisible]);
+
+  useEffect(() => {
+    if (isFirstTriggerRef.current) {
+      isFirstTriggerRef.current = false;
+      return;
+    }
+
+    const syncAfterToggle = () => {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // Ignore if map container is detached
+      }
+      const container = typeof map.getContainer === 'function' ? map.getContainer() : null;
+      const isVisible =
+        hasVisibleMapSize(map) &&
+        (!container || (container.clientWidth > 0 && container.clientHeight > 0));
+      if (wasHiddenRef.current && isVisible) {
+        wasHiddenRef.current = false;
+        onBecomeVisible?.();
+      } else if (!isVisible) {
+        wasHiddenRef.current = true;
+      }
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      const id = requestAnimationFrame(syncAfterToggle);
+      return () => {
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id);
+      };
+    }
+    syncAfterToggle();
+  }, [visibilityTrigger, map, onBecomeVisible]);
+
   return null;
 };
 
@@ -178,6 +384,73 @@ export interface LegRouteInfo {
 }
 
 export const LEG_ROUTE_CACHE = new Map<string, LegRouteInfo>();
+
+const FLIGHT_ARC_SEGMENTS = 40;
+const FLIGHT_ARC_CURVE_RATIO = 0.16;
+
+const clampMercatorLat = (lat: number): number => Math.max(-85, Math.min(85, lat));
+
+const toMercatorY = (lat: number): number => {
+  const rad = (clampMercatorLat(lat) * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+};
+
+/**
+ * Compute the map bearing angle in degrees clockwise from North (0 = North, 90 = East)
+ * along the flight direction from `start` to `end` in Web Mercator space.
+ */
+export const computeFlightBearing = (
+  start: [number, number],
+  end: [number, number]
+): number => {
+  const dLngRad = ((end[1] - start[1]) * Math.PI) / 180;
+  const dMercY = toMercatorY(end[0]) - toMercatorY(start[0]);
+  if (Math.abs(dLngRad) < 1e-9 && Math.abs(dMercY) < 1e-9) return 0;
+  return (Math.atan2(dLngRad, dMercY) * 180) / Math.PI;
+};
+
+/**
+ * Build a smooth quadratic Bezier aviation arc between `start` and `end`,
+ * lifting perpendicularly (~16% of chord length, curving northward/upward).
+ */
+export const buildFlightArc = (
+  start: [number, number],
+  end: [number, number],
+  segments = FLIGHT_ARC_SEGMENTS
+): [number, number][] => {
+  const [lat1, lng1] = start;
+  const [lat2, lng2] = end;
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const dist = Math.hypot(dLat, dLng);
+
+  if (dist < 1e-6) {
+    return [[lat1, lng1], [lat2, lng2]];
+  }
+
+  const steps = Math.max(2, Math.round(segments));
+  const midLat = (lat1 + lat2) / 2;
+  const midLng = (lng1 + lng2) / 2;
+
+  // Choose the perpendicular unit vector pointing northward (positive lat) when dLng != 0
+  const sign = dLng >= 0 ? 1 : -1;
+  const perpLat = (sign * dLng) / dist;
+  const perpLng = (-sign * dLat) / dist;
+  const lift = dist * FLIGHT_ARC_CURVE_RATIO;
+
+  const ctrlLat = clampMercatorLat(midLat + perpLat * lift);
+  const ctrlLng = midLng + perpLng * lift;
+
+  const points: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const oneMinusT = 1 - t;
+    const lat = oneMinusT * oneMinusT * lat1 + 2 * oneMinusT * t * ctrlLat + t * t * lat2;
+    const lng = oneMinusT * oneMinusT * lng1 + 2 * oneMinusT * t * ctrlLng + t * t * lng2;
+    points.push([lat, lng]);
+  }
+  return points;
+};
 
 const buildLegCacheKey = (
   lat1: number,
@@ -200,7 +473,7 @@ const fetchLegRoute = (
 
   if (mode === 'flight') {
     return Promise.resolve({
-      geometry: [[lat1, lng1], [lat2, lng2]],
+      geometry: buildFlightArc([lat1, lng1], [lat2, lng2]),
       duration: 0,
       distance: 0,
       mode,
@@ -348,11 +621,13 @@ const fetchOSRM = async (
   };
 };
 
-export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards }) => {
+export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemId, onMarkerClick, hasBottomCards, visibilityTrigger }) => {
   const { language } = useTranslation();
   const isEn = language?.startsWith('en');
 
   const [legsRouteInfo, setLegsRouteInfo] = useState<LegRouteInfo[]>([]);
+  const [visibleRev, setVisibleRev] = useState(0);
+  const handleMapBecomeVisible = useCallback(() => setVisibleRev((v) => v + 1), []);
 
   const [routingModeOverride, setRoutingModeOverride] = useState<'auto' | 'driving' | 'walking' | 'bicycling' | 'transit'>('auto');
   const [isRoutingMenuOpen, setIsRoutingMenuOpen] = useState(false);
@@ -388,6 +663,12 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   const [isSearching, setIsSearching] = useState(false);
   const [mapRef, setMapRef] = useState<L.Map | null>(null);
 
+  // Enrich legacy/already-created airport items missing coordinates with fallback airport coords
+  const resolvedItems = useMemo(
+    () => items.map((item) => enrichAirportCoords(item)),
+    [items]
+  );
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!searchQuery.trim()) return;
@@ -415,7 +696,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       }
 
       // 2. Check existing items in itinerary to allow quick jumps
-      const existingMatches = items.filter(i => 
+      const existingMatches = resolvedItems.filter(i => 
         i.placeName && 
         i.placeName.toLowerCase().includes(searchQuery.toLowerCase()) && 
         i.lat != null && 
@@ -521,11 +802,29 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
     const latNum = typeof result.lat === 'number' ? result.lat : parseFloat(result.lat);
     const lonNum = typeof result.lon === 'number' ? result.lon : parseFloat(result.lon);
 
-    if (mapRef && !isNaN(latNum) && !isNaN(lonNum)) {
-      mapRef.flyTo([latNum, lonNum], Math.max(mapRef.getZoom(), 15), { duration: 1 });
+    if (mapRef && Number.isFinite(latNum) && Number.isFinite(lonNum)) {
+      const hasVisibleSize = hasVisibleMapSize(mapRef);
+      const currentZoom = getSafeMapZoom(mapRef, 13);
+      const targetZoom = Math.max(currentZoom, 15);
+      const currentCenter = getSafeMapCenter(mapRef);
+      const distDeg = currentCenter
+        ? Math.hypot(latNum - currentCenter.lat, lonNum - currentCenter.lng)
+        : 1;
+
+      if (!hasVisibleSize) {
+        safeSetMapView(mapRef, [latNum, lonNum], targetZoom, { animate: false });
+      } else if (distDeg >= 2) {
+        safeSetMapView(mapRef, [latNum, lonNum], 14, { animate: true, duration: 0.45 } as any);
+      } else {
+        try {
+          mapRef.flyTo([latNum, lonNum], targetZoom, { duration: 0.75 });
+        } catch {
+          safeSetMapView(mapRef, [latNum, lonNum], targetZoom, { animate: false });
+        }
+      }
     }
 
-    if(onAddSearchResult && !isNaN(latNum) && !isNaN(lonNum)) {
+    if (onAddSearchResult && Number.isFinite(latNum) && Number.isFinite(lonNum)) {
       onAddSearchResult(result.display_name.split(',')[0], latNum, lonNum);
     }
     setSearchQuery('');
@@ -535,15 +834,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   // Filter out any items where lat or lng is missing, null, or undefined
   const validItems = useMemo(
     () =>
-      items.filter(
+      resolvedItems.filter(
         i =>
           i.lat != null &&
           i.lng != null &&
-          !isNaN(i.lat) &&
-          !isNaN(i.lng) &&
+          Number.isFinite(Number(i.lat)) &&
+          Number.isFinite(Number(i.lng)) &&
           i.type !== 'Transport'
       ),
-    [items]
+    [resolvedItems]
   );
   const pathPositions: [number, number][] = useMemo(
     () => validItems.map(i => [Number(i.lat), Number(i.lng)]),
@@ -559,27 +858,39 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
   }
 
   const getLegMode = (stop1: ItineraryItem, stop2: ItineraryItem) => {
+    const idx1 = resolvedItems.findIndex(it => it.id === stop1.id);
+    const idx2 = resolvedItems.findIndex(it => it.id === stop2.id);
+
+    let explicitTransportMode: string | null = null;
+    if (idx1 !== -1 && idx2 !== -1) {
+      const start = Math.min(idx1, idx2);
+      const end = Math.max(idx1, idx2);
+      for (let i = start + 1; i < end; i++) {
+        if (resolvedItems[i].type === 'Transport') {
+          const mode = resolvedItems[i].transportType;
+          if (mode === 'Flight') return 'flight';
+          if (mode === 'Walking') explicitTransportMode = 'walking';
+          else if (mode === 'Public') explicitTransportMode = 'transit';
+          else if (mode === 'Car') explicitTransportMode = 'driving';
+          else if (mode === 'Bicycle') explicitTransportMode = 'bicycling';
+        }
+      }
+    }
+
+    // Two consecutive flight airport stops without a ground transport leg always draw a flight line
+    if (
+      !explicitTransportMode &&
+      stop1.transportType === 'Flight' &&
+      stop2.transportType === 'Flight'
+    ) {
+      return 'flight';
+    }
+
     if (routingModeOverride !== 'auto') {
       return routingModeOverride;
     }
-    
-    const idx1 = items.findIndex(it => it.id === stop1.id);
-    const idx2 = items.findIndex(it => it.id === stop2.id);
-    if (idx1 === -1 || idx2 === -1) return 'driving';
-    
-    const start = Math.min(idx1, idx2);
-    const end = Math.max(idx1, idx2);
-    for (let i = start + 1; i < end; i++) {
-      if (items[i].type === 'Transport') {
-        const mode = items[i].transportType;
-        if (mode === 'Walking') return 'walking';
-        if (mode === 'Public') return 'transit';
-        if (mode === 'Car') return 'driving';
-        if (mode === 'Bicycle') return 'bicycling';
-        if (mode === 'Flight') return 'flight';
-      }
-    }
-    return 'driving';
+
+    return explicitTransportMode ?? 'driving';
   };
 
   const plannedLegs = useMemo(() => {
@@ -614,7 +925,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       });
     }
     return legs;
-  }, [validItems, items, routingModeOverride]);
+  }, [validItems, resolvedItems, routingModeOverride]);
 
   const legsSignature = useMemo(
     () => plannedLegs.map((l) => l.cacheKey).join('|'),
@@ -628,12 +939,15 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
       return;
     }
 
-    // Seed immediately from cache or straight-line fallback so route lines never vanish during fetches
+    // Seed immediately from cache or curved-flight / straight-line fallback so route lines never vanish during fetches
     const immediateLegs: LegRouteInfo[] = plannedLegs.map((leg) => {
       const cached = LEG_ROUTE_CACHE.get(leg.cacheKey);
       if (cached && !cached.isFallback) return cached;
       return {
-        geometry: [[leg.lat1, leg.lng1], [leg.lat2, leg.lng2]],
+        geometry:
+          leg.mode === 'flight'
+            ? buildFlightArc([leg.lat1, leg.lng1], [leg.lat2, leg.lng2])
+            : [[leg.lat1, leg.lng1], [leg.lat2, leg.lng2]],
         duration: 0,
         distance: 0,
         mode: leg.mode,
@@ -840,8 +1154,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
-        <MapResizer />
-        {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} />}
+        <MapResizer onBecomeVisible={handleMapBecomeVisible} visibilityTrigger={visibilityTrigger} />
+        {validItems.length > 0 && <ChangeView bounds={bounds} activeItem={activeItem} visibleRev={visibleRev} />}
         
         {/* Draw the connected route legs with dual-layer Flighty glowing casing */}
         {legsRouteInfo && legsRouteInfo.length > 0 ? (
@@ -863,10 +1177,10 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
               color = isDarkMode ? '#34D399' : '#10B981'; // Emerald
               weight = 4;
             } else if (leg.mode === 'flight') {
-              color = isDarkMode ? '#60A5FA' : '#3B82F6'; // Blue
-              dashArray = '5, 10';
-              weight = 3;
-              opacity = 0.78;
+              color = isDarkMode ? '#38BDF8' : '#0EA5E9'; // Flighty sky-blue arc
+              dashArray = '6, 8';
+              weight = 2.5;
+              opacity = 0.92;
             }
 
             return (
@@ -875,8 +1189,8 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
                   positions={leg.geometry}
                   pathOptions={{
                     color,
-                    weight: weight + 3,
-                    opacity: isDarkMode ? 0.18 : 0.12,
+                    weight: leg.mode === 'flight' ? 7 : weight + 3,
+                    opacity: leg.mode === 'flight' ? (isDarkMode ? 0.22 : 0.14) : (isDarkMode ? 0.18 : 0.12),
                   }}
                 />
                 <Polyline
@@ -920,9 +1234,14 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const leg = legsRouteInfo[idx];
            if (!leg || !leg.geometry || leg.geometry.length < 2) return null;
            
-           // Calculate midpoint of the route geometry instead of straight line midpoint for better accuracy!
-           const midPointIdx = Math.floor(leg.geometry.length / 2);
-           const [midLat, midLng] = leg.geometry[midPointIdx];
+           // Calculate midpoint of the route geometry (interpolate 2-point lines like flights so the badge sits centered)
+           const [midLat, midLng] =
+             leg.geometry.length === 2
+               ? [
+                   (leg.geometry[0][0] + leg.geometry[1][0]) / 2,
+                   (leg.geometry[0][1] + leg.geometry[1][1]) / 2,
+                 ]
+               : leg.geometry[Math.floor(leg.geometry.length / 2)];
            
            if ((!leg.duration || leg.duration <= 0) && leg.mode !== 'flight') return null; // hide if fallback/0 duration except for flight
            const mins = Math.max(1, Math.round(leg.duration / 60)); // Minimum 1 min
@@ -946,7 +1265,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            } else if (leg.mode === 'flight') {
              modeIcon = MODE_ICON_HTML.flight;
              modeText = isEn ? 'Flight' : '飛行';
-             iconColorClass = 'text-blue-400';
+             iconColorClass = 'text-sky-400';
            }
            
            let timeText = '';
@@ -963,13 +1282,26 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
            const displayStr = leg.mode === 'flight' 
              ? modeText
              : `${modeText} ${timeText}`;
+
+           // Lucide Plane naturally points NE (+45 deg); rotate by (bearing - 45) to align with flight path
+           const planeRotationDeg =
+             leg.mode === 'flight'
+               ? Number(
+                   (
+                     computeFlightBearing(
+                       leg.geometry[0],
+                       leg.geometry[leg.geometry.length - 1]
+                     ) - 45
+                   ).toFixed(1)
+                 )
+               : undefined;
            
            return (
              <Marker 
                key={`duration-${idx}`} 
                position={[midLat, midLng]}
                zIndexOffset={100}
-               icon={getDurationDivIcon(iconColorClass, modeIcon, displayStr)}
+               icon={getDurationDivIcon(iconColorClass, modeIcon, displayStr, planeRotationDeg)}
              />
            );
         })}
@@ -979,7 +1311,7 @@ export const MapView: React.FC<Props> = ({ items, onAddSearchResult, activeItemI
           <Marker 
             key={item.id} 
             position={[Number(item.lat!), Number(item.lng!)]}
-            icon={createCustomIcon(idx, item.type, item.id === activeItemId)}
+            icon={createCustomIcon(idx, item.transportType === 'Flight' ? 'Flight' : item.type, item.id === activeItemId)}
             zIndexOffset={item.id === activeItemId ? 1000 : idx * 10}
             eventHandlers={{
               click: () => onMarkerClick && onMarkerClick(item.id)

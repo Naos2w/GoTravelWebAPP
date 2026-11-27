@@ -1,7 +1,13 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { MapView, LEG_ROUTE_CACHE } from "../../components/MapView";
+import {
+  MapView,
+  LEG_ROUTE_CACHE,
+  buildFlightArc,
+  computeFlightBearing,
+  createCustomIcon,
+} from "../../components/MapView";
 import { LocalizationProvider } from "../../contexts/LocalizationContext";
 import { ItineraryItem } from "../../types";
 
@@ -13,6 +19,7 @@ const mockMapInstance = {
   stop: vi.fn(),
   getCenter: vi.fn().mockReturnValue({ lat: 35.71, lng: 139.79 }),
   getZoom: vi.fn().mockReturnValue(14),
+  getSize: vi.fn().mockReturnValue({ x: 400, y: 600 }),
   getContainer: vi.fn().mockReturnValue(document.createElement("div")),
   invalidateSize: vi.fn(),
 };
@@ -22,7 +29,15 @@ vi.mock("react-leaflet", () => ({
     <div data-testid="map-container" data-prefer-canvas={String(preferCanvas)}>{children}</div>
   ),
   TileLayer: () => <div data-testid="tile-layer" />,
-  Marker: ({ children }: any) => <div data-testid="marker">{children}</div>,
+  Marker: ({ children, position, icon }: any) => (
+    <div
+      data-testid="marker"
+      data-position={position ? JSON.stringify(position) : ""}
+      data-icon={icon ? JSON.stringify(icon) : ""}
+    >
+      {children}
+    </div>
+  ),
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
   Polyline: ({ pathOptions, color, positions }: any) => (
     <div
@@ -37,14 +52,14 @@ vi.mock("react-leaflet", () => ({
 
 vi.mock("leaflet", () => ({
   default: {
-    divIcon: () => ({}),
+    divIcon: (opts: any) => opts ?? {},
     latLngBounds: () => ({
       extend: vi.fn(),
       isValid: vi.fn().mockReturnValue(true),
       toBBoxString: vi.fn().mockReturnValue("0,0,1,1"),
     }),
   },
-  divIcon: () => ({}),
+  divIcon: (opts: any) => opts ?? {},
   latLngBounds: () => ({
     extend: vi.fn(),
     isValid: vi.fn().mockReturnValue(true),
@@ -60,8 +75,10 @@ describe("MapView Component Smoke Test", () => {
     mockMapInstance.panTo.mockClear();
     mockMapInstance.fitBounds.mockClear();
     mockMapInstance.stop.mockClear();
+    mockMapInstance.invalidateSize.mockClear();
     mockMapInstance.getZoom.mockReturnValue(14);
     mockMapInstance.getCenter.mockReturnValue({ lat: 35.71, lng: 139.79 });
+    mockMapInstance.getSize.mockReturnValue({ x: 400, y: 600 });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Offline OSRM test")));
   });
 
@@ -204,17 +221,17 @@ describe("MapView Component Smoke Test", () => {
     );
   });
 
-  it("flies to a far stop with a snappy duration <= 0.8s", () => {
-    const farItems: ItineraryItem[] = [
+  it("flies to a regional stop (0.05 <= distDeg < 2) with a snappy duration <= 0.8s", () => {
+    const regionalItems: ItineraryItem[] = [
       ...mockItems,
       {
-        id: "item-far",
+        id: "item-regional",
         trip_id: "trip-1",
         user_id: "user-1",
         time: "15:00",
-        placeName: "Kyoto Station",
-        lat: 34.9858,
-        lng: 135.7588,
+        placeName: "Yokohama Station",
+        lat: 35.4658,
+        lng: 139.6223,
         type: "Place",
         date: "2026-10-01",
       },
@@ -222,13 +239,13 @@ describe("MapView Component Smoke Test", () => {
     mockMapInstance.getZoom.mockReturnValue(14);
     render(
       <LocalizationProvider>
-        <MapView items={farItems} activeItemId="item-far" />
+        <MapView items={regionalItems} activeItemId="item-regional" />
       </LocalizationProvider>
     );
 
     expect(mockMapInstance.stop).toHaveBeenCalled();
     expect(mockMapInstance.flyTo).toHaveBeenCalledWith(
-      [34.9858, 135.7588],
+      [35.4658, 139.6223],
       15,
       expect.objectContaining({ animate: true, easeLinearity: 0.25 })
     );
@@ -236,6 +253,120 @@ describe("MapView Component Smoke Test", () => {
     expect(flyOptions.duration).toBeLessThanOrEqual(0.8);
     expect(mockMapInstance.setView).not.toHaveBeenCalled();
     expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+  });
+
+  it("avoids flyTo and animated fitBounds when map container is hidden (0x0 on mobile list mode)", () => {
+    const flightItems: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Flight: BR106",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Arrival",
+        date: "2026-04-01",
+      },
+    ];
+
+    mockMapInstance.getSize.mockReturnValue({ x: 0, y: 0 });
+    mockMapInstance.getCenter.mockReturnValue({ lat: 25.0797, lng: 121.2342 });
+
+    const { rerender } = render(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId={null} />
+      </LocalizationProvider>
+    );
+
+    // Must never call fitBounds or flyTo on a 0x0 hidden container
+    expect(mockMapInstance.fitBounds).not.toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+
+    // Selecting an airport card while map is hidden (0x0) must use non-animated setView safely
+    rerender(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId="f-arr" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).toHaveBeenCalledWith(
+      [33.5859, 130.4507],
+      14,
+      { animate: false }
+    );
+  });
+
+  it("uses setView instead of unstable flyTo when jumping to a far-away airport (distDeg >= 2)", () => {
+    const flightItems: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        date: "2026-04-01",
+      },
+    ];
+
+    mockMapInstance.getSize.mockReturnValue({ x: 390, y: 600 });
+    mockMapInstance.getCenter.mockReturnValue({ lat: 25.0797, lng: 121.2342 });
+
+    render(
+      <LocalizationProvider>
+        <MapView items={flightItems} activeItemId="f-arr" />
+      </LocalizationProvider>
+    );
+
+    expect(mockMapInstance.stop).toHaveBeenCalled();
+    expect(mockMapInstance.flyTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.panTo).not.toHaveBeenCalled();
+    expect(mockMapInstance.setView).toHaveBeenCalledWith(
+      [33.5859, 130.4507],
+      14,
+      expect.objectContaining({ animate: true })
+    );
+  });
+
+  it("calls invalidateSize({ animate: false }) when container transitions from 0x0 to visible", () => {
+    let resizeCallback: ((entries: any[]) => void) | null = null;
+    class MockResizeObserver {
+      constructor(cb: (entries: any[]) => void) {
+        resizeCallback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", MockResizeObserver as any);
+    mockMapInstance.getSize.mockReturnValue({ x: 0, y: 0 });
+
+    render(
+      <LocalizationProvider>
+        <MapView items={mockItems} />
+      </LocalizationProvider>
+    );
+
+    mockMapInstance.getSize.mockReturnValue({ x: 390, y: 600 });
+    resizeCallback?.([{ contentRect: { width: 390, height: 600 } }]);
+
+    expect(mockMapInstance.invalidateSize).toHaveBeenCalledWith({ animate: false });
   });
 
   it("rejects degenerate 0-length OSRM routes (car-free towns) and keeps a valid 2-point polyline", async () => {
@@ -316,6 +447,116 @@ describe("MapView Component Smoke Test", () => {
         expect(JSON.parse(pl.getAttribute("data-positions") || "[]")).toEqual(expected);
       });
     });
+  });
+
+  it("enriches legacy airport stops missing lat/lng and renders a flight polyline without calling OSRM", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const legacyFlightDay: ItineraryItem[] = [
+      {
+        id: "f-dep",
+        time: "08:10",
+        placeName: "TPE Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Flight: BR106",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-mid",
+        time: "09:45",
+        placeName: "Flight",
+        type: "Transport",
+        transportType: "Flight",
+        note: "2h 10m",
+        date: "2026-04-01",
+      },
+      {
+        id: "f-arr",
+        time: "11:20",
+        placeName: "FUK Airport",
+        type: "Place",
+        transportType: "Flight",
+        note: "Arrival",
+        date: "2026-04-01",
+      },
+    ];
+
+    render(
+      <LocalizationProvider>
+        <MapView items={legacyFlightDay} />
+      </LocalizationProvider>
+    );
+
+    expect(screen.getByTestId("map-container")).toBeInTheDocument();
+    expect(screen.queryByText(/新增帶有坐標的地點即可在地圖上查看/)).not.toBeInTheDocument();
+    // 2 airport markers + 1 midpoint flight badge marker
+    expect(screen.getAllByTestId("marker").length).toBe(3);
+
+    const polylines = screen.getAllByTestId("polyline");
+    expect(polylines.length).toBe(2);
+    const positions: [number, number][] = JSON.parse(polylines[0].getAttribute("data-positions") || "[]");
+    expect(positions.length).toBe(41);
+    expect(positions[0]).toEqual([25.0797, 121.2342]);
+    expect(positions[positions.length - 1]).toEqual([33.5859, 130.4507]);
+
+    // Curved arc midpoint at t = 0.5 must bow away from the straight chord
+    const straightMidLat = (25.0797 + 33.5859) / 2;
+    const straightMidLng = (121.2342 + 130.4507) / 2;
+    const arcMid = positions[Math.floor(positions.length / 2)];
+    expect(arcMid[0]).toBeGreaterThan(straightMidLat);
+    expect(arcMid[1]).not.toBeCloseTo(straightMidLng, 2);
+
+    // Midpoint flight badge sits on the curved arc's t=0.5 point and rotates the plane along flight bearing
+    const markers = screen.getAllByTestId("marker");
+    const badgeMarker = markers.find((m) => (m.getAttribute("data-icon") || "").includes("飛行"));
+    expect(badgeMarker).toBeDefined();
+    expect(JSON.parse(badgeMarker!.getAttribute("data-position") || "[]")).toEqual(arcMid);
+    const badgeIcon = JSON.parse(badgeMarker!.getAttribute("data-icon") || "{}");
+    expect(badgeIcon.html).toContain("transform: rotate(");
+
+    // Flight legs must never hit OSRM
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("builds smooth curved flight arcs for regional and long-haul routes with accurate bearing", () => {
+    const longHaulArc = buildFlightArc([25.0797, 121.2342], [49.1967, -123.1815]);
+    expect(longHaulArc.length).toBe(41);
+    expect(longHaulArc[0]).toEqual([25.0797, 121.2342]);
+    expect(longHaulArc[longHaulArc.length - 1]).toEqual([49.1967, -123.1815]);
+    expect(longHaulArc[20][0]).toBeGreaterThan((25.0797 + 49.1967) / 2);
+
+    // Due North = 0 deg, Due East = 90 deg, TPE -> FUK ~ NE (~43 deg)
+    expect(computeFlightBearing([25, 121], [35, 121])).toBeCloseTo(0, 1);
+    expect(computeFlightBearing([25, 121], [25, 131])).toBeCloseTo(90, 1);
+    const tpeFukBearing = computeFlightBearing([25.0797, 121.2342], [33.5859, 130.4507]);
+    expect(tpeFukBearing).toBeGreaterThan(35);
+    expect(tpeFukBearing).toBeLessThan(55);
+  });
+
+  it("renders non-blinking static focus halo and dead-center concentric marker numbers", () => {
+    render(
+      <LocalizationProvider>
+        <MapView items={mockItems} activeItemId="item-1" />
+      </LocalizationProvider>
+    );
+
+    const markers = screen.getAllByTestId("marker");
+    expect(markers).toHaveLength(1);
+    const activeIcon = JSON.parse(markers[0].getAttribute("data-icon") || "{}");
+    expect(activeIcon.html).not.toMatch(/animate-ping|animate-pulse|animate-pulse-soft/);
+    expect(activeIcon.html).toContain("display:flex;align-items:center;justify-content:center;");
+    expect(activeIcon.html).toContain("line-height:1;padding:0;margin:0;");
+    expect(activeIcon.html).toContain("box-shadow:0 0 14px");
+    expect(activeIcon.iconSize).toEqual([44, 44]);
+    expect(activeIcon.iconAnchor).toEqual([22, 22]);
+
+    const inactiveIcon = createCustomIcon(1, "Food", false) as any;
+    expect(inactiveIcon.html).not.toMatch(/animate-ping|animate-pulse|animate-pulse-soft/);
+    expect(inactiveIcon.html).toContain("display:flex;align-items:center;justify-content:center;");
+    expect(inactiveIcon.iconSize).toEqual([28, 28]);
+    expect(inactiveIcon.iconAnchor).toEqual([14, 14]);
   });
 });
 

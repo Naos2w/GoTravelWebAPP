@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
@@ -26,6 +26,21 @@ vi.mock("../../services/storageService", () => {
     },
     getTrips: vi.fn().mockResolvedValue([]),
     getTripById: vi.fn().mockResolvedValue(null),
+    createNewTrip: vi.fn().mockImplementation((partial: any) => ({
+      id: "trip-new-1",
+      name: partial.destination || "",
+      destination: partial.destination || "",
+      startDate: partial.startDate || "",
+      endDate: partial.endDate || "",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+      budget: 50000,
+    })),
+    createFullTrip: vi.fn().mockResolvedValue(undefined),
+    joinTrip: vi.fn().mockResolvedValue(undefined),
+    saveTrip: vi.fn().mockResolvedValue(undefined),
     deleteTrip: vi.fn().mockResolvedValue(undefined),
     leaveTrip: vi.fn().mockResolvedValue(undefined),
     updateChecklistItem: vi.fn().mockResolvedValue(undefined),
@@ -37,6 +52,10 @@ vi.mock("../../services/storageService", () => {
 // Mock leaflet & MapView to avoid canvas/DOM errors in jsdom
 vi.mock("../../components/MapView", () => ({
   MapView: () => <div data-testid="mock-map-view">Mock Map</div>,
+}));
+
+vi.mock("../../services/tdxService", () => ({
+  fetchTdxFlights: vi.fn(),
 }));
 
 import App from "../../App";
@@ -445,6 +464,425 @@ describe("App Component (Smoke Test)", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/trips/trip-route-42");
       expect(window.location.search).toBe("");
+    });
+  });
+
+  it("never locks tabs when flight price is 0", async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const zeroPriceTrip = {
+      id: "trip-zero-price",
+      user_id: "user-zp-1",
+      name: "Osaka Trip",
+      destination: "KIX",
+      startDate: "2026-10-01",
+      endDate: "2026-10-04",
+      expenses: [],
+      checklist: [],
+      itinerary: [{ date: "2026-10-01", items: [] }],
+      flights: [
+        {
+          id: "flight-zp-1",
+          user_id: "user-zp-1",
+          traveler_name: "Test Traveler",
+          price: 0,
+          currency: "TWD",
+          cabinClass: "Economy",
+          outbound: {
+            airline: "EVA Air",
+            airlineID: "BR",
+            flightNumber: "BR132",
+            departureTime: "2026-10-01T08:30",
+            arrivalTime: "2026-10-01T12:10",
+            departureAirport: "TPE",
+            arrivalAirport: "KIX",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+        },
+      ],
+    };
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-zp-1",
+            email: "zp@example.com",
+            user_metadata: { full_name: "Test Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([zeroPriceTrip as any]);
+    vi.mocked(getTripById).mockResolvedValue(zeroPriceTrip as any);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Osaka Trip")).toBeInTheDocument());
+    act(() => {
+      screen.getByText("Osaka Trip").click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Mobile Navigation")).toBeInTheDocument();
+    });
+
+    for (const label of [/概覽|Overview/i, /行程|Itinerary/i, /清單|Checklist/i, /花費|Expenses/i, /機票|Tickets/i]) {
+      for (const btn of screen.getAllByRole("button", { name: label })) {
+        expect(btn).not.toBeDisabled();
+      }
+    }
+
+    // Freely switch to Itinerary tab even though price === 0
+    fireEvent.click(screen.getAllByRole("button", { name: /行程|Itinerary/i })[0]);
+    await waitFor(() => {
+      expect(screen.getAllByText(/Day\s*1/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  const openUnpricedTrip = async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const trip = {
+      id: "trip-pill",
+      user_id: "user-pill-1",
+      name: "Sapporo Trip",
+      destination: "CTS",
+      startDate: "2026-10-01",
+      endDate: "2026-10-04",
+      expenses: [],
+      checklist: [],
+      itinerary: [{ date: "2026-10-01", items: [] }],
+      flights: [
+        {
+          id: "flight-pill-1",
+          user_id: "user-pill-1",
+          traveler_name: "Pill Traveler",
+          price: 0,
+          currency: "TWD",
+          cabinClass: "Economy",
+          outbound: {
+            airline: "EVA Air",
+            airlineID: "BR",
+            flightNumber: "BR108",
+            departureTime: "2026-10-01T08:30",
+            arrivalTime: "2026-10-01T12:10",
+            departureAirport: "TPE",
+            arrivalAirport: "CTS",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+        },
+      ],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-pill-1",
+            email: "pill@example.com",
+            user_metadata: { full_name: "Pill Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([trip as any]);
+    vi.mocked(getTripById).mockResolvedValue(trip as any);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Sapporo Trip")).toBeInTheDocument());
+    act(() => {
+      screen.getByText("Sapporo Trip").click();
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Mobile Navigation")).toBeInTheDocument();
+    });
+  };
+
+  it("shows the mobile price pill for an existing unpriced flight (no fresh creation) and jumps to price edit", async () => {
+    await openUnpricedTrip();
+    const pill = await screen.findByTestId("mobile-itinerary-price-cta");
+    expect(pill.className).toContain("sm:hidden");
+
+    fireEvent.click(within(pill).getByRole("button", { name: /填機票金額|Add price/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("flight-price-input")).toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(screen.getByTestId("flight-price-input"));
+    expect(screen.queryByTestId("mobile-itinerary-price-cta")).not.toBeInTheDocument();
+  });
+
+  it("dismisses the mobile price pill cleanly with the close button", async () => {
+    await openUnpricedTrip();
+    const pill = await screen.findByTestId("mobile-itinerary-price-cta");
+    fireEvent.click(within(pill).getByRole("button", { name: /關閉提示|Dismiss tip/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("mobile-itinerary-price-cta")).not.toBeInTheDocument();
+    });
+  });
+
+  it("runs guided post-flight-creation flow: BoardingPassIssueModal -> Itinerary banner -> Flights price edit -> Overview", async () => {
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    const { fetchTdxFlights } = await import("../../services/tdxService");
+
+    let createdTrip: any = null;
+    vi.mocked(createFullTrip).mockImplementation(async (trip: any) => {
+      createdTrip = trip;
+    });
+    vi.mocked(getTripById).mockImplementation(async () => createdTrip);
+
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-guide-1",
+            email: "guide@example.com",
+            user_metadata: { full_name: "Guide Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([]);
+    vi.mocked(fetchTdxFlights)
+      .mockResolvedValueOnce([
+        {
+          airline: "EVA Air",
+          airlineID: "BR",
+          airlineNameZh: "長榮航空",
+          airlineNameEn: "EVA Air",
+          flightNumber: "BR198",
+          departureTime: "2026-10-01T08:50",
+          arrivalTime: "2026-10-01T13:15",
+          departureAirport: "TPE",
+          arrivalAirport: "NRT",
+          terminal: "2",
+          gate: "C7",
+          status: "Scheduled",
+          baggage: { carryOn: { count: 1, weight: "" }, checked: { count: 0, weight: "" } },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          airline: "EVA Air",
+          airlineID: "BR",
+          airlineNameZh: "長榮航空",
+          airlineNameEn: "EVA Air",
+          flightNumber: "BR197",
+          departureTime: "2026-10-05T14:15",
+          arrivalTime: "2026-10-05T17:00",
+          departureAirport: "NRT",
+          arrivalAirport: "TPE",
+          terminal: "1",
+          gate: "B2",
+          status: "Scheduled",
+          baggage: { carryOn: { count: 1, weight: "" }, checked: { count: 0, weight: "" } },
+        },
+      ]);
+
+    const { container } = render(<App />);
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /新增旅程|New Trip/i }).length).toBeGreaterThan(0);
+    });
+
+    // Open TripForm and import outbound + inbound flights
+    fireEvent.click(screen.getAllByRole("button", { name: /新增旅程|New Trip/i })[0]);
+    fireEvent.click(screen.getByRole("tab", { name: /航班匯入|Import Flights/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: "NRT" })[1]);
+    fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20261001" } });
+    fireEvent.change(container.querySelector("#outbound-flight-number")!, { target: { value: "BR198" } });
+    fireEvent.click(screen.getByRole("button", { name: /^搜尋$|^Search$/i }));
+
+    await waitFor(() => expect(screen.getByText("BR198")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("BR198"));
+    fireEvent.click(screen.getByRole("button", { name: /下一步：設定回程|Next: Set Inbound/i }));
+
+    fireEvent.change(screen.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "20261005" } });
+    fireEvent.change(container.querySelector("#inbound-flight-number")!, { target: { value: "BR197" } });
+    fireEvent.click(screen.getByRole("button", { name: /^搜尋$|^Search$/i }));
+
+    await waitFor(() => expect(screen.getByText("BR197")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("BR197"));
+    fireEvent.click(screen.getByRole("button", { name: /前往確認|Go to Review/i }));
+    fireEvent.click(screen.getByRole("button", { name: /確認|Confirm/i }));
+
+    // 1. BoardingPassIssueModal opens with auto-filled BR Economy baggage (1x7kg / 1x23kg)
+    await waitFor(() => {
+      expect(screen.getByTestId("boarding-pass-issue-modal")).toBeInTheDocument();
+    });
+    expect(screen.getAllByTestId("boarding-pass-baggage")[0].textContent).toContain("1×23kg");
+
+    // 2. Continue -> Itinerary tab with dismissible guided banner
+    fireEvent.click(screen.getByTestId("boarding-pass-continue"));
+    await waitFor(() => {
+      expect(screen.getByTestId("guide-itinerary-banner")).toBeInTheDocument();
+    });
+
+    // 3. Mobile header pill renders alongside the desktop banner (jsdom ignores media queries);
+    // clicking it jumps to Flights tab edit mode and focuses the price input
+    const mobileCta = screen.getByTestId("mobile-itinerary-price-cta");
+    expect(mobileCta).toBeInTheDocument();
+    expect(mobileCta.className).toContain("sm:hidden");
+    expect(screen.getByTestId("guide-itinerary-banner").className).toContain("hidden sm:flex");
+    fireEvent.click(within(mobileCta).getByRole("button", { name: /填機票金額|Add price/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("guide-price-hint")).toBeInTheDocument();
+    });
+    const priceInput = screen.getByTestId("flight-price-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(priceInput);
+
+    // 4. Enter price & save -> returns to Overview tab with success toast
+    fireEvent.change(priceInput, { target: { value: "16500" } });
+    fireEvent.click(screen.getByRole("button", { name: /確認|Confirm|Save/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/機票金額已儲存|Ticket price saved/i)).toBeInTheDocument();
+    });
+  });
+
+  it("quick-creates a trip without flights directly onto the Overview tab without boarding pass animation", async () => {
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    let createdTrip: any = null;
+    vi.mocked(createFullTrip).mockImplementation(async (trip: any) => {
+      createdTrip = trip;
+    });
+    vi.mocked(getTripById).mockImplementation(async () => createdTrip);
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-quick-1",
+            email: "quick@example.com",
+            user_metadata: { full_name: "Quick Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([]);
+
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /新增旅程|New Trip/i }).length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: /新增旅程|New Trip/i })[0]);
+    fireEvent.change(screen.getByPlaceholderText(/例如：東京 5 日遊|e\.g\., Tokyo 5 Days/i), {
+      target: { value: "Taipei Weekend" },
+    });
+    const [startInput, endInput] = screen.getAllByPlaceholderText("YYYY/MM/DD");
+    fireEvent.change(startInput, { target: { value: "20261101" } });
+    fireEvent.change(endInput, { target: { value: "20261103" } });
+    fireEvent.click(screen.getByRole("button", { name: /建立旅程|Create Trip/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Taipei Weekend").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByTestId("boarding-pass-issue-modal")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guide-itinerary-banner")).not.toBeInTheDocument();
+  });
+
+  it("deduplicates trip IDs and skips Realtime list refresh during trip creation so no duplicate trip card appears", async () => {
+    const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
+    let globalTripsInsertHandler: ((payload: any) => void) | null = null;
+    const globalChannel = {
+      on: vi.fn().mockImplementation(function (this: any, type: string, filter: any, cb: (payload: any) => void) {
+        if (type === "postgres_changes" && filter?.table === "trips") {
+          globalTripsInsertHandler = cb;
+        }
+        return this;
+      }),
+      subscribe: vi.fn().mockReturnThis(),
+    };
+    const activeChannel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+    };
+    vi.mocked(supabase.channel).mockImplementation((name: string) =>
+      name.startsWith("global-trips-") ? (globalChannel as any) : (activeChannel as any)
+    );
+
+    const duplicatePartialTrip = {
+      id: "trip-new-1",
+      user_id: "user-dedupe-1",
+      name: "Taipei Weekend",
+      destination: "Taipei Weekend",
+      startDate: "2026-11-01",
+      endDate: "2026-11-03",
+      expenses: [],
+      flights: [],
+      checklist: [],
+      itinerary: [],
+    };
+
+    let createdTrip: any = null;
+    let resolveCreateFullTrip!: () => void;
+    vi.mocked(createFullTrip).mockImplementation(
+      (trip: any) =>
+        new Promise<void>((resolve) => {
+          createdTrip = trip;
+          resolveCreateFullTrip = resolve;
+        })
+    );
+    vi.mocked(getTripById).mockImplementation(async () => createdTrip);
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-dedupe-1",
+            email: "dedupe@example.com",
+            user_metadata: { full_name: "Dedupe Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    // Return duplicate partial rows with the same ID as the newly created trip
+    vi.mocked(getTrips).mockResolvedValue([duplicatePartialTrip, duplicatePartialTrip]);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("heading", { name: "Taipei Weekend" })).toHaveLength(1);
+    });
+    const initialGetTripsCalls = vi.mocked(getTrips).mock.calls.length;
+
+    // Open TripForm and submit while createFullTrip stays in flight
+    fireEvent.click(screen.getAllByRole("button", { name: /新增旅程|New Trip/i })[0]);
+    fireEvent.change(screen.getByPlaceholderText(/例如：東京 5 日遊|e\.g\., Tokyo 5 Days/i), {
+      target: { value: "Taipei Weekend" },
+    });
+    const [startInput, endInput] = screen.getAllByPlaceholderText("YYYY/MM/DD");
+    fireEvent.change(startInput, { target: { value: "20261101" } });
+    fireEvent.change(endInput, { target: { value: "20261103" } });
+
+    const submitBtn = screen.getByRole("button", { name: /建立旅程|Create Trip/i });
+    fireEvent.click(submitBtn);
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(createFullTrip).toHaveBeenCalledTimes(1);
+    });
+
+    // Simulate Realtime INSERT firing mid-creation; refreshList() must skip while creatingTripRef is true
+    expect(globalTripsInsertHandler).not.toBeNull();
+    act(() => {
+      globalTripsInsertHandler!({ eventType: "INSERT", new: { id: "trip-new-1" } });
+    });
+    expect(vi.mocked(getTrips).mock.calls.length).toBe(initialGetTripsCalls);
+
+    await act(async () => {
+      resolveCreateFullTrip();
+    });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips/trip-new-1");
+    });
+
+    // Navigate back to the trips list and verify only one trip card exists for trip-new-1
+    const backBtn = document.querySelector("nav button") as HTMLButtonElement;
+    expect(backBtn).not.toBeNull();
+    fireEvent.click(backBtn);
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/trips");
+      expect(screen.getAllByRole("heading", { name: "Taipei Weekend" })).toHaveLength(1);
     });
   });
 });
