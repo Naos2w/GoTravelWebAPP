@@ -175,6 +175,8 @@ const App: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [postCreateGuideStep, setPostCreateGuideStep] = useState<PostCreateGuideStep>("idle");
   const [guideFlight, setGuideFlight] = useState<FlightInfo | null>(null);
+  const [guideTargetFlightId, setGuideTargetFlightId] = useState<string | null>(null);
+  const [dismissedPricePromptTripIds, setDismissedPricePromptTripIds] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("theme") as Theme) || "light"
   );
@@ -1046,6 +1048,18 @@ const App: React.FC = () => {
     });
   }, [currentTrip]);
 
+  // The user's own flight that still has no price: drives the persistent "add price" reminder.
+  const myUnpricedFlight =
+    !isGuest && currentTrip && user
+      ? currentTrip.flights?.find((f) => f.user_id === user.id && (!f.price || f.price <= 0))
+      : undefined;
+  const showMobilePriceCta =
+    (postCreateGuideStep === "itinerary-hint" && activeTab === "itinerary") ||
+    (Boolean(myUnpricedFlight) &&
+      activeTab !== "flights" &&
+      !!currentTrip &&
+      !dismissedPricePromptTripIds[currentTrip.id]);
+
   // Guided post-creation flow only lives as long as its screen: leaving it ends the guide.
   useEffect(() => {
     if (postCreateGuideStep === "idle" || postCreateGuideStep === "issuing") return;
@@ -1443,8 +1457,17 @@ const App: React.FC = () => {
   };
 
   const handleGuideGoToPrice = () => {
+    setGuideTargetFlightId(myUnpricedFlight?.id ?? guideFlight?.id ?? null);
     setPostCreateGuideStep("edit-price");
     selectTabWithDirection("flights");
+  };
+
+  const handleDismissPricePrompt = () => {
+    setPostCreateGuideStep("idle");
+    if (currentTrip) {
+      const tripId = currentTrip.id;
+      setDismissedPricePromptTripIds((prev) => ({ ...prev, [tripId]: true }));
+    }
   };
 
   const handleGuidedPriceSaved = () => {
@@ -2407,7 +2430,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5 sm:gap-3">
-                  {postCreateGuideStep === "itinerary-hint" && activeTab === "itinerary" && (
+                  {showMobilePriceCta && (
                     <div
                       data-testid="mobile-itinerary-price-cta"
                       className="sm:hidden flex items-center gap-0.5 animate-in fade-in duration-300"
@@ -2422,7 +2445,7 @@ const App: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPostCreateGuideStep("idle")}
+                        onClick={handleDismissPricePrompt}
                         aria-label={t("guideBannerDismiss")}
                         className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full cursor-pointer"
                       >
@@ -2894,7 +2917,7 @@ const App: React.FC = () => {
                       onUpdate={updateCurrentTrip}
                       isGuest={isGuest}
                       autoEditFlightId={
-                        postCreateGuideStep === "edit-price" ? guideFlight?.id ?? null : null
+                        postCreateGuideStep === "edit-price" ? guideTargetFlightId : null
                       }
                       onGuidedPriceSaved={handleGuidedPriceSaved}
                     />

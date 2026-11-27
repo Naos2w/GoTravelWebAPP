@@ -539,6 +539,85 @@ describe("App Component (Smoke Test)", () => {
     });
   });
 
+  const openUnpricedTrip = async () => {
+    const { supabase, getTrips, getTripById } = await import("../../services/storageService");
+    const trip = {
+      id: "trip-pill",
+      user_id: "user-pill-1",
+      name: "Sapporo Trip",
+      destination: "CTS",
+      startDate: "2026-10-01",
+      endDate: "2026-10-04",
+      expenses: [],
+      checklist: [],
+      itinerary: [{ date: "2026-10-01", items: [] }],
+      flights: [
+        {
+          id: "flight-pill-1",
+          user_id: "user-pill-1",
+          traveler_name: "Pill Traveler",
+          price: 0,
+          currency: "TWD",
+          cabinClass: "Economy",
+          outbound: {
+            airline: "EVA Air",
+            airlineID: "BR",
+            flightNumber: "BR108",
+            departureTime: "2026-10-01T08:30",
+            arrivalTime: "2026-10-01T12:10",
+            departureAirport: "TPE",
+            arrivalAirport: "CTS",
+          },
+          baggage: { carryOn: { count: 1, weight: "7kg" }, checked: { count: 1, weight: "23kg" } },
+        },
+      ],
+    };
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: "user-pill-1",
+            email: "pill@example.com",
+            user_metadata: { full_name: "Pill Traveler" },
+          },
+        } as any,
+      },
+      error: null,
+    });
+    vi.mocked(getTrips).mockResolvedValue([trip as any]);
+    vi.mocked(getTripById).mockResolvedValue(trip as any);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Sapporo Trip")).toBeInTheDocument());
+    act(() => {
+      screen.getByText("Sapporo Trip").click();
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Mobile Navigation")).toBeInTheDocument();
+    });
+  };
+
+  it("shows the mobile price pill for an existing unpriced flight (no fresh creation) and jumps to price edit", async () => {
+    await openUnpricedTrip();
+    const pill = await screen.findByTestId("mobile-itinerary-price-cta");
+    expect(pill.className).toContain("sm:hidden");
+
+    fireEvent.click(within(pill).getByRole("button", { name: /填機票金額|Add price/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("flight-price-input")).toBeInTheDocument();
+    });
+    expect(document.activeElement).toBe(screen.getByTestId("flight-price-input"));
+    expect(screen.queryByTestId("mobile-itinerary-price-cta")).not.toBeInTheDocument();
+  });
+
+  it("dismisses the mobile price pill cleanly with the close button", async () => {
+    await openUnpricedTrip();
+    const pill = await screen.findByTestId("mobile-itinerary-price-cta");
+    fireEvent.click(within(pill).getByRole("button", { name: /關閉提示|Dismiss tip/i }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("mobile-itinerary-price-cta")).not.toBeInTheDocument();
+    });
+  });
+
   it("runs guided post-flight-creation flow: BoardingPassIssueModal -> Itinerary banner -> Flights price edit -> Overview", async () => {
     const { supabase, getTrips, getTripById, createFullTrip } = await import("../../services/storageService");
     const { fetchTdxFlights } = await import("../../services/tdxService");

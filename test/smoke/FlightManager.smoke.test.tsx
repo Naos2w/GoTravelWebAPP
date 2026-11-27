@@ -172,4 +172,52 @@ describe("FlightManager & BoardingPass Smoke Tests", () => {
     });
     expect(onGuidedPriceSaved).toHaveBeenCalledTimes(1);
   });
+
+  const unpricedTrip = (price: number): Trip => ({
+    ...mockTrip,
+    flights: [{ ...mockTrip.flights![0], price }],
+  });
+
+  it("shows the missing-price banner for an unpriced own flight; CTA opens edit mode and focuses price", () => {
+    render(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(0)} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const banner = screen.getByTestId("flight-missing-price-banner");
+    expect(banner.textContent).toMatch(/尚未填寫機票價格|Flight price not set yet/);
+    fireEvent.click(screen.getByTestId("flight-missing-price-cta"));
+
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+    const priceInput = screen.getByTestId("flight-price-input") as HTMLInputElement;
+    expect(document.activeElement).toBe(priceInput);
+  });
+
+  it("hides the missing-price banner when price > 0, for guests, and for other users' flights", () => {
+    const { rerender } = render(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(18000)} currentUser={mockUser} onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+
+    rerender(
+      <LocalizationProvider>
+        <FlightManager trip={unpricedTrip(0)} currentUser={mockUser} isGuest onUpdate={vi.fn()} />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+
+    rerender(
+      <LocalizationProvider>
+        <FlightManager
+          trip={unpricedTrip(0)}
+          currentUser={{ ...mockUser, id: "someone-else" }}
+          onUpdate={vi.fn()}
+        />
+      </LocalizationProvider>
+    );
+    expect(screen.queryByTestId("flight-missing-price-banner")).toBeNull();
+  });
 });

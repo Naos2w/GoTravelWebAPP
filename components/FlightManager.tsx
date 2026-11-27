@@ -1348,12 +1348,21 @@ export const FlightManager: React.FC<Props> = ({
     startEdit(target);
   }, [autoEditFlightId, trip.flights]);
 
+  const [focusPriceOnEdit, setFocusPriceOnEdit] = useState(false);
+  const shouldFocusPrice = isGuidedEdit || (focusPriceOnEdit && !!editingFlightId);
+
   useEffect(() => {
-    if (!isGuidedEdit) return;
+    if (!shouldFocusPrice) return;
     const input = priceInputRef.current;
     input?.focus();
     input?.scrollIntoView?.({ block: "center", behavior: "smooth" });
-  }, [isGuidedEdit]);
+    setFocusPriceOnEdit(false);
+  }, [shouldFocusPrice]);
+
+  const myUnpricedFlight =
+    !isGuest && currentUser
+      ? trip.flights?.find((f) => f.user_id === currentUser.id && (!f.price || f.price <= 0))
+      : undefined;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12 px-4 sm:px-0">
@@ -1390,6 +1399,32 @@ export const FlightManager: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {!editingFlightId && myUnpricedFlight && (
+        <div
+          role="status"
+          data-testid="flight-missing-price-banner"
+          className="flex items-center gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-3 -mt-4"
+        >
+          <span className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400">
+            <DollarSign size={16} />
+          </span>
+          <p className="flex-1 min-w-0 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
+            {t("flightMissingPriceText")}
+          </p>
+          <button
+            type="button"
+            data-testid="flight-missing-price-cta"
+            onClick={() => {
+              setFocusPriceOnEdit(true);
+              startEdit(myUnpricedFlight);
+            }}
+            className="shrink-0 bg-primary text-white text-xs font-black px-4 py-2 rounded-xl shadow-md shadow-primary/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+          >
+            {t("flightMissingPriceCta")}
+          </button>
+        </div>
+      )}
 
       {editingFlightId && tempFlightData ? (
         <div className="space-y-6 animate-in fade-in duration-500 ios27-card p-6 sm:p-8 rounded-[36px] shadow-ios relative overflow-hidden">
