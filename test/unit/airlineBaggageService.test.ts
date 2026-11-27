@@ -4,7 +4,7 @@ import {
   isSameBaggage,
   inferAirlineId,
   formatBaggageSummary,
-} from "../../services/airlineBaggageService";
+} from "../../src/features/flights/services/airlineBaggageService";
 
 describe("airlineBaggageService", () => {
   describe("getDefaultBaggage", () => {

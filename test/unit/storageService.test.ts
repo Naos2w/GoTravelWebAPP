@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as storageService from "../../services/storageService";
+import * as storageService from "../../src/shared/services/storageService";
 import {
   isValidUUID,
   formatDateStr,
@@ -30,15 +30,15 @@ import {
   findUserIdByEmail,
   supabase,
   DbTripRow,
-} from "../../services/storageService";
-import * as supabaseClientRepo from "../../services/repos/supabaseClient";
-import * as mappersRepo from "../../services/repos/mappers";
-import * as itineraryRepo from "../../services/repos/itineraryRepo";
-import * as expenseRepo from "../../services/repos/expenseRepo";
-import * as checklistRepo from "../../services/repos/checklistRepo";
-import * as flightRepo from "../../services/repos/flightRepo";
-import * as tripRepo from "../../services/repos/tripRepo";
-import { Currency, Expense, FlightInfo, ItineraryItem } from "../../types";
+} from "../../src/shared/services/storageService";
+import * as supabaseClientRepo from "../../src/shared/services/repos/supabaseClient";
+import * as mappersRepo from "../../src/shared/services/repos/mappers";
+import * as itineraryRepo from "../../src/shared/services/repos/itineraryRepo";
+import * as expenseRepo from "../../src/shared/services/repos/expenseRepo";
+import * as checklistRepo from "../../src/shared/services/repos/checklistRepo";
+import * as flightRepo from "../../src/shared/services/repos/flightRepo";
+import * as tripRepo from "../../src/shared/services/repos/tripRepo";
+import { Currency, Expense, FlightInfo, ItineraryItem } from "../../src/types";
 
 describe("storageService", () => {
   beforeEach(() => {

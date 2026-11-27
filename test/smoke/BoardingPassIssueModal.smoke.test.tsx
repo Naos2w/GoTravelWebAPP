@@ -7,9 +7,9 @@ import {
   PRINT_DURATION_MS,
   STAGGER_MS,
   getTotalIssueDurationMs,
-} from "../../components/BoardingPassIssueModal";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Currency, FlightInfo } from "../../types";
+} from "../../src/features/flights/BoardingPassIssueModal";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Currency, FlightInfo } from "../../src/types";
 
 const oneWayFlight: FlightInfo = {
   id: "flight-1",

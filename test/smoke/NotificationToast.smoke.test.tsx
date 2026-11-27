@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render, screen, act } from "@testing-library/react";
-import { NotificationToast } from "../../components/NotificationToast";
+import { NotificationToast } from "../../src/shared/components/NotificationToast";
 
 describe("NotificationToast (Smoke Test)", () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@ import {
   parseRawCoordinates,
   parseGoogleMapsUrl,
   resolveLocationInput,
-} from "../../services/mapUrlService";
+} from "../../src/features/itinerary/services/mapUrlService";
 
 describe("mapUrlService (Unit Tests)", () => {
   describe("isGoogleMapsUrl", () => {

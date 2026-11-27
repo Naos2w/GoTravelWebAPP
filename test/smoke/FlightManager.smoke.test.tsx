@@ -1,10 +1,10 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { FlightManager } from "../../components/FlightManager";
-import { BoardingPass } from "../../components/BoardingPass";
-import { LocalizationProvider } from "../../contexts/LocalizationContext";
-import { Trip, User, FlightSegment, Currency } from "../../types";
+import { FlightManager } from "../../src/features/flights/FlightManager";
+import { BoardingPass } from "../../src/features/flights/BoardingPass";
+import { LocalizationProvider } from "../../src/shared/contexts/LocalizationContext";
+import { Trip, User, FlightSegment, Currency } from "../../src/types";
 
 describe("FlightManager & BoardingPass Smoke Tests", () => {
   const mockUser: User = {

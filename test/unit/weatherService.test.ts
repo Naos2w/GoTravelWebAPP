@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { classifyWmoCode, fetchDayWeather, clearWeatherCache } from '../../services/weatherService';
+import { classifyWmoCode, fetchDayWeather, clearWeatherCache } from '../../src/features/itinerary/services/weatherService';
 
 describe('weatherService', () => {
   beforeEach(() => {

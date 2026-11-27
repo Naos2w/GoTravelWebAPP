@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DateTimeUtils } from "../../services/dateTimeUtils";
+import { DateTimeUtils } from "../../src/shared/services/dateTimeUtils";
 
 describe("DateTimeUtils", () => {
   describe("formatTime24", () => {

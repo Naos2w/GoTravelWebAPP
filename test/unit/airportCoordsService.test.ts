@@ -4,7 +4,7 @@ import {
   getAirportCoords,
   resolveAirportCoordsFromPlaceName,
   enrichAirportCoords,
-} from "../../services/airportCoordsService";
+} from "../../src/features/flights/services/airportCoordsService";
 
 describe("airportCoordsService", () => {
   it("contains at least 70 major international airports with valid WGS-84 coordinates", () => {
