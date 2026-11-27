@@ -91,6 +91,87 @@ const layoverFlight: FlightInfo = {
   inbound: roundTripFlight.inbound,
 };
 
+const fourTicketLayoverFlight: FlightInfo = {
+  ...oneWayFlight,
+  id: "flight-4-leg-layover",
+  outbound: {
+    airline: "EVA Air",
+    airlineID: "BR",
+    airlineNameZh: "長榮航空",
+    airlineNameEn: "EVA Air",
+    flightNumber: "BR010 + AC8225",
+    departureTime: "2026-12-01T23:55",
+    arrivalTime: "2026-12-02T14:20",
+    departureAirport: "TPE",
+    arrivalAirport: "YZF",
+    status: "Scheduled",
+    segments: [
+      {
+        airline: "EVA Air",
+        airlineID: "BR",
+        airlineNameZh: "長榮航空",
+        airlineNameEn: "EVA Air",
+        flightNumber: "BR010",
+        departureTime: "2026-12-01T23:55",
+        arrivalTime: "2026-12-01T18:25",
+        departureAirport: "TPE",
+        arrivalAirport: "YVR",
+        status: "Scheduled",
+      },
+      {
+        airline: "Air Canada",
+        airlineID: "AC",
+        airlineNameZh: "加拿大航空",
+        airlineNameEn: "Air Canada",
+        flightNumber: "AC8225",
+        departureTime: "2026-12-02T09:10",
+        arrivalTime: "2026-12-02T14:20",
+        departureAirport: "YVR",
+        arrivalAirport: "YZF",
+        status: "Scheduled",
+      },
+    ],
+  },
+  inbound: {
+    airline: "EVA Air",
+    airlineID: "BR",
+    airlineNameZh: "長榮航空",
+    airlineNameEn: "EVA Air",
+    flightNumber: "AC8226 + BR009",
+    departureTime: "2026-12-08T15:00",
+    arrivalTime: "2026-12-10T06:00",
+    departureAirport: "YZF",
+    arrivalAirport: "TPE",
+    status: "Scheduled",
+    segments: [
+      {
+        airline: "Air Canada",
+        airlineID: "AC",
+        airlineNameZh: "加拿大航空",
+        airlineNameEn: "Air Canada",
+        flightNumber: "AC8226",
+        departureTime: "2026-12-08T15:00",
+        arrivalTime: "2026-12-08T18:10",
+        departureAirport: "YZF",
+        arrivalAirport: "YVR",
+        status: "Scheduled",
+      },
+      {
+        airline: "EVA Air",
+        airlineID: "BR",
+        airlineNameZh: "長榮航空",
+        airlineNameEn: "EVA Air",
+        flightNumber: "BR009",
+        departureTime: "2026-12-09T01:05",
+        arrivalTime: "2026-12-10T06:00",
+        departureAirport: "YVR",
+        arrivalAirport: "TPE",
+        status: "Scheduled",
+      },
+    ],
+  },
+};
+
 describe("BoardingPassIssueModal Smoke Tests", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -339,5 +420,175 @@ describe("BoardingPassIssueModal Smoke Tests", () => {
       vi.advanceTimersByTime(10000);
     });
     expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it("smoothly auto-scrolls desktop and mobile containers to follow tickets 2, 3, and 4 on a 4-ticket layover", () => {
+    const origScrollIntoView = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollIntoView"
+    );
+    const scrolledTargets: Array<{ el: HTMLElement; arg: unknown }> = [];
+    const scrollIntoViewSpy = vi.fn(function (this: HTMLElement, arg?: unknown) {
+      scrolledTargets.push({ el: this, arg });
+    });
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      writable: true,
+      value: scrollIntoViewSpy,
+    });
+
+    try {
+      render(
+        <LocalizationProvider>
+          <BoardingPassIssueModal flight={fourTicketLayoverFlight} onContinue={vi.fn()} />
+        </LocalizationProvider>
+      );
+
+      const desktopPasses = screen.getAllByTestId("boarding-pass-desktop");
+      const mobilePasses = screen.getAllByTestId("boarding-pass-mobile");
+      expect(desktopPasses).toHaveLength(4);
+      expect(mobilePasses).toHaveLength(4);
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("1 / 4");
+      // No scroll on ticket 1 mount
+      expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+      // Ticket 2 (YVR -> YZF)
+      act(() => {
+        vi.advanceTimersByTime(STAGGER_MS);
+      });
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("2 / 4");
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(2);
+      expect(scrolledTargets[0].el.contains(desktopPasses[1])).toBe(true);
+      expect(scrolledTargets[1].el.contains(mobilePasses[1])).toBe(true);
+      expect(scrolledTargets[0].arg).toEqual({
+        behavior: "smooth",
+        block: "end",
+        inline: "nearest",
+      });
+
+      // Ticket 3 (YZF -> YVR)
+      act(() => {
+        vi.advanceTimersByTime(STAGGER_MS);
+      });
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("3 / 4");
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(4);
+      expect(scrolledTargets[2].el.contains(desktopPasses[2])).toBe(true);
+      expect(scrolledTargets[3].el.contains(mobilePasses[2])).toBe(true);
+
+      // Ticket 4 (YVR -> TPE)
+      act(() => {
+        vi.advanceTimersByTime(STAGGER_MS);
+      });
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("4 / 4");
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(6);
+      expect(scrolledTargets[4].el.contains(desktopPasses[3])).toBe(true);
+      expect(scrolledTargets[5].el.contains(mobilePasses[3])).toBe(true);
+
+      // After printing finishes, no further auto-scroll fires
+      act(() => {
+        vi.advanceTimersByTime(PRINT_DURATION_MS);
+      });
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("✓");
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(6);
+    } finally {
+      if (origScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", origScrollIntoView);
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
+  });
+
+  it("stops auto-scrolling once the user manually interacts with the pass container", () => {
+    const origScrollIntoView = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollIntoView"
+    );
+    const scrollIntoViewSpy = vi.fn();
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      writable: true,
+      value: scrollIntoViewSpy,
+    });
+
+    try {
+      render(
+        <LocalizationProvider>
+          <BoardingPassIssueModal flight={fourTicketLayoverFlight} onContinue={vi.fn()} />
+        </LocalizationProvider>
+      );
+
+      // Ticket 2 triggers auto-scroll (desktop + mobile)
+      act(() => {
+        vi.advanceTimersByTime(STAGGER_MS);
+      });
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(2);
+
+      // User scrolls manually to inspect an earlier ticket
+      fireEvent.wheel(screen.getByTestId("boarding-pass-scroll-desktop"));
+
+      // Tickets 3 and 4 print without hijacking the user's scroll position
+      act(() => {
+        vi.advanceTimersByTime(STAGGER_MS * 2);
+      });
+      expect(screen.getByTestId("boarding-pass-status").textContent).toContain("4 / 4");
+      expect(scrollIntoViewSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      if (origScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", origScrollIntoView);
+      } else {
+        delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      }
+    }
+  });
+
+  it("handles missing scrollIntoView in jsdom safely and falls back to container.scrollTo when available", () => {
+    const origScrollIntoView = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "scrollIntoView"
+    );
+    const origScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollTo");
+
+    delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollToSpy,
+    });
+
+    try {
+      render(
+        <LocalizationProvider>
+          <BoardingPassIssueModal flight={fourTicketLayoverFlight} onContinue={vi.fn()} />
+        </LocalizationProvider>
+      );
+
+      expect(() => {
+        for (let step = 0; step < 3; step++) {
+          act(() => {
+            vi.advanceTimersByTime(STAGGER_MS);
+          });
+        }
+      }).not.toThrow();
+
+      // 3 subsequent tickets x 2 containers (desktop + mobile)
+      expect(scrollToSpy).toHaveBeenCalledTimes(6);
+      expect(scrollToSpy).toHaveBeenCalledWith({
+        top: expect.any(Number),
+        behavior: "smooth",
+      });
+    } finally {
+      if (origScrollIntoView) {
+        Object.defineProperty(HTMLElement.prototype, "scrollIntoView", origScrollIntoView);
+      }
+      if (origScrollTo) {
+        Object.defineProperty(HTMLElement.prototype, "scrollTo", origScrollTo);
+      } else {
+        delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+      }
+    }
   });
 });
