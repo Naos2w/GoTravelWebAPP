@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowRight, Briefcase, CheckCircle2, Luggage, Plane } from 'lucide-react';
 import { BaggageInfo, FlightInfo, FlightSegment } from '../types';
 import { DateTimeUtils } from '../services/dateTimeUtils';
@@ -364,11 +365,11 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
   const metalSlot = (horizontal: boolean) => (
     <div
       aria-hidden="true"
-      className={`shrink-0 bg-gradient-to-b from-slate-300 via-slate-100 to-slate-400 dark:from-slate-600 dark:via-slate-400 dark:to-slate-700 shadow-lg rounded-full relative z-10 ${
+      className={`shrink-0 border shadow-inner rounded-full relative z-10 ${
         horizontal
-          ? 'w-3 self-stretch min-h-[140px] -mr-1'
-          : 'h-3 w-[320px] max-w-full -mb-1'
-      }`}
+          ? 'bg-gradient-to-b w-3 self-stretch min-h-[140px] -mr-1'
+          : 'bg-gradient-to-r h-3 w-[320px] max-w-full -mb-1'
+      } from-slate-200 via-white to-slate-200 border-slate-300/80 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 dark:border-white/20`}
     >
       <div
         className={`absolute bg-black/70 rounded-full ${
@@ -378,13 +379,13 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
     </div>
   );
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
       aria-label={t('bpIssued')}
       data-testid="boarding-pass-issue-modal"
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 backdrop-blur-md p-4 animate-in fade-in duration-300"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#F5F5F7]/90 dark:bg-[#060709]/85 backdrop-blur-2xl p-4 animate-in fade-in duration-300"
       style={{
         ['--bp-duration' as any]: `${effectiveDurationMs}ms`,
         ['--bp-print-duration' as any]: `${PRINT_DURATION_MS}ms`,
@@ -398,8 +399,8 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
             aria-live="polite"
             className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-black tracking-wide border transition-colors duration-300 ${
               allPrinted
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/35'
-                : 'bg-white/10 text-white border-white/20'
+                ? 'bg-emerald-500/12 text-emerald-700 border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/25'
+                : 'bg-sky-500/12 text-sky-700 border-sky-500/25 dark:bg-sky-500/15 dark:text-sky-300 dark:border-sky-400/25'
             }`}
           >
             {allPrinted ? (
@@ -409,7 +410,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
             )}
             <span>{statusText}</span>
           </div>
-          <h2 className="text-xl font-black text-white tracking-tight">
+          <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
             {allPrinted ? t('bpIssued') : t('bpIssuing')}
           </h2>
         </div>
@@ -433,14 +434,14 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
         </div>
 
         <div className="w-full max-w-sm space-y-3 shrink-0">
-          <div className="h-1 rounded-full bg-white/15 overflow-hidden" aria-hidden="true">
+          <div className="h-1 rounded-full bg-slate-200 dark:bg-white/15 overflow-hidden" aria-hidden="true">
             <div className="bp-progress h-full w-full rounded-full bg-primary" />
           </div>
           <button
             type="button"
             data-testid="boarding-pass-continue"
             onClick={finish}
-            className="w-full bg-white text-slate-900 py-3.5 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+            className="w-full bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 py-3.5 rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
             autoFocus
           >
             {previewMode ? t('bpClosePreview') : t('bpViewItinerary')}
@@ -449,4 +450,7 @@ export const BoardingPassIssueModal: React.FC<Props> = ({ flight, onContinue, du
       </div>
     </div>
   );
+
+  // Portal to <body> so ancestor transforms (tab swipe wrapper) can't trap `fixed` and the dock can't overlap.
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

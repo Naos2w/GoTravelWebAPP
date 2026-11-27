@@ -139,6 +139,21 @@ describe("BoardingPassIssueModal Smoke Tests", () => {
     expect(screen.getByTestId("boarding-pass-status").textContent).toContain("✓");
   });
 
+  it("portals into document.body with light/dark glass backdrop classes", () => {
+    const { container } = render(
+      <LocalizationProvider>
+        <BoardingPassIssueModal flight={roundTripFlight} onContinue={vi.fn()} />
+      </LocalizationProvider>
+    );
+
+    const modal = screen.getByTestId("boarding-pass-issue-modal");
+    expect(container.contains(modal)).toBe(false);
+    expect(modal.parentElement).toBe(document.body);
+    expect(modal.className).toContain("bg-[#F5F5F7]/90");
+    expect(modal.className).toContain("dark:bg-[#060709]/85");
+    expect(modal.className).toContain("z-[9999]");
+  });
+
   it("renders carry-on (Briefcase) and checked (Luggage) icon badges on desktop and mobile passes", () => {
     render(
       <LocalizationProvider>
