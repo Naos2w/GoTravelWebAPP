@@ -23,8 +23,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   return (
     <>
       <div className="min-h-[100dvh] flex flex-col justify-between p-6 sm:p-10 relative overflow-hidden aviation-grid-bg">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[640px] bg-primary/15 dark:bg-primary/20 rounded-full blur-[140px] -z-10 pointer-events-none" />
-
         <div className="flex-1 flex items-center justify-center w-full max-w-6xl mx-auto py-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center w-full animate-in fade-in slide-in-from-bottom-8 duration-700">
             {/* Left Column: Hero Copy & Auth Actions */}
@@ -48,7 +46,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   type="button"
                   onClick={onGoogleLogin}
                   disabled={isLoggingIn}
-                  className="w-full sm:w-auto bg-primary text-white px-7 py-4 rounded-2xl font-bold text-base shadow-xl shadow-primary/25 hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 whitespace-nowrap shrink-0 cursor-pointer"
+                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white px-7 py-4 rounded-2xl font-bold text-base shadow-md hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   {isLoggingIn ? (
                     <>
@@ -81,8 +79,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Right Column: Flighty x Apple Wallet Showcase Card */}
             <div className="lg:col-span-6 w-full max-w-md mx-auto lg:max-w-none">
               <div className="ios27-card rounded-[28px] p-6 sm:p-7 relative overflow-hidden space-y-5">
-                <div className="absolute -right-12 -top-12 w-44 h-44 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
-
                 {/* Top Aviation Pass Header */}
                 <div className="flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.08] pb-4 relative z-10">
                   <div className="flex items-center gap-2.5">
@@ -185,7 +181,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <button
             type="button"
             onClick={onOpenPendingTripLogin}
-            className="bg-primary text-white text-xs font-black px-4 py-2 rounded-xl hover:scale-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0 ml-2 shadow-md shadow-primary/20"
+            className="bg-primary hover:bg-primary/90 text-white text-xs font-black px-4 py-2 rounded-xl hover:scale-105 active:scale-95 transition-all cursor-pointer whitespace-nowrap shrink-0 ml-2 shadow-sm"
           >
             {t("login")}
           </button>

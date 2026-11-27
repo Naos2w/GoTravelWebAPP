@@ -168,7 +168,6 @@ export const TripCard: React.FC<TripCardProps> = ({
         )} p-6 flex flex-col justify-between transition-transform duration-500`}
       >
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
-        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/15 blur-2xl pointer-events-none" />
         <div
           aria-hidden="true"
           className="absolute right-4 top-8 text-6xl font-mono font-black tracking-tighter text-white/[0.12] select-none pointer-events-none leading-none"
@@ -208,8 +207,8 @@ export const TripCard: React.FC<TripCardProps> = ({
               data-testid={isOwner ? "trip-delete-btn" : "trip-leave-btn"}
               className={`w-9 h-9 rounded-full ${
                 isOwner
-                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/40"
-                  : "bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-600/40"
+                  ? "bg-rose-600 hover:bg-rose-700 text-white shadow-md"
+                  : "bg-amber-600 hover:bg-amber-700 text-white shadow-md"
               } flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer animate-in zoom-in-75 fade-in ring-2 ring-white/90 dark:ring-[#060709]`}
             >
               {isOwner ? <Trash2 size={16} /> : <LogOut size={16} />}

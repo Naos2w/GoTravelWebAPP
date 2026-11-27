@@ -233,6 +233,8 @@ describe("BoardingPassIssueModal Smoke Tests", () => {
     expect(modal.className).toContain("bg-[#F5F5F7]/90");
     expect(modal.className).toContain("dark:bg-[#060709]/85");
     expect(modal.className).toContain("z-[9999]");
+    expect(screen.getByTestId("boarding-pass-scroll-desktop").className).toContain("no-scrollbar");
+    expect(screen.getByTestId("boarding-pass-scroll-mobile").className).toContain("no-scrollbar");
   });
 
   it("renders carry-on (Briefcase) and checked (Luggage) icon badges on desktop and mobile passes", () => {

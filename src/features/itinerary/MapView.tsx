@@ -71,12 +71,11 @@ export const createCustomIcon = (index: number, type: string, isActive = false) 
   const isFlight = type === 'Flight';
 
   const bgClass = isFlight ? 'bg-blue-500' : isFood ? 'bg-orange-500' : 'bg-primary';
-  const shadowClass = isFlight ? 'shadow-blue-500/40' : isFood ? 'shadow-orange-500/40' : 'shadow-primary/40';
   const haloStyle = isFlight
-    ? 'background:rgba(59,130,246,0.16);border:1.5px solid rgba(59,130,246,0.45);box-shadow:0 0 14px rgba(59,130,246,0.35);'
+    ? 'background:rgba(59,130,246,0.14);border:1.5px solid rgba(59,130,246,0.45);'
     : isFood
-      ? 'background:rgba(249,115,22,0.16);border:1.5px solid rgba(249,115,22,0.45);box-shadow:0 0 14px rgba(249,115,22,0.35);'
-      : 'background:rgba(0,122,255,0.16);border:1.5px solid rgba(0,122,255,0.45);box-shadow:0 0 14px rgba(0,122,255,0.35);';
+      ? 'background:rgba(249,115,22,0.14);border:1.5px solid rgba(249,115,22,0.45);'
+      : 'background:rgba(0,122,255,0.14);border:1.5px solid rgba(0,122,255,0.45);';
 
   const outerSize = isActive ? 44 : 28;
   const circleSize = isActive ? 32 : 28;
@@ -85,7 +84,7 @@ export const createCustomIcon = (index: number, type: string, isActive = false) 
   const html = `
     <div class="group cursor-pointer transition-transform hover:scale-105" style="position:relative;width:${outerSize}px;height:${outerSize}px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
       ${isActive ? `<div style="position:absolute;inset:0;border-radius:9999px;pointer-events:none;${haloStyle}"></div>` : ''}
-      <div class="${bgClass} border-2 border-white dark:border-slate-900 shadow-lg ${shadowClass}" style="position:relative;width:${circleSize}px;height:${circleSize}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
+      <div class="${bgClass} border-2 border-white dark:border-slate-900 shadow-md" style="position:relative;width:${circleSize}px;height:${circleSize}px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0;margin:0;box-sizing:border-box;">
         <span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#ffffff;font-size:${isActive ? '12px' : '11px'};font-weight:800;line-height:1;padding:0;margin:0;text-align:center;font-variant-numeric:tabular-nums;">${index + 1}</span>
       </div>
     </div>

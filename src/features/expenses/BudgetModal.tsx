@@ -46,7 +46,7 @@ export const BudgetModal: React.FC<BudgetModalProps> = ({
         <div className="flex gap-3">
           <button
             onClick={() => onSave(val)}
-            className="flex-1 bg-primary text-white py-4 rounded-2xl font-black shadow-lg shadow-primary/20 transition-transform active:scale-95"
+            className="flex-1 bg-primary hover:bg-primary/90 text-white py-4 rounded-2xl font-black shadow-sm transition-transform active:scale-95"
           >
             {t("save")}
           </button>

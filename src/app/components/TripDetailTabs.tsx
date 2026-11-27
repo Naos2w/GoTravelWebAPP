@@ -156,7 +156,7 @@ export const TripDetailTabs: React.FC<TripDetailTabsProps> = ({
                       <button
                         type="button"
                         onClick={onGuideGoToPrice}
-                        className="bg-primary text-white text-xs font-black px-4 py-2 rounded-xl shadow-md shadow-primary/20 active:scale-95 transition-all whitespace-nowrap shrink-0 cursor-pointer"
+                        className="bg-primary hover:bg-primary/90 text-white text-xs font-black px-4 py-2 rounded-xl shadow-sm active:scale-95 transition-all whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         {t("guideBannerCta")}
                       </button>

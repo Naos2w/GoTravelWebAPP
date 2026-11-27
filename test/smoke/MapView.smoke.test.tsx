@@ -548,7 +548,8 @@ describe("MapView Component Smoke Test", () => {
     expect(activeIcon.html).not.toMatch(/animate-ping|animate-pulse|animate-pulse-soft/);
     expect(activeIcon.html).toContain("display:flex;align-items:center;justify-content:center;");
     expect(activeIcon.html).toContain("line-height:1;padding:0;margin:0;");
-    expect(activeIcon.html).toContain("box-shadow:0 0 14px");
+    expect(activeIcon.html).toContain("border:1.5px solid rgba(0,122,255,0.45);");
+    expect(activeIcon.html).not.toContain("box-shadow:0 0 14px");
     expect(activeIcon.iconSize).toEqual([44, 44]);
     expect(activeIcon.iconAnchor).toEqual([22, 22]);
 

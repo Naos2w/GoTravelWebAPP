@@ -28,6 +28,7 @@ import {
   Luggage,
   Printer,
   ArrowRight,
+  CalendarPlus,
 } from "lucide-react";
 import { fetchTdxFlights } from "./services/tdxService";
 import { BoardingPass } from "./BoardingPass";
@@ -39,6 +40,7 @@ import { supabase } from "../../shared/services/storageService";
 import { fetchLiveRatesToTwd, getRateToTwd } from "../expenses/services/exchangeRateService";
 import { getDefaultBaggage, isSameBaggage } from "./services/airlineBaggageService";
 import { getAirportCoords } from "./services/airportCoordsService";
+import { buildGoogleCalendarFlightUrl } from "../export/services/calendarChecklistExportService";
 
 interface FlightSelectorModalProps {
   onClose: () => void;
@@ -431,7 +433,7 @@ const FlightSelectorModal: React.FC<FlightSelectorModalProps> = ({
               </div>
               <button
                 onClick={handleConfirm}
-                className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-xl shadow-primary/20 flex items-center justify-center gap-2 transition-transform active:scale-95"
+                className="w-full bg-primary hover:bg-primary/90 text-white py-4 rounded-2xl font-black shadow-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
               >
                 <Check size={20} /> {t("confirm")}
               </button>
@@ -1384,10 +1386,10 @@ export const FlightManager: React.FC<Props> = ({
             )}
             <button
               onClick={handleStartAdd}
-              className={`p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg ${
+              className={`p-3 sm:px-6 sm:py-2.5 rounded-full sm:rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-sm ${
                 hasMyFlight
                   ? "bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-300 hover:bg-slate-200"
-                  : "bg-primary text-white hover:opacity-90 shadow-primary/20"
+                  : "bg-primary text-white hover:bg-primary/90"
               }`}
               title={hasMyFlight ? t("addSegment") : t("addMyFlight")}
             >
@@ -1419,7 +1421,7 @@ export const FlightManager: React.FC<Props> = ({
               setFocusPriceOnEdit(true);
               startEdit(myUnpricedFlight);
             }}
-            className="shrink-0 bg-primary text-white text-xs font-black px-4 py-2 rounded-xl shadow-md shadow-primary/20 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+            className="shrink-0 bg-primary hover:bg-primary/90 text-white text-xs font-black px-4 py-2 rounded-xl shadow-sm active:scale-95 transition-all cursor-pointer whitespace-nowrap"
           >
             {t("flightMissingPriceCta")}
           </button>
@@ -1691,6 +1693,18 @@ export const FlightManager: React.FC<Props> = ({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={buildGoogleCalendarFlightUrl(flight.outbound, trip.name)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="flight-add-gcal-btn"
+                        aria-label={t("exportStudioAddFlightToGcal")}
+                        title={t("exportStudioAddFlightToGcal")}
+                        className="h-9 w-9 sm:w-auto px-0 sm:px-3 justify-center whitespace-nowrap shrink-0 bg-white dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.12] backdrop-blur-md rounded-full text-slate-600 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold opacity-100 sm:opacity-85 sm:group-hover:opacity-100 active:scale-95 cursor-pointer"
+                      >
+                        <CalendarPlus size={13} className="shrink-0" />
+                        <span className="hidden sm:inline">{t("exportStudioAddToGcalShort")}</span>
+                      </a>
                       <button
                         type="button"
                         data-testid="replay-boarding-pass-btn"

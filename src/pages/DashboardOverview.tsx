@@ -165,7 +165,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       <div className="hidden md:grid grid-cols-12 gap-5 min-h-[620px]">
         {/* Destination Hero Card */}
         <div className="col-span-12 lg:col-span-6 rounded-[32px] overflow-hidden relative group ios27-card p-8 lg:p-10 flex flex-col justify-between aviation-grid-bg">
-          <div className="absolute -right-12 -top-12 w-52 h-52 bg-primary/10 dark:bg-primary/15 rounded-full blur-3xl pointer-events-none" />
           {arrivalCode && (
             <div
               aria-hidden="true"

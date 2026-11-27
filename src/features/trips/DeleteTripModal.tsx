@@ -121,10 +121,10 @@ export const DeleteTripModal: React.FC<DeleteTripModalProps> = ({
             onClick={() => onConfirm()}
             disabled={isDeleting}
             data-testid="confirm-trip-action-btn"
-            className={`flex-1 px-5 py-3.5 font-bold rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer text-sm ${
+            className={`flex-1 px-5 py-3.5 font-bold rounded-2xl transition-all shadow-sm active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer text-sm ${
               isOwner
-                ? "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/25"
-                : "bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/25"
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "bg-amber-600 hover:bg-amber-700 text-white"
             }`}
           >
             {isDeleting ? (

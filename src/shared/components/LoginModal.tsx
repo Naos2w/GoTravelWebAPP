@@ -118,13 +118,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         className="bg-white dark:bg-[#121318]/95 backdrop-blur-3xl border border-black/[0.08] dark:border-white/[0.14] w-full max-w-md rounded-[32px] p-7 shadow-2xl flex flex-col gap-6 relative overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Glow ambient background */}
-        <div
-          className={`absolute top-0 right-0 w-36 h-36 ${
-            isSessionExpired ? "bg-amber-500/15" : "bg-primary/10"
-          } rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none`}
-        />
-
         {/* Modal Header */}
         <div className="flex justify-between items-start relative z-10">
           <div>
@@ -179,7 +172,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <button
             onClick={handleGoogleLogin}
             disabled={isGoogleLoading || isEmailSending}
-            className="w-full bg-primary hover:bg-primary/95 text-white py-4 px-6 rounded-2xl font-black text-sm shadow-lg shadow-primary/25 hover:shadow-primary/35 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100 transition-all flex items-center justify-center gap-3 cursor-pointer"
+            className="w-full bg-primary hover:bg-primary/90 text-white py-4 px-6 rounded-2xl font-black text-sm shadow-sm hover:scale-[1.01] active:scale-[0.98] disabled:opacity-60 disabled:hover:scale-100 transition-all flex items-center justify-center gap-3 cursor-pointer"
           >
             {isGoogleLoading ? (
               <>

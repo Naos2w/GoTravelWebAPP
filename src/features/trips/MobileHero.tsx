@@ -98,7 +98,6 @@ export const MobileHero: React.FC<MobileHeroProps> = ({
     <div className="md:hidden space-y-4 mb-6">
       {/* Aviation Destination Hero Card */}
       <div className="w-full rounded-[28px] p-7 shadow-ios ios27-card relative overflow-hidden aviation-grid-bg">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
         {arrivalCode && (
           <div
             aria-hidden="true"

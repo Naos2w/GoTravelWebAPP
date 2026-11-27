@@ -392,8 +392,8 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
             <div 
               className={`h-full transition-all duration-700 ease-out rounded-full ${
                 globalProgress === 100 
-                  ? 'bg-emerald-500 shadow-sm shadow-emerald-500/30' 
-                  : 'bg-primary shadow-sm shadow-primary/30'
+                  ? 'bg-emerald-500' 
+                  : 'bg-primary'
               }`} 
               style={{ width: `${globalProgress}%` }} 
             />
@@ -458,7 +458,7 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
               <button 
                 onClick={addItem} 
                 disabled={!newItemText.trim()}
-                className="h-12 md:h-auto px-7 bg-primary text-white rounded-2xl font-bold shadow-md shadow-primary/25 hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-wider disabled:opacity-50 disabled:scale-100 disabled:shadow-none shrink-0 cursor-pointer"
+                className="h-12 md:h-auto px-7 bg-primary hover:bg-primary/90 text-white rounded-2xl font-bold shadow-sm hover:scale-105 active:scale-95 transition-all text-xs uppercase tracking-wider disabled:opacity-50 disabled:scale-100 disabled:shadow-none shrink-0 cursor-pointer"
               >
                 {labels.confirm}
               </button>
@@ -560,8 +560,8 @@ export const Checklist: React.FC<Props> = ({ trip, currentUser, onUpdate, isGues
                             onClick={(e) => { e.stopPropagation(); toggleItem(item.id); }} 
                             className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-200 shrink-0 cursor-pointer active:scale-75 ${
                               item.isCompleted 
-                              ? 'bg-indigo-500 border-indigo-500 text-white shadow-sm shadow-indigo-500/30 scale-100' 
-                              : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-indigo-500 hover:scale-105'
+                              ? 'bg-primary border-primary text-white shadow-sm scale-100' 
+                              : 'border-slate-300 dark:border-slate-500 text-transparent hover:border-primary hover:scale-105'
                             }`}
                             aria-label="Toggle item"
                           >

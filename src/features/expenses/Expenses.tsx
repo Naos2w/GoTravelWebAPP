@@ -531,10 +531,6 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
       <div className="space-y-6 lg:col-span-1">
         {/* Apple Wallet iOS 27 Liquid Glass Card */}
         <div className="relative overflow-hidden rounded-[28px] ios27-card p-7 sm:p-8 shadow-xl border border-black/[0.06] dark:border-white/[0.14] group aviation-grid-bg">
-          {/* Card Specular Reflection / Glow Effect */}
-          <div className="absolute -right-16 -top-16 w-56 h-56 bg-primary/15 dark:bg-primary/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute right-0 bottom-0 w-40 h-40 bg-indigo-500/10 dark:bg-white/[0.03] rounded-full blur-2xl pointer-events-none" />
-          
           <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-white/70 uppercase tracking-[0.14em]">
@@ -901,7 +897,7 @@ export const Expenses: React.FC<Props> = ({ trip, currentUser, onUpdate, isGuest
               <div className="flex gap-3 pt-2">
                 <button 
                   onClick={saveExpense} 
-                  className="flex-1 bg-primary text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-md shadow-primary/25 hover:scale-[1.01] active:scale-95 transition-all cursor-pointer"
+                  className="flex-1 bg-primary hover:bg-primary/90 text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-wider shadow-sm hover:scale-[1.01] active:scale-95 transition-all cursor-pointer"
                 >
                   {t('save')}
                 </button>

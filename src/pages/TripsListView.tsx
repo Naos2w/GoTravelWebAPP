@@ -203,7 +203,7 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
             <button
               type="button"
               onClick={onOpenCreateForm}
-              className="hidden sm:inline-flex bg-primary hover:bg-primary/95 text-white px-5 py-2.5 rounded-2xl items-center gap-2 font-bold text-sm shadow-lg shadow-primary/25 hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap shrink-0 cursor-pointer"
+              className="hidden sm:inline-flex bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-2xl items-center gap-2 font-bold text-sm shadow-sm hover:scale-105 active:scale-95 transition-all duration-200 whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Plus size={18} /> {t("newTrip")}
             </button>
@@ -337,7 +337,7 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
           <button
             type="button"
             onClick={onOpenCreateForm}
-            className="bg-primary hover:bg-primary/95 text-white px-8 py-4 rounded-2xl font-bold text-sm shadow-xl shadow-primary/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+            className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-bold text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Plus size={18} /> {t("createFirstTrip")}
           </button>
@@ -400,7 +400,7 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
           type="button"
           onClick={onOpenCreateForm}
           aria-label={t("newTrip")}
-          className="w-14 h-14 rounded-full bg-primary text-white shadow-2xl shadow-primary/40 flex items-center justify-center active:scale-90 transition-transform duration-200 cursor-pointer"
+          className="w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-white shadow-lg flex items-center justify-center active:scale-90 transition-transform duration-200 cursor-pointer"
         >
           <Plus size={24} strokeWidth={2.5} />
         </button>
