@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 
 let authStateListener: ((event: string, session: any) => void) | null = null;
 
@@ -636,8 +636,13 @@ describe("App Component (Smoke Test)", () => {
       expect(screen.getByTestId("guide-itinerary-banner")).toBeInTheDocument();
     });
 
-    // 3. Click CTA -> Flights tab auto-opens edit mode and focuses price input
-    fireEvent.click(screen.getByRole("button", { name: /去輸入金額|Enter price/i }));
+    // 3. Mobile header pill renders alongside the desktop banner (jsdom ignores media queries);
+    // clicking it jumps to Flights tab edit mode and focuses the price input
+    const mobileCta = screen.getByTestId("mobile-itinerary-price-cta");
+    expect(mobileCta).toBeInTheDocument();
+    expect(mobileCta.className).toContain("sm:hidden");
+    expect(screen.getByTestId("guide-itinerary-banner").className).toContain("hidden sm:flex");
+    fireEvent.click(within(mobileCta).getByRole("button", { name: /填機票金額|Add price/i }));
     await waitFor(() => {
       expect(screen.getByTestId("guide-price-hint")).toBeInTheDocument();
     });

@@ -2386,7 +2386,7 @@ const App: React.FC = () => {
                   >
                     <ChevronLeft size={20} strokeWidth={2.5} />
                   </button>
-                  <div className="truncate">
+                  <div className="min-w-0 truncate">
                     <div className="text-sm font-bold truncate text-slate-900 dark:text-slate-100">
                       {currentTrip.name}
                     </div>
@@ -2406,7 +2406,30 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="shrink-0 flex items-center gap-1.5 sm:gap-3">
+                  {postCreateGuideStep === "itinerary-hint" && activeTab === "itinerary" && (
+                    <div
+                      data-testid="mobile-itinerary-price-cta"
+                      className="sm:hidden flex items-center gap-0.5 animate-in fade-in duration-300"
+                    >
+                      <button
+                        type="button"
+                        onClick={handleGuideGoToPrice}
+                        className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold rounded-full bg-primary text-white shadow-sm whitespace-nowrap active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Plane size={12} />
+                        {t("guideGoEnterPrice")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPostCreateGuideStep("idle")}
+                        aria-label={t("guideBannerDismiss")}
+                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full cursor-pointer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
                   <div className="hidden md:flex bg-black/[0.04] dark:bg-white/[0.06] p-1 rounded-2xl gap-0.5 border border-black/[0.04] dark:border-white/[0.1] backdrop-blur-2xl shadow-sm">
                     {tabs.map((tab) => {
                       const isActive = activeTab === tab.id;
@@ -2816,7 +2839,7 @@ const App: React.FC = () => {
                         <div
                           role="status"
                           data-testid="guide-itinerary-banner"
-                          className="mb-5 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 animate-in slide-in-from-top-4 fade-in duration-500"
+                          className="mb-5 hidden sm:flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 animate-in slide-in-from-top-4 fade-in duration-500"
                         >
                           <div className="flex-1 min-w-0 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
                             ✈️ {t("guideBannerText")} ➔
