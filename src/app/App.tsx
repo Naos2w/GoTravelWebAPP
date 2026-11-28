@@ -1,6 +1,23 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
 import { Trip, FlightInfo, Theme, Language, User } from "../types";
-import { buildTripShareUrl } from "../shared/services/routerService";
+import {
+  buildTripShareUrl,
+  isPublicContentView,
+} from "../shared/services/routerService";
+import { isValidUUID } from "../shared/services/storageService";
+import { applyPageSeo } from "../shared/services/seoService";
+import {
+  initThirdPartyScripts,
+  trackEvent,
+} from "../shared/services/analyticsService";
+import { createTripFromTemplate } from "../shared/data/demoTemplates";
+import { CookieConsentBanner } from "../shared/components/CookieConsentBanner";
+import { AdSlot } from "../shared/components/AdSlot";
+import {
+  OnboardingTour,
+  isOnboardingTourDone,
+  resetOnboardingTour,
+} from "../shared/components/OnboardingTour";
 import {
   fetchLiveRatesToTwd,
   getRateToTwd,
@@ -31,6 +48,18 @@ import {
 import { TripDetailTabs } from "./components/TripDetailTabs";
 import { LandingPage } from "../pages/LandingPage";
 import { TripsListView } from "../pages/TripsListView";
+
+const GuidePage = React.lazy(() =>
+  import("../pages/GuidePage").then((m) => ({ default: m.GuidePage }))
+);
+const TemplatesPage = React.lazy(() =>
+  import("../pages/TemplatesPage").then((m) => ({ default: m.TemplatesPage }))
+);
+const LegalPage = React.lazy(() =>
+  import("../pages/LegalPages").then((m) => ({ default: m.LegalPage }))
+);
+
+const PENDING_TEMPLATE_STORAGE_KEY = "gotravel_pending_template_id";
 import { BoardingPassIssueModal } from "../features/flights/BoardingPassIssueModal";
 import { NotificationToast } from "../shared/components/NotificationToast";
 import { BudgetModal } from "../features/expenses/BudgetModal";
@@ -122,6 +151,7 @@ const App: React.FC = () => {
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isInstallPwaOpen, setIsInstallPwaOpen] = useState(false);
   const [pendingPwaIntent, setPendingPwaIntent] = useState<PwaLaunchIntent>(
     () => parsePwaLaunchIntent()
@@ -161,6 +191,7 @@ const App: React.FC = () => {
     navigateToTrip,
     navigateToList,
     navigateToLanding,
+    navigateToPublicPage,
     parseCurrentRoute,
     replaceRouteUrl,
   } = useTripRouter({ isLoading, userRef });
@@ -266,7 +297,32 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchLiveRatesToTwd();
+    initThirdPartyScripts();
   }, []);
+
+  useEffect(() => {
+    applyPageSeo(
+      view,
+      language,
+      view === "detail" ? currentTrip?.name : undefined
+    );
+  }, [view, language, currentTrip?.name]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    trackEvent("page_view", { page: view });
+  }, [view, isLoading]);
+
+  useEffect(() => {
+    if (
+      view === "detail" &&
+      currentTrip &&
+      !isOnboardingTourDone() &&
+      postCreateGuideStep === "idle"
+    ) {
+      setIsOnboardingOpen(true);
+    }
+  }, [view, currentTrip?.id, postCreateGuideStep]);
 
   const isCreator = Boolean(
     user &&
@@ -387,6 +443,109 @@ const App: React.FC = () => {
     },
   });
 
+  const applyTemplateForUser = useCallback(
+    async (
+      templateId: string,
+      activeUser: User,
+      source: "demo" | "template"
+    ) => {
+      const rawTrip = createTripFromTemplate(
+        templateId,
+        activeUser.id,
+        activeUser.name,
+        language
+      );
+      const tripId = isValidUUID(rawTrip.id) ? rawTrip.id : crypto.randomUUID();
+      const normalizedTrip: Trip = {
+        ...rawTrip,
+        id: tripId,
+        flights: (rawTrip.flights || []).map((f) => ({
+          ...f,
+          id: isValidUUID(f.id) ? f.id : crypto.randomUUID(),
+        })),
+        checklist: (rawTrip.checklist || []).map((c) => ({
+          ...c,
+          id: isValidUUID(c.id) ? c.id : crypto.randomUUID(),
+          trip_id: tripId,
+        })),
+        expenses: (rawTrip.expenses || []).map((e) => ({
+          ...e,
+          id: isValidUUID(e.id) ? e.id : crypto.randomUUID(),
+          trip_id: tripId,
+        })),
+        itinerary: (rawTrip.itinerary || []).map((day) => ({
+          ...day,
+          items: day.items.map((item) => ({
+            ...item,
+            id: isValidUUID(item.id) ? item.id : crypto.randomUUID(),
+            trip_id: tripId,
+          })),
+        })),
+      };
+      if (source === "demo") {
+        trackEvent("try_demo_trip", { template_id: templateId });
+      }
+      trackEvent("use_template", { template_id: templateId });
+      await handleCreateTripSubmit(normalizedTrip);
+    },
+    [language, handleCreateTripSubmit]
+  );
+
+  const handleUseTemplate = useCallback(
+    async (
+      templateId: string = "tokyo-3d",
+      source: "demo" | "template" = "template"
+    ) => {
+      const activeUser = userRef.current;
+      if (!activeUser) {
+        try {
+          sessionStorage.setItem(PENDING_TEMPLATE_STORAGE_KEY, templateId);
+        } catch {
+          // Ignore storage errors in restricted environments
+        }
+        setLoginReason(null);
+        setIsLoginModalOpen(true);
+        return;
+      }
+      await applyTemplateForUser(templateId, activeUser, source);
+    },
+    [applyTemplateForUser, setIsLoginModalOpen, setLoginReason, userRef]
+  );
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+    let pendingId: string | null = null;
+    try {
+      pendingId = sessionStorage.getItem(PENDING_TEMPLATE_STORAGE_KEY);
+      if (pendingId) {
+        sessionStorage.removeItem(PENDING_TEMPLATE_STORAGE_KEY);
+      }
+    } catch {
+      pendingId = null;
+    }
+    if (!pendingId) return;
+    setIsLoginModalOpen(false);
+    void applyTemplateForUser(
+      pendingId,
+      user,
+      pendingId === "tokyo-3d" ? "demo" : "template"
+    );
+  }, [isLoading, user, applyTemplateForUser, setIsLoginModalOpen]);
+
+  const handleReplayOnboardingTour = useCallback(() => {
+    resetOnboardingTour();
+    if (view === "detail" && currentTrip) {
+      setIsOnboardingOpen(true);
+      return;
+    }
+    if (tripsRef.current.length > 0) {
+      navigateToTrip(tripsRef.current[0].id);
+      setIsOnboardingOpen(true);
+      return;
+    }
+    setIsOnboardingOpen(true);
+  }, [view, currentTrip, navigateToTrip, tripsRef]);
+
   const myUnpricedFlight =
     !isGuest && currentTrip && user
       ? currentTrip.flights?.find(
@@ -471,6 +630,8 @@ const App: React.FC = () => {
       onCloseMenu={() => setProfileMenuOpen(null)}
       onOpenInstallPwa={() => setIsInstallPwaOpen(true)}
       isPwaStandalone={isPwaStandalone}
+      onOpenGuide={() => navigateToPublicPage("guide")}
+      onReplayTour={handleReplayOnboardingTour}
     />
   );
 
@@ -533,7 +694,52 @@ const App: React.FC = () => {
                 setLoginReason("trip_access");
                 setIsLoginModalOpen(true);
               }}
+              onNavigatePublic={navigateToPublicPage}
             />
+          )}
+
+          {isPublicContentView(view) && (
+            <Suspense
+              fallback={
+                <div className="min-h-screen flex items-center justify-center bg-[#F5F6F8] dark:bg-[#0B0D11]">
+                  <Loader2 className="animate-spin text-ns-blue" size={32} />
+                </div>
+              }
+            >
+              {view === "guide" && (
+                <GuidePage
+                  language={language}
+                  onBack={() => (user ? navigateToList() : navigateToLanding())}
+                  onNavigate={navigateToPublicPage}
+                  onReplayTour={handleReplayOnboardingTour}
+                  bottomSlot={<AdSlot slot="guide-bottom" language={language} />}
+                />
+              )}
+              {view === "templates" && (
+                <TemplatesPage
+                  language={language}
+                  onBack={() => (user ? navigateToList() : navigateToLanding())}
+                  onNavigate={navigateToPublicPage}
+                  onUseTemplate={(templateId) =>
+                    void handleUseTemplate(templateId, "template")
+                  }
+                  bottomSlot={
+                    <AdSlot slot="templates-bottom" language={language} />
+                  }
+                />
+              )}
+              {(view === "about" ||
+                view === "privacy" ||
+                view === "terms" ||
+                view === "contact") && (
+                <LegalPage
+                  page={view}
+                  language={language}
+                  onBack={() => (user ? navigateToList() : navigateToLanding())}
+                  onNavigate={navigateToPublicPage}
+                />
+              )}
+            </Suspense>
           )}
 
           {postCreateGuideStep === "issuing" && guideFlight && (
@@ -614,12 +820,22 @@ const App: React.FC = () => {
                   trip={currentTrip}
                   user={user}
                   onClose={() => setIsShareModalOpen(false)}
-                  onInvite={handleInvite}
+                  onInvite={async (email) => {
+                    await handleInvite(email);
+                    trackEvent("share_trip", {
+                      method: "invite",
+                      trip_id: currentTrip.id,
+                    });
+                  }}
                   onRemoveInvite={handleRemoveInvite}
                   copyLink={() => {
                     navigator.clipboard.writeText(
                       buildTripShareUrl(currentTrip.id)
                     );
+                    trackEvent("share_trip", {
+                      method: "copy_link",
+                      trip_id: currentTrip.id,
+                    });
                     setNotification({ message: t("copied"), type: "success" });
                   }}
                 />
@@ -630,9 +846,14 @@ const App: React.FC = () => {
                   trip={currentTrip}
                   isOpen={isExportModalOpen}
                   onClose={() => setIsExportModalOpen(false)}
-                  onNotify={(message, type) =>
-                    setNotification({ message, type })
-                  }
+                  onNotify={(message, type) => {
+                    if (type === "success") {
+                      trackEvent("export_artifact", {
+                        trip_id: currentTrip.id,
+                      });
+                    }
+                    setNotification({ message, type });
+                  }}
                 />
               )}
 
@@ -700,11 +921,18 @@ const App: React.FC = () => {
               onManualResync={handleManualResync}
               onOpenCreateForm={() => setShowCreateForm(true)}
               onCloseCreateForm={() => setShowCreateForm(false)}
-              onCreateTripSubmit={handleCreateTripSubmit}
+              onCreateTripSubmit={async (tripData) => {
+                await handleCreateTripSubmit(tripData);
+                trackEvent("create_trip", {
+                  destination: tripData.destination,
+                });
+              }}
               onSelectTrip={navigateToTrip}
               onDeleteTripClick={(target) => setTripToDelete(target)}
               calculateTripTotal={calculateTripTotal}
               getGradient={getGradient}
+              onTryDemoTrip={() => void handleUseTemplate("tokyo-3d", "demo")}
+              onNavigatePublic={navigateToPublicPage}
             />
           )}
 
@@ -772,6 +1000,22 @@ const App: React.FC = () => {
               }}
             />
           )}
+
+          <OnboardingTour
+            isOpen={isOnboardingOpen}
+            onClose={() => setIsOnboardingOpen(false)}
+            language={language}
+            onNavigateTab={(tab) => {
+              if (view === "detail" && currentTrip) {
+                selectTabWithDirection(tab);
+              }
+            }}
+          />
+
+          <CookieConsentBanner
+            language={language}
+            onNavigatePrivacy={() => navigateToPublicPage("privacy")}
+          />
         </div>
       </ErrorBoundary>
     </LocalizationProvider>

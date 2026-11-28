@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  AppView,
+  isPublicContentView,
   parseRouteFromLocation,
   buildPathForRoute,
   buildTripShareUrl,
@@ -60,14 +62,53 @@ describe("routerService (Unit Tests)", () => {
         isLegacyQueryUrl: true,
       });
     });
+
+    it("resolves all 6 public content routes and trailing-slash variants", () => {
+      const publicViews: AppView[] = [
+        "guide",
+        "templates",
+        "about",
+        "privacy",
+        "terms",
+        "contact",
+      ];
+
+      for (const view of publicViews) {
+        expect(isPublicContentView(view)).toBe(true);
+        expect(
+          parseRouteFromLocation({ pathname: `/${view}`, search: "" })
+        ).toEqual({
+          view,
+          tripId: null,
+          isLegacyQueryUrl: false,
+        });
+        expect(
+          parseRouteFromLocation({ pathname: `/${view}/`, search: "" })
+        ).toEqual({
+          view,
+          tripId: null,
+          isLegacyQueryUrl: false,
+        });
+      }
+
+      expect(isPublicContentView("landing")).toBe(false);
+      expect(isPublicContentView("list")).toBe(false);
+      expect(isPublicContentView("detail")).toBe(false);
+    });
   });
 
   describe("buildPathForRoute & buildTripShareUrl", () => {
-    it("builds canonical paths for each view", () => {
+    it("builds canonical paths for each view including public content pages", () => {
       expect(buildPathForRoute("landing")).toBe("/");
       expect(buildPathForRoute("list")).toBe("/trips");
       expect(buildPathForRoute("detail", "trip-99")).toBe("/trips/trip-99");
       expect(buildPathForRoute("detail", null)).toBe("/");
+      expect(buildPathForRoute("guide")).toBe("/guide");
+      expect(buildPathForRoute("templates")).toBe("/templates");
+      expect(buildPathForRoute("about")).toBe("/about");
+      expect(buildPathForRoute("privacy")).toBe("/privacy");
+      expect(buildPathForRoute("terms")).toBe("/terms");
+      expect(buildPathForRoute("contact")).toBe("/contact");
     });
 
     it("builds clean path-based share URLs", () => {

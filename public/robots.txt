@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Allow: /guide
+Allow: /templates
+Allow: /about
+Allow: /privacy
+Allow: /terms
+Allow: /contact
+
+Sitemap: https://gotravel.app/sitemap.xml

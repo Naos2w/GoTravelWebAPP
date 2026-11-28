@@ -16,6 +16,8 @@ import {
   WifiOff,
   RefreshCw,
   Smartphone,
+  HelpCircle,
+  Play,
 } from "lucide-react";
 import { Trip, Theme, Language, User } from "../../types";
 import { useTranslation } from "../../shared/contexts/LocalizationContext";
@@ -36,6 +38,8 @@ export interface ProfileMenuContentProps {
   onCloseMenu: () => void;
   onOpenInstallPwa?: () => void;
   isPwaStandalone?: boolean;
+  onOpenGuide?: () => void;
+  onReplayTour?: () => void;
 }
 
 export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
@@ -52,6 +56,8 @@ export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
   onCloseMenu,
   onOpenInstallPwa,
   isPwaStandalone = false,
+  onOpenGuide,
+  onReplayTour,
 }) => {
   const { t } = useTranslation();
 
@@ -164,6 +170,45 @@ export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
           <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap shrink-0">
             App
           </span>
+        </button>
+      )}
+
+      {onOpenGuide && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="menu-guide-btn"
+          onClick={() => {
+            onCloseMenu();
+            onOpenGuide();
+          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <HelpCircle size={15} className="text-ns-blue shrink-0" />
+            <span className="truncate">{t("userGuide")}</span>
+          </div>
+          <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap shrink-0">
+            FAQ
+          </span>
+        </button>
+      )}
+
+      {onReplayTour && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="menu-replay-tour-btn"
+          onClick={() => {
+            onCloseMenu();
+            onReplayTour();
+          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Play size={15} className="text-ns-green shrink-0" />
+            <span className="truncate">{t("replayOnboardingTour")}</span>
+          </div>
         </button>
       )}
 
