@@ -10,11 +10,14 @@ import {
   Smartphone,
   Users,
 } from "lucide-react";
-import { Language } from "../types";
+import { Language, Theme } from "../types";
 import { PublicPageShell } from "./LegalPages";
 
 export interface GuidePageProps {
   language: Language;
+  theme?: Theme;
+  onToggleTheme?: () => void;
+  onToggleLanguage?: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
   onReplayTour: () => void;
@@ -218,6 +221,9 @@ const FAQ_ITEMS: FaqItem[] = [
 
 export const GuidePage: React.FC<GuidePageProps> = ({
   language,
+  theme,
+  onToggleTheme,
+  onToggleLanguage,
   onBack,
   onNavigate,
   onReplayTour,
@@ -239,6 +245,9 @@ export const GuidePage: React.FC<GuidePageProps> = ({
           : "掌握五個核心流程，從機票匯入、地圖排程、旅伴分帳到離線手冊，一氣呵成完成旅程規劃。"
       }
       language={language}
+      theme={theme}
+      onToggleTheme={onToggleTheme}
+      onToggleLanguage={onToggleLanguage}
       onBack={onBack}
       onNavigate={onNavigate}
       activePath="/guide"

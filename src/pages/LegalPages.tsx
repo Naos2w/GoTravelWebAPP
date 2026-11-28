@@ -10,20 +10,23 @@ import {
   ExternalLink,
   FileText,
   Globe,
+  Languages,
   Layers,
   Lock,
   Mail,
   MessageSquare,
+  Moon,
   Plane,
   Shield,
   Sparkles,
+  Sun,
 } from "lucide-react";
-import { Language } from "../types";
+import { Language, Theme } from "../types";
 import { APP_VERSION } from "../shared/services/version";
 
 export const SUPPORT_EMAIL = "support@gotravel.app";
 export const GITHUB_FEEDBACK_URL =
-  "https://github.com/gotravel-app/go-travel/issues";
+  "https://github.com/Naos2w/GoTravelWebAPP/issues";
 
 export interface SiteFooterProps {
   language: Language;
@@ -101,6 +104,9 @@ export interface PublicPageShellProps {
   title: string;
   subtitle?: string;
   language: Language;
+  theme?: Theme;
+  onToggleTheme?: () => void;
+  onToggleLanguage?: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
   activePath?: string;
@@ -121,6 +127,9 @@ export const PublicPageShell: React.FC<PublicPageShellProps> = ({
   title,
   subtitle,
   language,
+  theme = "light",
+  onToggleTheme,
+  onToggleLanguage,
   onBack,
   onNavigate,
   activePath,
@@ -143,32 +152,71 @@ export const PublicPageShell: React.FC<PublicPageShellProps> = ({
             <span>{isEn ? "Back to Go Travel" : "返回 Go Travel"}</span>
           </button>
 
-          <nav
-            aria-label={isEn ? "Quick navigation" : "快速導覽"}
-            className="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar"
-          >
-            {TOP_NAV_LINKS.map((item) => {
-              const isActive = activePath === item.path;
-              return (
-                <a
-                  key={item.path}
-                  href={item.path}
-                  data-testid={`topnav-link-${item.path.slice(1)}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onNavigate(item.path);
-                  }}
-                  className={`h-9 px-3 rounded-full text-xs font-bold flex items-center transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-                    isActive
-                      ? "bg-ns-blue/12 text-ns-blue border border-ns-blue/25"
-                      : "text-[#68707D] dark:text-[#8B93A1] hover:text-[#1A1D23] dark:hover:text-[#ECEFF4] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] border border-transparent"
-                  }`}
-                >
-                  {isEn ? item.en : item.zh}
-                </a>
-              );
-            })}
-          </nav>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <nav
+              aria-label={isEn ? "Quick navigation" : "快速導覽"}
+              className="flex flex-nowrap items-center gap-1.5 overflow-x-auto no-scrollbar"
+            >
+              {TOP_NAV_LINKS.map((item) => {
+                const isActive = activePath === item.path;
+                return (
+                  <a
+                    key={item.path}
+                    href={item.path}
+                    data-testid={`topnav-link-${item.path.slice(1)}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavigate(item.path);
+                    }}
+                    className={`h-9 px-3 rounded-full text-xs font-bold flex items-center transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                      isActive
+                        ? "bg-ns-blue/12 text-ns-blue border border-ns-blue/25"
+                        : "text-[#68707D] dark:text-[#8B93A1] hover:text-[#1A1D23] dark:hover:text-[#ECEFF4] hover:bg-black/[0.04] dark:hover:bg-white/[0.08] border border-transparent"
+                    }`}
+                  >
+                    {isEn ? item.en : item.zh}
+                  </a>
+                );
+              })}
+            </nav>
+
+            {(onToggleTheme || onToggleLanguage) && (
+              <div className="flex items-center gap-1.5 shrink-0 pl-1.5 border-l border-black/[0.06] dark:border-white/[0.08]">
+                {onToggleTheme && (
+                  <button
+                    type="button"
+                    data-testid="public-shell-theme-toggle"
+                    onClick={onToggleTheme}
+                    aria-label={isEn ? "Toggle theme" : "切換深淺色"}
+                    title={isEn ? "Toggle theme" : "切換深淺色"}
+                    className="w-9 h-9 rounded-xl bg-[#F0F2F5] dark:bg-[#1B1F2A] hover:bg-black/[0.06] dark:hover:bg-white/[0.10] border border-black/[0.06] dark:border-white/[0.10] text-[#1A1D23] dark:text-[#ECEFF4] flex items-center justify-center transition-all active:scale-95 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    {theme === "dark" ? (
+                      <Sun size={15} className="shrink-0" />
+                    ) : (
+                      <Moon size={15} className="shrink-0" />
+                    )}
+                  </button>
+                )}
+                {onToggleLanguage && (
+                  <button
+                    type="button"
+                    data-testid="public-shell-lang-toggle"
+                    onClick={onToggleLanguage}
+                    aria-label={isEn ? "Switch to Chinese" : "切換為英文"}
+                    title={isEn ? "Switch to Chinese" : "切換為英文"}
+                    className="h-9 min-w-[2.25rem] px-2.5 rounded-xl bg-[#F0F2F5] dark:bg-[#1B1F2A] hover:bg-black/[0.06] dark:hover:bg-white/[0.10] border border-black/[0.06] dark:border-white/[0.10] text-xs font-bold font-mono text-[#1A1D23] dark:text-[#ECEFF4] flex items-center justify-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <Languages
+                      size={13}
+                      className="shrink-0 text-[#68707D] dark:text-[#8B93A1]"
+                    />
+                    <span>{isEn ? "zh" : "EN"}</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -196,6 +244,9 @@ export const PublicPageShell: React.FC<PublicPageShellProps> = ({
 export interface LegalPageProps {
   page: "about" | "privacy" | "terms" | "contact";
   language: Language;
+  theme?: Theme;
+  onToggleTheme?: () => void;
+  onToggleLanguage?: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
 }
@@ -610,6 +661,9 @@ const ContactContent: React.FC<{
 export const LegalPage: React.FC<LegalPageProps> = ({
   page,
   language,
+  theme,
+  onToggleTheme,
+  onToggleLanguage,
   onBack,
   onNavigate,
 }) => {
@@ -650,6 +704,9 @@ export const LegalPage: React.FC<LegalPageProps> = ({
       title={meta[page].title}
       subtitle={meta[page].subtitle}
       language={language}
+      theme={theme}
+      onToggleTheme={onToggleTheme}
+      onToggleLanguage={onToggleLanguage}
       onBack={onBack}
       onNavigate={onNavigate}
       activePath={`/${page}`}

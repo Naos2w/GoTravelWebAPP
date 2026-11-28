@@ -8,7 +8,7 @@ import {
   Utensils,
   Wallet,
 } from "lucide-react";
-import { Language } from "../types";
+import { Language, Theme } from "../types";
 import {
   CURATED_TRIP_TEMPLATES,
   TemplateStop,
@@ -18,6 +18,9 @@ import { PublicPageShell } from "./LegalPages";
 
 export interface TemplatesPageProps {
   language: Language;
+  theme?: Theme;
+  onToggleTheme?: () => void;
+  onToggleLanguage?: () => void;
   onBack: () => void;
   onNavigate: (path: string) => void;
   onUseTemplate: (templateId: string) => void;
@@ -282,6 +285,9 @@ const TemplatePreviewCard: React.FC<TemplatePreviewCardProps> = ({
 
 export const TemplatesPage: React.FC<TemplatesPageProps> = ({
   language,
+  theme,
+  onToggleTheme,
+  onToggleLanguage,
   onBack,
   onNavigate,
   onUseTemplate,
@@ -298,6 +304,9 @@ export const TemplatesPage: React.FC<TemplatesPageProps> = ({
           : "精選含真實航班、經緯度景點座標、多幣別預算與行李清單的經典範本，一鍵套用即可自由微調出發。"
       }
       language={language}
+      theme={theme}
+      onToggleTheme={onToggleTheme}
+      onToggleLanguage={onToggleLanguage}
       onBack={onBack}
       onNavigate={onNavigate}
       activePath="/templates"

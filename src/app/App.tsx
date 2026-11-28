@@ -615,6 +615,14 @@ const App: React.FC = () => {
     return Math.max(1, allEmails.size);
   }, [currentTrip]);
 
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  }, []);
+
+  const toggleLanguage = useCallback(() => {
+    setLanguage((prev) => (prev === "zh" ? "en" : "zh"));
+  }, []);
+
   const profileMenuContent = (
     <ProfileMenuContent
       user={user}
@@ -622,8 +630,8 @@ const App: React.FC = () => {
       isCreator={isCreator}
       theme={theme}
       language={language}
-      onToggleTheme={() => setTheme(theme === "light" ? "dark" : "light")}
-      onToggleLanguage={() => setLanguage(language === "zh" ? "en" : "zh")}
+      onToggleTheme={toggleTheme}
+      onToggleLanguage={toggleLanguage}
       onOpenExport={() => setIsExportModalOpen(true)}
       onLogout={handleLogout}
       onOpenLogin={() => setIsLoginModalOpen(true)}
@@ -709,6 +717,9 @@ const App: React.FC = () => {
               {view === "guide" && (
                 <GuidePage
                   language={language}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  onToggleLanguage={toggleLanguage}
                   onBack={() => (user ? navigateToList() : navigateToLanding())}
                   onNavigate={navigateToPublicPage}
                   onReplayTour={handleReplayOnboardingTour}
@@ -718,6 +729,9 @@ const App: React.FC = () => {
               {view === "templates" && (
                 <TemplatesPage
                   language={language}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  onToggleLanguage={toggleLanguage}
                   onBack={() => (user ? navigateToList() : navigateToLanding())}
                   onNavigate={navigateToPublicPage}
                   onUseTemplate={(templateId) =>
@@ -735,6 +749,9 @@ const App: React.FC = () => {
                 <LegalPage
                   page={view}
                   language={language}
+                  theme={theme}
+                  onToggleTheme={toggleTheme}
+                  onToggleLanguage={toggleLanguage}
                   onBack={() => (user ? navigateToList() : navigateToLanding())}
                   onNavigate={navigateToPublicPage}
                 />

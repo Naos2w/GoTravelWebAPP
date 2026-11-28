@@ -191,7 +191,7 @@ describe("Public Pages, Curated Templates & OnboardingTour (Smoke Tests)", () =>
         /Third-Party Flight/
       );
 
-      // Contact page with copy email helper
+      // Contact page with copy email helper and updated GitHub feedback URL
       rerender(
         <LegalPage
           page="contact"
@@ -201,10 +201,41 @@ describe("Public Pages, Curated Templates & OnboardingTour (Smoke Tests)", () =>
         />
       );
       expect(screen.getByTestId("legal-page-contact")).toBeInTheDocument();
+      expect(screen.getByTestId("contact-github-link")).toHaveAttribute(
+        "href",
+        "https://github.com/Naos2w/GoTravelWebAPP/issues"
+      );
       fireEvent.click(screen.getByTestId("contact-copy-email-btn"));
       await waitFor(() => {
         expect(writeText).toHaveBeenCalledWith("support@gotravel.app");
       });
+    });
+
+    it("renders theme and language toggle buttons in PublicPageShell when handlers are provided", () => {
+      const onToggleTheme = vi.fn();
+      const onToggleLanguage = vi.fn();
+
+      render(
+        <LegalPage
+          page="about"
+          language="zh"
+          theme="light"
+          onToggleTheme={onToggleTheme}
+          onToggleLanguage={onToggleLanguage}
+          onBack={vi.fn()}
+          onNavigate={vi.fn()}
+        />
+      );
+
+      const themeBtn = screen.getByTestId("public-shell-theme-toggle");
+      const langBtn = screen.getByTestId("public-shell-lang-toggle");
+      expect(langBtn).toHaveTextContent("EN");
+
+      fireEvent.click(themeBtn);
+      fireEvent.click(langBtn);
+
+      expect(onToggleTheme).toHaveBeenCalledTimes(1);
+      expect(onToggleLanguage).toHaveBeenCalledTimes(1);
     });
 
     it("renders all 6 public links inside SiteFooter", () => {
