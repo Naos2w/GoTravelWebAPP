@@ -1,4 +1,29 @@
-export type AppView = "landing" | "list" | "detail";
+export type AppView =
+  | "landing"
+  | "list"
+  | "detail"
+  | "guide"
+  | "templates"
+  | "about"
+  | "privacy"
+  | "terms"
+  | "contact";
+
+export const PUBLIC_CONTENT_VIEWS: readonly AppView[] = [
+  "guide",
+  "templates",
+  "about",
+  "privacy",
+  "terms",
+  "contact",
+];
+
+/**
+ * Returns true if the given AppView is a public informational/content route
+ * accessible without authentication.
+ */
+export const isPublicContentView = (view: AppView): boolean =>
+  PUBLIC_CONTENT_VIEWS.includes(view);
 
 export interface ParsedRoute {
   view: AppView;
@@ -21,6 +46,7 @@ const safeDecodeSegment = (raw: string): string => {
  * - /trips            -> list
  * - /trips/:tripId    -> detail
  * - /?tripId=:tripId  -> detail (legacy share link compatibility)
+ * - /guide, /templates, /about, /privacy, /terms, /contact -> public views
  */
 export const parseRouteFromLocation = (
   locationObj: { pathname: string; search: string } = window.location
@@ -37,6 +63,15 @@ export const parseRouteFromLocation = (
 
   const rawPath = locationObj.pathname || "/";
   const normalizedPath = rawPath.length > 1 ? rawPath.replace(/\/+$/, "") : rawPath;
+
+  const publicSlug = normalizedPath.slice(1) as AppView;
+  if (normalizedPath.startsWith("/") && isPublicContentView(publicSlug)) {
+    return {
+      view: publicSlug,
+      tripId: null,
+      isLegacyQueryUrl: false,
+    };
+  }
 
   if (normalizedPath === "/trips") {
     return {
@@ -74,6 +109,9 @@ export const buildPathForRoute = (
   }
   if (view === "list") {
     return "/trips";
+  }
+  if (isPublicContentView(view)) {
+    return `/${view}`;
   }
   return "/";
 };

@@ -1,0 +1,5 @@
+# Go Travel ads.txt
+# Once Google AdSense is approved, replace pub-XXXXXXXXXXXXXXXX with your AdSense Publisher ID
+# and uncomment the line below:
+#
+# google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0

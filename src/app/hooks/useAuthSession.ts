@@ -9,7 +9,11 @@ import {
   saveRedirectTripId,
   isSupabaseConfigured,
 } from "../../shared/services/authService";
-import { AppView, ParsedRoute } from "../../shared/services/routerService";
+import {
+  AppView,
+  ParsedRoute,
+  isPublicContentView,
+} from "../../shared/services/routerService";
 import { translations } from "../../shared/contexts/LocalizationContext";
 import { LoginReason } from "../../shared/components/LoginModal";
 import { NotificationState } from "./useTripRealtime";
@@ -136,6 +140,9 @@ export function useAuthSession({
       } finally {
         setIsLoading(false);
       }
+    } else if (isPublicContentView(parsedRoute.view)) {
+      setView(parsedRoute.view);
+      setIsLoading(false);
     } else {
       replaceRouteUrl("list", null);
       setView("list");
@@ -182,7 +189,11 @@ export function useAuthSession({
 
           if (isMounted) {
             setUser(null);
-            navigateToLanding();
+            if (isPublicContentView(parsedRoute.view)) {
+              setView(parsedRoute.view);
+            } else {
+              navigateToLanding();
+            }
             setIsLoading(false);
           }
         }

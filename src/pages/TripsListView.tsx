@@ -16,6 +16,8 @@ import { useTranslation } from "../shared/contexts/LocalizationContext";
 import { APP_VERSION } from "../shared/services/version";
 import { TripCard, getTripTiming } from "../features/trips/TripCard";
 import { TripForm } from "../features/trips/TripForm";
+import { AdSlot } from "../shared/components/AdSlot";
+import { SiteFooter } from "./LegalPages";
 
 export interface TripsListViewProps {
   trips: Trip[];
@@ -32,6 +34,8 @@ export interface TripsListViewProps {
   onDeleteTripClick: (trip: Trip) => void;
   calculateTripTotal: (trip: Trip) => number;
   getGradient: (str: string) => string;
+  onTryDemoTrip?: () => void;
+  onNavigatePublic?: (path: string) => void;
 }
 
 export const TripsListView: React.FC<TripsListViewProps> = ({
@@ -49,6 +53,8 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
   onDeleteTripClick,
   calculateTripTotal,
   getGradient,
+  onTryDemoTrip,
+  onNavigatePublic,
 }) => {
   const { t, language } = useTranslation();
   const [tripSearchQuery, setTripSearchQuery] = useState("");
@@ -103,7 +109,8 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
   }, [trips, tripSearchQuery, tripFilter]);
 
   return (
-    <div className="p-4 sm:p-10 pb-28 max-w-7xl mx-auto min-h-screen relative">
+    <div className="min-h-screen flex flex-col">
+      <div className="flex-1 p-4 sm:p-10 pb-16 max-w-7xl w-full mx-auto relative">
       <header className="flex justify-between items-center mb-12">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="text-lg font-bold text-primary tracking-tight whitespace-nowrap shrink-0">
@@ -334,13 +341,26 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400 max-w-sm mb-8 leading-relaxed">
             {t("emptyTripsDesc")}
           </p>
-          <button
-            type="button"
-            onClick={onOpenCreateForm}
-            className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-bold text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <Plus size={18} /> {t("createFirstTrip")}
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+            <button
+              type="button"
+              onClick={onOpenCreateForm}
+              className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white px-7 py-4 rounded-2xl font-bold text-sm shadow-sm hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Plus size={18} /> {t("createFirstTrip")}
+            </button>
+            {onTryDemoTrip && (
+              <button
+                type="button"
+                data-testid="try-demo-trip-btn"
+                onClick={onTryDemoTrip}
+                className="w-full sm:w-auto bg-white dark:bg-[#14171F] hover:bg-[#F0F2F5] dark:hover:bg-[#1B1F2A] text-[#1A1D23] dark:text-[#ECEFF4] border border-black/[0.08] dark:border-white/[0.12] px-6 py-4 rounded-2xl font-bold text-sm shadow-sm hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Compass size={17} className="text-ns-blue shrink-0" />
+                <span>{t("tryDemoTripBtn")}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -404,6 +424,18 @@ export const TripsListView: React.FC<TripsListViewProps> = ({
         >
           <Plus size={24} strokeWidth={2.5} />
         </button>
+      </div>
+      </div>
+
+      {/* Safe AdSlot + SiteFooter well away from interactive trip cards */}
+      <div className="max-w-7xl w-full mx-auto px-4 sm:px-10 pb-8">
+        <AdSlot slot="trips-list-bottom" language={language} />
+      </div>
+      <div className="pb-20 sm:pb-0">
+        <SiteFooter
+          language={language}
+          onNavigate={(path) => onNavigatePublic?.(path)}
+        />
       </div>
     </div>
   );

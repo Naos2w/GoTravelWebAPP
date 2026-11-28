@@ -424,6 +424,11 @@ export const translations = {
     pwaShortcutFlights: "登機證",
     pwaShortcutQuickSave: "快速收錄 Google Maps 連結",
     pwaShortcutCopied: "已複製捷徑連結！可貼入 iPhone 捷徑 App",
+    userGuide: "使用教學",
+    replayOnboardingTour: "重新觀看新手導覽",
+    exploreTemplates: "探索範例行程",
+    tryDemoTripBtn: "一鍵體驗東京 3 日範例旅程",
+    creatingDemoTrip: "正在建立範例旅程...",
   },
   en: {
     appName: "Go Travel",
@@ -846,6 +851,11 @@ export const translations = {
     pwaShortcutFlights: "Boarding Pass",
     pwaShortcutQuickSave: "Quick Save Google Maps Link",
     pwaShortcutCopied: "Shortcut URL copied! Paste into Apple Shortcuts",
+    userGuide: "User Guide",
+    replayOnboardingTour: "Replay Tour",
+    exploreTemplates: "Explore Templates",
+    tryDemoTripBtn: "Try 3-Day Tokyo Demo Trip",
+    creatingDemoTrip: "Creating demo trip...",
   },
 };
 
