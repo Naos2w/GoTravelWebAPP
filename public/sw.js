@@ -1,9 +1,12 @@
-const CACHE_NAME = 'go-travel-cache-v1';
+const CACHE_NAME = 'go-travel-cache-v2';
 const APP_SHELL_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon.svg',
+  '/apple-touch-icon.png',
+  '/icon-192.png',
+  '/icon-512.png',
 ];
 
 const CACHEABLE_EXTERNAL_HOSTS = [

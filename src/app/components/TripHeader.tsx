@@ -15,6 +15,7 @@ import {
   User as UserIcon,
   WifiOff,
   RefreshCw,
+  Smartphone,
 } from "lucide-react";
 import { Trip, Theme, Language, User } from "../../types";
 import { useTranslation } from "../../shared/contexts/LocalizationContext";
@@ -33,6 +34,8 @@ export interface ProfileMenuContentProps {
   onLogout: () => void;
   onOpenLogin: () => void;
   onCloseMenu: () => void;
+  onOpenInstallPwa?: () => void;
+  isPwaStandalone?: boolean;
 }
 
 export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
@@ -47,6 +50,8 @@ export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
   onLogout,
   onOpenLogin,
   onCloseMenu,
+  onOpenInstallPwa,
+  isPwaStandalone = false,
 }) => {
   const { t } = useTranslation();
 
@@ -137,6 +142,27 @@ export const ProfileMenuContent: React.FC<ProfileMenuContentProps> = ({
           </div>
           <span className="text-[10px] font-medium text-slate-400">
             iOS / 日曆
+          </span>
+        </button>
+      )}
+
+      {!isPwaStandalone && onOpenInstallPwa && (
+        <button
+          type="button"
+          role="menuitem"
+          data-testid="menu-install-pwa-btn"
+          onClick={() => {
+            onCloseMenu();
+            onOpenInstallPwa();
+          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Smartphone size={15} className="text-ns-blue shrink-0" />
+            <span className="truncate">{t("pwaAddToHomeScreen")}</span>
+          </div>
+          <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap shrink-0">
+            App
           </span>
         </button>
       )}

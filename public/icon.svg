@@ -1,19 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Go Travel">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0A84FF" />
-      <stop offset="100%" stop-color="#0051B3" />
+      <stop offset="0%" stop-color="#18283A" />
+      <stop offset="55%" stop-color="#2E4E6E" />
+      <stop offset="100%" stop-color="#3B6B9B" />
     </linearGradient>
     <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28" />
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.14" />
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
+    <clipPath id="iconClip">
+      <rect width="512" height="512" rx="116" />
+    </clipPath>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#bg)" />
-  <rect width="512" height="256" rx="116" fill="url(#shine)" />
-  <path
-    d="M396.5 115.5c-9.8-9.8-25.2-11.2-36.7-3.4L109.2 280.4c-11.4 7.7-9.8 25 2.8 30.4l93.7 40.3 39.8 93.7c5.4 12.6 22.8 14.1 30.4 2.7l124-250.3c7.7-11.6 6.3-27-3.4-36.7z"
-    fill="#FFFFFF"
-  />
-  <path d="M205.7 351.1l151.1-151.1-111.3 200.5z" fill="#DCEBFF" opacity="0.7" />
+
+  <g clip-path="url(#iconClip)">
+    <rect width="512" height="512" fill="url(#bg)" />
+    <rect width="512" height="256" fill="url(#shine)" />
+
+    <g fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.8" stroke-linecap="round">
+      <circle cx="256" cy="256" r="184" />
+      <circle cx="256" cy="256" r="128" stroke-dasharray="6 8" />
+      <circle cx="256" cy="488" r="340" />
+      <path d="M 96 416 Q 220 220 416 96" stroke-dasharray="5 7" />
+      <line x1="256" y1="58" x2="256" y2="72" />
+      <line x1="256" y1="440" x2="256" y2="454" />
+      <line x1="58" y1="256" x2="72" y2="256" />
+      <line x1="440" y1="256" x2="454" y2="256" />
+    </g>
+
+    <g transform="translate(256 256) rotate(45)">
+      <path
+        d="M 0 -108 L -15 -36 L -96 36 L -22 26 L -13 62 L -40 92 L 0 74 Z"
+        fill="#FFFFFF"
+      />
+      <path
+        d="M 0 -108 L 15 -36 L 96 36 L 22 26 L 13 62 L 40 92 L 0 74 Z"
+        fill="#D8E4F0"
+      />
+    </g>
+
+    <rect
+      x="0.9"
+      y="0.9"
+      width="510.2"
+      height="510.2"
+      rx="115.1"
+      fill="none"
+      stroke="#FFFFFF"
+      stroke-opacity="0.14"
+      stroke-width="1.8"
+    />
+  </g>
 </svg>

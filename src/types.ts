@@ -104,6 +104,7 @@ export interface ItineraryItem {
   lat?: number;
   lng?: number;
   note?: string;
+  googleMapsUrl?: string;
   type: "Place" | "Transport" | "Food";
   transportType?: TransportType;
   date: string;

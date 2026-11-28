@@ -29,10 +29,12 @@ import {
   Ticket,
   Smartphone,
   Camera,
+  Zap,
 } from "lucide-react";
 import { FlightSegment, Trip } from "../../types";
 import { useTranslation } from "../../shared/contexts/LocalizationContext";
 import { InfoTip } from "../../shared/components/InfoTip";
+import { buildAppleShortcutsLinks } from "../../shared/services/pwaService";
 import {
   exportToAppleNotes,
   downloadICalendar,
@@ -192,6 +194,9 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
   const [isSavingPng, setIsSavingPng] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
+  const [copiedShortcutKey, setCopiedShortcutKey] = useState<string | null>(
+    null
+  );
   const [isExportingNotes, setIsExportingNotes] = useState<boolean>(false);
   const [isSharingChecklist, setIsSharingChecklist] = useState<boolean>(false);
 
@@ -313,6 +318,31 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
     });
     return list;
   }, [flights, trip.name]);
+
+  const appleShortcutItems = useMemo(() => {
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "https://gotravel.app";
+    const links = buildAppleShortcutsLinks(origin);
+    return [
+      {
+        key: "today",
+        label: t("pwaShortcutToday"),
+        url: links.today,
+      },
+      {
+        key: "flights",
+        label: t("pwaShortcutFlights"),
+        url: links.flights,
+      },
+      {
+        key: "quickSavePlace",
+        label: t("pwaShortcutQuickSave"),
+        url: links.quickSavePlace,
+      },
+    ];
+  }, [t]);
 
   if (!isOpen) return null;
 
@@ -499,6 +529,19 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
       onNotify?.(t("exportStudioChecklistVtodoDownloaded"), "success");
     } catch {
       onNotify?.(t("exportStudioIcsError"), "error");
+    }
+  };
+
+  const handleCopyShortcutLink = async (key: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedShortcutKey(key);
+      onNotify?.(t("pwaShortcutCopied"), "success");
+      setTimeout(() => {
+        setCopiedShortcutKey((prev) => (prev === key ? null : prev));
+      }, 2000);
+    } catch {
+      onNotify?.(t("exportStudioCopyError"), "error");
     }
   };
 
@@ -1337,6 +1380,64 @@ export const PrintExportStudio: React.FC<PrintExportStudioProps> = ({
                       {t("exportStudioChecklistVtodoBtn")}
                     </span>
                   </button>
+                </div>
+              </div>
+
+              {/* Section: iPhone Shortcuts (Apple Shortcuts Deep Links) */}
+              <div
+                data-testid="apple-shortcuts-card"
+                className="p-4 rounded-2xl bg-[#F0F2F5]/85 dark:bg-[#1B1F2A]/85 border border-black/[0.06] dark:border-white/[0.08] space-y-3"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-ns-indigo/12 text-ns-indigo border border-ns-indigo/20 flex items-center justify-center shrink-0">
+                    <Zap size={16} />
+                  </div>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <h4 className="text-xs font-black text-[#1A1D23] dark:text-[#ECEFF4] truncate">
+                      {t("pwaShortcutsTitle")}
+                    </h4>
+                    <InfoTip
+                      text={t("pwaShortcutsTip")}
+                      align="left"
+                      testId="infotip-apple-shortcuts"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {appleShortcutItems.map((item) => {
+                    const isCopied = copiedShortcutKey === item.key;
+                    return (
+                      <div
+                        key={item.key}
+                        className="px-3 py-2.5 rounded-xl bg-white dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between gap-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-[#1A1D23] dark:text-[#ECEFF4] truncate">
+                            {item.label}
+                          </div>
+                          <div className="text-[10px] font-mono text-[#68707D] dark:text-[#8B93A1] truncate">
+                            {item.url}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          data-testid={`copy-shortcut-${item.key}`}
+                          onClick={() =>
+                            void handleCopyShortcutLink(item.key, item.url)
+                          }
+                          className="h-8 px-3 rounded-full bg-[#F0F2F5] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.14] border border-black/[0.06] dark:border-white/[0.10] text-[#1A1D23] dark:text-[#ECEFF4] text-[11px] font-black inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 active:scale-95 transition-all cursor-pointer"
+                        >
+                          {isCopied ? (
+                            <Check size={12} className="text-ns-green shrink-0" />
+                          ) : (
+                            <Copy size={12} className="text-ns-blue shrink-0" />
+                          )}
+                          <span>{isCopied ? t("copied") : t("copy")}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
